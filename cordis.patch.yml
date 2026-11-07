@@ -1,0 +1,3 @@
+- insert:
+    - id: gantt
+      name: '@local/dsh-gantt'
