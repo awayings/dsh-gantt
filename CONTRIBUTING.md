@@ -55,8 +55,10 @@ covers setup, the toolchain, and the verification procedure in depth.
   or `@ts-expect-error`.
 - **Tests.** Behavior changes need tests; hostile input and validation failures
   count as behavior. Run the narrowest spec first
-  (`pnpm exec vitest run tests/<area>/<name>.spec.js -t "<case>"`), then the
-  full gate.
+  (`pnpm exec vitest run tests/<area>/<name>.spec.js -t "<case>"`). When a
+  change crosses a real seam — the module-loader artifact, a request over the
+  wire, persistence across a restart — extend `tests/e2e/` too
+  (`pnpm run e2e`), and keep that suite small.
 - **UI changes** also need the manual checklist in `docs/development.md`
   (desktop down to ~390px, both locales, light and dark, a long tree) and a
   screenshot in the pull request.
@@ -88,16 +90,31 @@ chore(deps): bump oxlint to 1.86
 - Reference issues with `Fixes #123` / `Refs #123`.
 - Temporary files belong in `.tmp/` and must not be committed.
 
-## The local gate
+## The gates
 
-`pnpm run check` is the definition of green — it runs `lint`, `typecheck`, and
-`coverage` in parallel, prints their complete output, and fails if any of them
-does. `.husky/pre-commit` runs the same gate, so a commit cannot slip past it.
+Committing and merging are gated differently on purpose: commits stay fast, and
+a branch only merges with full evidence.
 
+### Commit — static only
+
+`.husky/pre-commit` runs `pnpm run static` (`lint` then `typecheck`, a few
+seconds). That is the whole commit gate: no unit tests, no end-to-end run. Fix
+what it reports; do not use `--no-verify`.
+
+### Pull request — the full gate
+
+`pnpm run check` is the definition of green for a branch. It runs `lint`,
+`typecheck`, `coverage` (the host and client unit suites with per-file
+thresholds), and `e2e` (the shipped client artifact over real HTTP against the
+real route handlers and a real SQLite file) in parallel, prints their complete
+output, and fails if any part fails.
+
+- Run it on the branch before opening the pull request, and again after any
+  review change or rebase: the evidence must describe the tree that will land.
+- Paste the final `==> check passed:` line — it names the tree hash — into the
+  pull request template. Never merge with a red gate.
 - A green run stamps the worktree (`.tmp/check.stamp`, 60-minute TTL). Unchanged
   content skips the rerun; `pnpm run check --full` forces it.
-- Do not use `--no-verify`. If the gate is failing for a reason unrelated to
-  your change, fix the reason or stop and report it.
 - Coverage is 100% per file for `store.js` and `index.js`, with the documented
   floor for `client.js`; the thresholds in `vitest.config.ts` are a ratchet —
   raise them when coverage rises, never lower them without a recorded decision
@@ -106,10 +123,12 @@ does. `.husky/pre-commit` runs the same gate, so a commit cannot slip past it.
 ## Pull requests
 
 Open the pull request against `main` with the repository template filled in.
-Pull requests have no CI job: the local gate `pnpm run check` is the evidence, so
-paste its final `==> check passed:` line into the template. CI re-runs the same
-gate only when a release tag is pushed, so a pull request that skipped the local
-gate is not ready for review.
+Pull requests have no CI job: the local pull-request gate `pnpm run check` —
+static analysis, the unit suites with coverage thresholds, and the end-to-end
+suite — is the evidence, so paste its final `==> check passed:` line into the
+template. CI re-runs the same full gate only when a release tag is pushed, so a
+pull request that skipped the local gate is not ready for review, and a branch
+merges only after its gate is green.
 
 Reviewers look for:
 

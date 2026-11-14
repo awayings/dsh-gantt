@@ -21,6 +21,19 @@ export default defineConfig({
           pool: 'forks',
         },
       },
+      {
+        // Real client artifact + real HTTP + real SQLite file: slow and
+        // deliberately few. Run it through `pnpm run e2e`, not `pnpm run test`.
+        test: {
+          name: 'e2e',
+          include: ['tests/e2e/**/*.spec.js'],
+          environment: 'jsdom',
+          setupFiles: ['tests/e2e/setup.js'],
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+          pool: 'forks',
+        },
+      },
     ],
     coverage: {
       provider: 'v8',

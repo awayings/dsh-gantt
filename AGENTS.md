@@ -71,8 +71,10 @@ by a local SQLite database and an authenticated JSON API.
 
 ### Tests
 
-- Tests live under `tests/store/`, `tests/host/`, and `tests/client/`. Host
-  logic runs in Node; the client runs in jsdom.
+- Tests live under `tests/store/`, `tests/host/`, `tests/client/`, and
+  `tests/e2e/`. Host logic runs in Node; the client runs in jsdom; the
+  end-to-end suite runs the real client artifact against the real host routes
+  over HTTP with a real SQLite file, and stays small.
 - Reuse existing specs, suites, and assertions. Drop tests no longer needed.
 - Iterate with the narrowest run first:
   `pnpm exec vitest run tests/<area>/<name>.spec.js -t "<case name>"`.
@@ -113,29 +115,46 @@ by a local SQLite database and an authenticated JSON API.
 - Keep row work proportional to the task tree size; there is no hidden
   pagination, so never add unbounded polling or duplicate refreshes.
 
-## Pre-commit checks
+## Verification gates
 
-Complete ALL of these before ANY commit:
+Two gates, deliberately split. Committing must stay fast; merging must be
+evidence-backed.
+
+### Commit — static only
+
+`.husky/pre-commit` runs `pnpm run static` (`lint` + `typecheck`, ~3 seconds).
+Every commit must be lint- and type-clean, but a commit does not run behavior
+tests.
 
 - Close out the to-do list, ensuring every item is completed, cleaned up, or
   explicitly closed.
 - Review the full diff independently: every change necessary, correct, and not
   over-engineered.
 - Clean up generated temporary files and temporary or unhelpful comments.
-- Run `pnpm run check`: it runs `pnpm run lint`, `pnpm run typecheck`, and
-  `pnpm run coverage` concurrently, prints each tool's complete output, and
-  fails when any of them does. The same logs stay in `.tmp/check-logs/`.
-  - Fix every lint and type error, and keep coverage at the policy below. Read
-    the complete output; never tail or truncate it.
-  - Coverage policy: **100% per-file** (statements, branches, functions, lines)
-    for `store.js` and `index.js`. `client.js` has a documented floor:
-    99% statements, 98% branches, 99% functions, 99% lines (measured
-    99.79/98.62/99.36/100), as configured in `vitest.config.ts`. The floor is a
-    ratchet: raise it when coverage rises, and never weaken it without a
-    recorded decision in `docs/development.md`.
-  - The `pre-commit` hook runs this same gate, and a green run stamps the
-    worktree into `.tmp/check.stamp` with a 60-minute TTL; a commit of unchanged
-    content skips the run. `pnpm run check --full` forces a full re-run.
+- Fix every lint and type error: the hook blocks the commit otherwise. Do not
+  use `--no-verify`.
+
+### Pull request — the full gate
+
+Run `pnpm run check` on the branch before opening a pull request for merge, and
+again after any review change or rebase:
+
+- It runs `pnpm run lint`, `pnpm run typecheck`, `pnpm run coverage` (unit
+  suites plus per-file thresholds) and `pnpm run e2e` (the shipped client
+  artifact against the shipped host routes, over real HTTP, on a real SQLite
+  file) concurrently, prints each tool's complete output, and fails when any of
+  them does. The logs stay in `.tmp/check-logs/`.
+- Read the complete output; never tail or truncate it.
+- Coverage policy: **100% per-file** (statements, branches, functions, lines)
+  for `store.js` and `index.js`. `client.js` has a documented floor:
+  99% statements, 98% branches, 99% functions, 99% lines (measured
+  99.79/98.62/99.36/100), as configured in `vitest.config.ts`. The floor is a
+  ratchet: raise it when coverage rises, and never weaken it without a recorded
+  decision in `docs/development.md`.
+- A green run stamps the worktree into `.tmp/check.stamp` with a 60-minute TTL,
+  and its final line names the tree hash: paste that line into the pull
+  request. `pnpm run check --full` forces a full re-run.
+- Never merge a branch with a red gate.
 
 ## Layout & responsive
 
@@ -161,13 +180,15 @@ Complete ALL of these before ANY commit:
 - **Setup**: `pnpm install` (installs the pinned dev toolchain and husky hooks).
 - **Syntax check**: `pnpm run verify` runs `node --check` on all three source
   files.
-- **Quality gate**: `pnpm run test` (vitest), `pnpm run check` (lint +
-  typecheck + coverage). On Windows the gate locates Git Bash via
-  `scripts/run-bash.mjs`; set `DSH_GANTT_BASH` to override the `bash.exe` path.
-  See `docs/development.md` for the full procedure.
-- **CI runs the gate only on release tags** (`.github/workflows/release.yml`).
-  Pull requests have no CI job: the local gate is the evidence, and the same
-  gate runs again in CI before a release is published.
+- **Gates**: `pnpm run static` (commit hook: lint + typecheck),
+  `pnpm run check` (pull-request gate: static + unit coverage + e2e),
+  `pnpm run test` and `pnpm run e2e` separately. On Windows the gate locates
+  Git Bash via `scripts/run-bash.mjs`; set `DSH_GANTT_BASH` to override the
+  `bash.exe` path. See `docs/development.md` for the full procedure.
+- **CI runs the full gate only on release tags**
+  (`.github/workflows/release.yml`). Pull requests have no CI job: the local
+  pull-request gate is the evidence, and the same gate runs again in CI before
+  a release is published.
 - **Web server**: start DSH with `dsh web`; it prints a tokenized URL such as
   `http://127.0.0.1:3080/?token=…`. Open that full URL once so the browser
   receives its session cookie.
