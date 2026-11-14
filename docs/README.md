@@ -21,9 +21,9 @@ plugin documentation and not a compatibility contract.
 
 ## Contributing
 
-[CONTRIBUTING.md](../CONTRIBUTING.md) covers the workflow — branches, commits,
-the local gate, pull requests, and the release checklist. [AGENTS.md](../AGENTS.md)
-holds the engineering policy.
+[CONTRIBUTING.md](../CONTRIBUTING.md) covers the workflow — commits, the local
+gates, and the release checklist. [AGENTS.md](../AGENTS.md) holds the engineering
+policy.
 
 ## Conventions
 

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Every push to main must carry a green full gate for exactly the pushed tree.
+# `pnpm run check` skips in milliseconds when the tree is already stamped; otherwise it runs the full suite.
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] || continue
+  case "$local_sha" in 000000*|'') continue ;; esac
+  if ! pnpm run check </dev/null; then
+    status=1
+    continue
+  fi
+  checked="$(cat .tmp/check.stamp 2>/dev/null || true)"
+  pushed="$(git rev-parse "${local_sha}^{tree}" 2>/dev/null || true)"
+  if [ -z "$checked" ] || [ "$checked" != "$pushed" ]; then
+    echo "pre-push: the checked tree is not the tree being pushed." >&2
+    echo "          checked ${checked:-<none>}, pushing ${pushed:-<unknown>}." >&2
+    echo "          Commit or stash working changes, then push again." >&2
+    status=1
+  fi
+done
+exit "$status"

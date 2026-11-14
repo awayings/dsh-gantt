@@ -123,7 +123,7 @@ pnpm run verify    # node --check on the three source files
 pnpm run static    # lint + typecheck (the commit hook)
 pnpm run test      # vitest (host + jsdom client unit suites)
 pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
-pnpm run check     # the full pull-request gate: static + coverage + e2e
+pnpm run check     # the full gate, run by the push hook: static + coverage + e2e
 ```
 
 - `cordis_inspect_query` → Client `Slots.listSubTree` with
@@ -189,14 +189,15 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run test` | Vitest host + jsdom client unit suites |
 | `pnpm run coverage` | Unit suites plus per-file coverage thresholds |
 | `pnpm run e2e` | Shipped client artifact against real HTTP and a real SQLite file |
-| `pnpm run check` | The pull-request gate: static + coverage + e2e in parallel, with a cached stamp |
+| `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
 Coverage is 100% per-file for `store.js` and `index.js`, with a documented floor
-for `client.js`. Commits only run the static check; branches are verified with
-the full gate locally before they are merged. CI re-runs the same full gate only
-when a release tag is pushed (`.github/workflows/release.yml`); pull requests
-have no CI job. Setup, test layout, database/API debugging, and the full
-verification procedure are in [docs/development.md](docs/development.md).
+for `client.js`. Commits only run the static check; `.husky/pre-push` runs the
+full gate before a push reaches `main`, and refuses a tree that is not green.
+There is no pull request step. CI re-runs the same full gate only when a release
+tag is pushed (`.github/workflows/release.yml`). Setup, test layout,
+database/API debugging, and the full verification procedure are in
+[docs/development.md](docs/development.md).
 
 ## Documentation
 
@@ -204,7 +205,7 @@ verification procedure are in [docs/development.md](docs/development.md).
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
-- [CONTRIBUTING.md](CONTRIBUTING.md) — branching, commits, pull requests, release checklist
+- [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
 - [AGENTS.md](AGENTS.md) — engineering policy (priorities, tests, file size, gate)
 
 ## License

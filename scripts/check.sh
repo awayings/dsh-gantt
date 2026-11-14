@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The pull-request gate: static analysis (lint, typecheck), unit coverage and the end-to-end suite in parallel, with
-# logs in .tmp/check-logs. Commits only run `pnpm run static`; behavior is verified here, on the whole branch, before
-# it is merged. The plugin ships its source directly, so there is no build step to gate on. A green run fingerprints
-# the worktree into .tmp/check.stamp so a repeated gate run skips unchanged content; the stamp expires after
-# STAMP_TTL_MIN because gitignored inputs (node_modules, tool caches) can drift un-fingerprinted. `--full` always re-runs.
+# The full gate: static analysis (lint, typecheck), unit coverage and the end-to-end suite in parallel, with logs in
+# .tmp/check-logs. `.husky/pre-push` runs it before a push to main, so no untested tree reaches the remote; commits
+# only run `pnpm run static`. The plugin ships its source directly, so there is no build step to gate on. A green run
+# fingerprints the worktree into .tmp/check.stamp so a repeated gate run skips unchanged content; the stamp expires
+# after STAMP_TTL_MIN because gitignored inputs (node_modules, tool caches) can drift un-fingerprinted. `--full` forces.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,4 +76,4 @@ if [[ "$BEFORE" != "$AFTER" ]]; then
 fi
 
 printf '%s\n' "$BEFORE" > "$STAMP"
-echo "==> check passed: lint, typecheck, unit coverage thresholds and e2e — tree ${BEFORE:0:12} (full output above; logs in $LOGS). Paste this line into the pull request."
+echo "==> check passed: lint, typecheck, unit coverage thresholds and e2e — tree ${BEFORE:0:12} (logs in $LOGS)."

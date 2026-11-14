@@ -1,4 +1,4 @@
-# Commits only need to be statically clean: lint plus typecheck, a few seconds.
-# Behavior (unit coverage and the end-to-end suite) is the pull-request gate,
-# `pnpm run check`, which runs before a branch is merged.
+# Commits stay fast: lint plus typecheck, a few seconds.
+# Behavior (unit coverage and the end-to-end suite) is gated by `.husky/pre-push`
+# before a push to main reaches the remote.
 pnpm run static

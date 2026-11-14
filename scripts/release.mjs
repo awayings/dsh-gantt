@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Release helper. The version bump lands through a pull request first; this
+// Release helper. The version bump lands on main first, through the push gate; this
 // script refuses to tag anything else, runs the same gate the release workflow
 // runs, then creates the annotated tag and optionally pushes it and waits for
 // the workflow.
@@ -87,11 +87,11 @@ capture('git', ['fetch', '--quiet', 'origin', 'main'])
 
 const head = capture('git', ['rev-parse', 'HEAD'])
 const remoteHead = capture('git', ['rev-parse', 'origin/main'])
-if (head !== remoteHead) fail('local main differs from origin/main; merge the release commit through a pull request first')
+if (head !== remoteHead) fail('local main differs from origin/main; push the release commit first')
 
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
 if (pkg.version !== version) {
-  fail(`package.json says ${pkg.version}, but the release would be ${tag}; land the version bump in a pull request first`)
+  fail(`package.json says ${pkg.version}, but the release would be ${tag}; land the version bump on main first`)
 }
 
 if (capture('git', ['tag', '--list', tag]) !== '') fail(`tag ${tag} already exists locally`)

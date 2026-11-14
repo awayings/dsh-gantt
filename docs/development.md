@@ -23,8 +23,9 @@ pnpm install
 pnpm run verify
 ```
 
-`pnpm install` also runs `husky` and installs the `pre-commit` hook, which runs
-`pnpm run static` (lint + typecheck) on every commit.
+`pnpm install` also runs `husky` and installs both hooks: `pre-commit` runs
+`pnpm run static` (lint + typecheck), and `pre-push` runs the full gate before a
+push to `main`.
 
 ## Toolchain
 
@@ -34,7 +35,7 @@ pnpm run verify
 | TypeScript `~7.0.2` (`tsc --noEmit`) | Typecheck `checkJs` for host, client, and tests | `tsconfig.json`, `tsconfig.client.json`, `tsconfig.tests.json` |
 | [vitest](https://vitest.dev/) `^5.1.0` | Host (Node), client (jsdom), and end-to-end (jsdom + real HTTP) projects | `vitest.config.ts` |
 | `@vitest/coverage-v8` | Per-file coverage thresholds | `vitest.config.ts` |
-| husky `^9.1.7` | Runs the static gate before commits | `.husky/pre-commit` |
+| husky `^9.1.7` | Runs the commit and push gates | `.husky/pre-commit`, `.husky/pre-push` |
 | jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
 
 There is **no build step**. All three source files are shipped as-is:
@@ -53,19 +54,21 @@ DSH.
 | `pnpm run test` | `vitest run --project host --project client` | Unit behavior in Node and jsdom. |
 | `pnpm run coverage` | `vitest run --project host --project client --coverage` | Unit behavior plus per-file thresholds. |
 | `pnpm run e2e` | `vitest run --project e2e` | The shipped client artifact, real HTTP, the real route handlers, and a real SQLite file. |
-| `pnpm run check` | lint + typecheck + coverage + e2e in parallel | The pull-request gate; fails if any part fails. |
+| `pnpm run check` | lint + typecheck + coverage + e2e in parallel | The full gate, run by `.husky/pre-push` before a push to `main`. |
 
 The gates are deliberately split. Committing runs `pnpm run static` from
 `.husky/pre-commit`: fast enough to stay out of the way, strict enough that no
-commit lands with a lint or type error. Behavior is verified once per branch,
-with the full gate `pnpm run check`, before the branch is merged — it runs the
-unit suites with coverage thresholds and the end-to-end suite, prints each
-tool's complete output, and keeps the logs in `.tmp/check-logs/`. It is
-implemented as `scripts/check.sh`, launched through `scripts/run-bash.mjs` so
-the same gate also runs on Windows (where the launcher locates Git Bash; set
-`DSH_GANTT_BASH` to a `bash.exe` path to override). A green run fingerprints
-the worktree contents into `.tmp/check.stamp` and prints the tree hash, so an
-unchanged repeat run can skip; `pnpm run check --full` forces a full re-run.
+commit lands with a lint or type error. Behavior is verified before a push
+reaches the remote: `.husky/pre-push` runs the full gate `pnpm run check` for
+any push to `main` — it runs the unit suites with coverage thresholds, the
+end-to-end suite, and static analysis in parallel, prints each tool's complete
+output, and keeps the logs in `.tmp/check-logs/`. It is implemented as
+`scripts/check.sh`, launched through `scripts/run-bash.mjs` so the same gate
+also runs on Windows (where the launcher locates Git Bash; set `DSH_GANTT_BASH`
+to a `bash.exe` path to override). A green run fingerprints the worktree
+contents into `.tmp/check.stamp`, so an unchanged repeat run skips instantly and
+the hook refuses a push whose tree does not match the stamp; `pnpm run check
+--full` forces a full re-run.
 
 Release tagging is scripted: `pnpm run release X.Y.Z [--dry-run] [--push]`
 validates the repository, runs the full gate, and creates/pushes the tag (see
@@ -73,8 +76,8 @@ validates the repository, runs the full gate, and creates/pushes the tag (see
 
 CI runs the full gate only on release tags: `.github/workflows/release.yml` runs
 `pnpm run lint`, `pnpm run typecheck`, `pnpm run coverage`, and `pnpm run e2e`
-after checking that the tag matches the package version. Pull requests have no
-CI job — the local pull-request gate is the evidence, and the same gate runs
+after checking that the tag matches the package version. Branches have no CI
+job — the local `pre-push` gate is what protects `main`, and the same gate runs
 again in CI before a release is published.
 
 Coverage policy:
@@ -146,8 +149,8 @@ resolved path, schema version, and row count at runtime.
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
 4. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
-   `pnpm run check` before opening the pull request. The commit hook only runs
-   the static check.
+   commit and push. The commit hook runs the static check; the push hook runs
+   the full gate before anything reaches `main`.
 5. Reinstall the bundle when the installed profile does not link to this
    checkout: `dsh plugin --profile web add /absolute/path/to/dsh-gantt` (or
    `plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }` in
@@ -285,10 +288,10 @@ the file DSH serves (the installed profile copy), not a stale checkout, and
 reload the page. Adding a bundler or build directory is out of scope; the
 single-file client is deliberate (`docs/compatibility.md`).
 
-### Direct pushes to `main` are rejected
+### `main` is protected against force-pushes and deletion
 
-`main` is protected with the rules applied to administrators, so `git push
-origin main` fails with `GH006: Protected branch update failed for
-refs/heads/main … Changes must be made through a pull request`. That is
-expected: push a branch, open a pull request, and merge it. Release tags are not
-branches, so `pnpm run release X.Y.Z --push` still pushes the tag directly.
+The administrator rules are enforced too, so `git push --force origin main` and
+deleting the branch are rejected. Ordinary pushes are fine: there is no pull
+request requirement and no server-side status check — the local `pre-push` gate
+is the control. Release tags are not branches, so
+`pnpm run release X.Y.Z --push` pushes the tag directly.
