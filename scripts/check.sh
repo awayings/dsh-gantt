@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# The pre-commit gate: lint, typecheck and coverage in parallel (logs in .tmp/check-logs). The plugin ships its source
-# directly, so there is no build step to gate on. A green run fingerprints the worktree into .tmp/check.stamp so husky
-# skips unchanged content; the stamp expires after STAMP_TTL_MIN because gitignored inputs (node_modules, tool caches)
-# can drift un-fingerprinted. `--full` always re-runs.
+# The pull-request gate: static analysis (lint, typecheck), unit coverage and the end-to-end suite in parallel, with
+# logs in .tmp/check-logs. Commits only run `pnpm run static`; behavior is verified here, on the whole branch, before
+# it is merged. The plugin ships its source directly, so there is no build step to gate on. A green run fingerprints
+# the worktree into .tmp/check.stamp so a repeated gate run skips unchanged content; the stamp expires after
+# STAMP_TTL_MIN because gitignored inputs (node_modules, tool caches) can drift un-fingerprinted. `--full` always re-runs.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +13,7 @@ STAMP=".tmp/check.stamp"
 LOGS=".tmp/check-logs"
 INDEX=".tmp/check-index"
 STAMP_TTL_MIN=60
-GATES=(lint typecheck coverage)
+GATES=(lint typecheck coverage e2e)
 
 # The fingerprint is the worktree's tree object, built through a THROWAWAY index: staged, unstaged and untracked files all count; gitignored outputs do not.
 fingerprint() {
@@ -36,22 +37,24 @@ FULL=0
 BEFORE="$(fingerprint)" || { echo "==> check: cannot fingerprint the worktree" >&2; exit 1; }
 if (( FULL == 0 )) && [[ -f "$STAMP" ]] && [[ "$(cat "$STAMP")" == "$BEFORE" ]] \
   && [[ -n "$(find "$STAMP" -mmin "-$STAMP_TTL_MIN" 2>/dev/null)" ]]; then
-  echo "==> check: worktree unchanged since the last green gate — skipping. Run 'pnpm run check --full' to force a full run."
+  echo "==> check: worktree unchanged since the last green gate ($(cut -c1-12 "$STAMP")) — skipping. Run 'pnpm run check --full' to force a full run."
   exit 0
 fi
 
 rm -rf "$LOGS"
 mkdir -p "$LOGS"
 
-echo "==> check: lint, typecheck and coverage in parallel"
+echo "==> check: static analysis, unit coverage and end-to-end in parallel"
 pnpm run lint >"$LOGS/lint.log" 2>&1 & LINT=$!
 pnpm run typecheck >"$LOGS/typecheck.log" 2>&1 & TYPECHECK=$!
 pnpm run coverage >"$LOGS/coverage.log" 2>&1 & COVERAGE=$!
+pnpm run e2e >"$LOGS/e2e.log" 2>&1 & E2E=$!
 
 FAILED=""
 wait "$LINT" || FAILED="$FAILED lint"
 wait "$TYPECHECK" || FAILED="$FAILED typecheck"
 wait "$COVERAGE" || FAILED="$FAILED coverage"
+wait "$E2E" || FAILED="$FAILED e2e"
 
 for name in "${GATES[@]}"; do
   echo
@@ -73,4 +76,4 @@ if [[ "$BEFORE" != "$AFTER" ]]; then
 fi
 
 printf '%s\n' "$BEFORE" > "$STAMP"
-echo "==> check passed: lint, typecheck and coverage thresholds (full output above; logs in $LOGS)"
+echo "==> check passed: lint, typecheck, unit coverage thresholds and e2e — tree ${BEFORE:0:12} (full output above; logs in $LOGS). Paste this line into the pull request."

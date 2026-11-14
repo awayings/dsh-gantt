@@ -40,6 +40,11 @@ jobs:
       - name: Test and coverage thresholds
         run: pnpm run coverage
 
+      # The end-to-end suite: the shipped client artifact over real HTTP against the real route handlers and a real
+      # SQLite file. It runs locally as part of `pnpm run check`, so it runs here for parity.
+      - name: End-to-end suite
+        run: pnpm run e2e
+
       - name: Verify version matches the tag
         run: |
           TAG="${{ github.ref_name }}"

@@ -29,6 +29,7 @@
     "test": "vitest run --project host --project client",
     "coverage": "vitest run --project host --project client --coverage",
     "e2e": "vitest run --project e2e",
+    "static": "pnpm run lint && pnpm run typecheck",
     "check": "node scripts/run-bash.mjs scripts/check.sh",
     "release": "node scripts/release.mjs",
     "verify": "node --check index.js && node --check store.js && node --check client.js",
