@@ -3,276 +3,82 @@
 A DeepSeek Harness plugin: a hierarchical task Gantt page in the Web UI, backed
 by a local SQLite database and an authenticated JSON API.
 
-## Background
+## Shape
 
-- DeepSeek Harness (DSH):
-  - an open-source agent harness developed by DeepSeek AI.
-  - GitHub: https://github.com/deepseek-ai/deepseek-harness
-  - NPM: `@deepseek-ai/dsh`
-  - The installed packages under `/data/app/node_modules/@deepseek-ai/` are the
-    source of truth for harness behavior (currently `0.2.2-rc.1`); a local clone
-    of the repository is an equivalent source when one is available.
-  - MUST read the actual package files (`README.*`, `lib/`, `lib/types/`) before
-    deciding anything about harness behavior. Never guess a seam, lifecycle, or
-    wire shape.
-- The plugin has two halves:
-  - host half `index.js` — runs in the `dsh web` server process, registers
-    `/api/gantt/*` routes through the Connection service, and owns the store.
-  - client half `client.js` — a single browser artifact loaded by the DSH client
-    module loader, registering one sidebar icon and one `main` page.
-- `docs/compatibility.md` is the single source of truth for supported versions
-  and harness seams. Read it before any compatibility-relevant change.
+- Host half `index.js` (runs in the `dsh web` process): registers `/api/gantt/*`
+  through the Connection service; `store.js` owns SQLite.
+- Client half `client.js`: one browser artifact loaded by the DSH module loader;
+  registers one sidebar icon and one `main` page.
+- **No build step**, no bundler, no `dist/`: all three files ship as source.
+  `client.js` must stay one classic script — DSH derives the artifact revision
+  from `exports["./client"]` metadata (mtime/ctime/size) only, so splitting the
+  entry would serve stale bytes from the immutable cache. Cap: 2300 lines.
+- Harness behavior: read the installed `@deepseek-ai/dsh` package under
+  `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`, `lib/types/`)
+  before deciding anything. Never guess a seam, lifecycle, or wire shape.
+  `docs/compatibility.md` is the source of truth for supported versions, seams,
+  and known limitations.
 
-## Coding standard
+## Gates
 
-### Priorities
+No pull requests: work commits straight to `main`, gated by two local hooks.
 
-- User experience, data accuracy, and data integrity come first. Nothing
-  outranks them.
-- Never trade them away for refactors, performance, or convenience.
-- Verify every change against reality with real tests. No assumptions.
+- `pre-commit` → `pnpm run static` (lint + typecheck, ~3 s).
+- `pre-push` → `pnpm run check` (static + unit coverage thresholds + e2e, in
+  parallel, ~15 s cold). A green run is cached in `.tmp/check.stamp` for 60 min
+  and skipped while the tree is unchanged; the push is refused unless the stamp
+  matches the pushed tree, so commit or stash first. `--full` forces a run.
+- Never `--no-verify`, never push a red or uncommitted tree, no history rewrites.
+- Coverage floors live in `vitest.config.ts` and ratchet up: 100% for `store.js`
+  and `index.js`; `client.js` 99/98/99/99 (measured 99.79/98.62/99.36/100).
+  Weakening one needs a recorded decision in `docs/development.md`.
+- CI runs the same gate only on `v*` release tags
+  (`.github/workflows/release.yml`); branches have no CI.
 
-### Efficiency
+## Rules
 
-- Make the smallest change that fully solves the problem, with the most
-  efficient implementation.
-- Keep code and tests small, modular, and loosely coupled. No duplication.
-- Reuse existing helpers, tests, and the harness's own facilities (slots,
-  locale service, style tokens). Delete code and tests that are outdated or no
-  longer needed.
-- No over-engineering: no abstraction that has a single caller, no option that
-  nothing sets.
+- UX, data accuracy, and data integrity first; never trade them for refactors,
+  speed, or convenience. Verify with real tests, not assumptions.
+- SQLite is the source of truth. Hierarchy numbers and stats are derived at read
+  time, never stored. Parent rollups are a cache: a parent that loses its last
+  child keeps its last rolled-up values (known limitation in
+  `docs/compatibility.md`).
+- Multi-row writes use one `BEGIN IMMEDIATE` transaction; validate before
+  mutating (dates, status vocabulary, progress bounds, parent existence,
+  cycles). The client refetches after every write and shows an error banner
+  instead of stale data.
+- Smallest change that fully solves it; reuse existing helpers; no abstraction
+  with a single caller, no unused option; delete dead code and old tests.
+- All source and test files < 1000 lines (`client.js`: 2300 cap).
+- Tests: `tests/store|host|client` (unit, Node/jsdom) and `tests/e2e` (real
+  artifact → real HTTP → real SQLite; small, behavior only). Narrowest run
+  first: `pnpm exec vitest run tests/<area>/<file>.spec.js -t "<case>"`.
+  Cover hostile input and validation failures.
+- English only in code, comments, tests, docs, and commits. UI copy: `en` + `zh`
+  dictionaries complete and in parity, every string through `t()`.
+- JSDoc on exported types/functions; prose comments only for non-obvious
+  platform constraints (e.g. the single-file artifact rule), never line
+  narration.
+- Temp files only in `.tmp` (gitignored); delete them after use.
+- No leaks on either side; no unbounded polling or duplicate refreshes.
+- Layout: the pane is the shell's center column, so its width varies — prefer
+  container queries. Fold, never crush; verify desktop → ~390 px, both locales,
+  light and dark, a long tree. Current viewport media queries are a known gap.
+- Zero runtime dependencies (Node built-ins + loader-provided React). Dev
+  tooling is pinned and locked; update one concern at a time.
+- Conventional Commits, English, imperative subject, one concern per commit.
+- Release: `pnpm run release X.Y.Z --push` (validates a clean, synced `main` and
+  its version, runs the full gate, tags, pushes, waits for the workflow).
+  Private package, never published to npm.
 
-### Data integrity
+## Runbook
 
-- The SQLite database is the single source of truth for the task tree.
-  Hierarchical numbers and stats are computed at read time and never stored.
-- Parent rollups (range, progress, status) are a persisted denormalized cache:
-  the read path re-derives them only while a parent has children. A parent that
-  loses its last child keeps its last rolled-up values, and the authored values
-  it had before its first child are overwritten — a known limitation recorded in
-  `docs/compatibility.md`. Never rely on authored parent values surviving their
-  first child.
-- Multi-row writes go through a `BEGIN IMMEDIATE` transaction; a failure rolls
-  back completely.
-- Validate before mutating: dates, status vocabulary, progress bounds, parent
-  existence, and hierarchy cycles.
-- The client never keeps a second source of truth: refresh from the API after
-  every write, and show an error banner rather than stale data when a read
-  fails.
-
-### Comments
-
-- JSDoc for exported types, functions, and public fields.
-- Prose comments only for non-obvious platform constraints, such as the
-  single-file client artifact rule or a SQLite/Node behavior a reader cannot
-  infer from the code. No narration of what the next line does.
-- Do not leave dead code or dead comments behind.
-
-### Tests
-
-- Tests live under `tests/store/`, `tests/host/`, `tests/client/`, and
-  `tests/e2e/`. Host logic runs in Node; the client runs in jsdom; the
-  end-to-end suite runs the real client artifact against the real host routes
-  over HTTP with a real SQLite file, and stays small.
-- Reuse existing specs, suites, and assertions. Drop tests no longer needed.
-- Iterate with the narrowest run first:
-  `pnpm exec vitest run tests/<area>/<name>.spec.js -t "<case name>"`.
-- Cover validation failures and hostile input, not only happy paths.
-
-### File size
-
-- Every source and test file stays under 1000 lines, with one documented
-  exception:
-  - `client.js` has a ratchet cap of **2300 lines**. DSH derives the client
-    artifact revision from the metadata of `exports["./client"]` only (mtime,
-    ctime, size), and every chunk URL embeds that revision; splitting the entry
-    file into runtime-required chunks leaves the entry untouched, so the
-    revision does not change and the browser serves stale bytes from its
-    immutable cache. The entry file MUST stay monolithic. See
-    `docs/compatibility.md` for the evidence and the escape hatch (bundle back
-    into one file if splitting is ever needed).
-  - Do not raise the cap without updating this rule and adding a test or check
-    that enforces it.
-
-### Language
-
-- English only: code, comments, tests, documentation, commit messages, PR
-  descriptions.
-- UI copy exists in both `en` and `zh` dictionaries and MUST stay complete and
-  in parity. The Chinese study notes under `docs/reference/` are historical
-  reference material and are the only exception.
-
-### Temporary files
-
-- Create them only in `./.tmp`.
-- Delete them immediately after use; `.tmp` is git-ignored.
-
-### Memory and performance
-
-- No leaks on either side: clear timers/effects in the client, close the
-  SQLite handle on host unload, and release references to removed nodes.
-- Keep row work proportional to the task tree size; there is no hidden
-  pagination, so never add unbounded polling or duplicate refreshes.
-
-## Verification gates
-
-Two gates, deliberately split. Committing must stay fast; merging must be
-evidence-backed.
-
-### Commit — static only
-
-`.husky/pre-commit` runs `pnpm run static` (`lint` + `typecheck`, ~3 seconds).
-Every commit must be lint- and type-clean, but a commit does not run behavior
-tests.
-
-- Close out the to-do list, ensuring every item is completed, cleaned up, or
-  explicitly closed.
-- Review the full diff independently: every change necessary, correct, and not
-  over-engineered.
-- Clean up generated temporary files and temporary or unhelpful comments.
-- Fix every lint and type error: the hook blocks the commit otherwise. Do not
-  use `--no-verify`.
-
-### Pull request — the full gate
-
-Run `pnpm run check` on the branch before opening a pull request for merge, and
-again after any review change or rebase:
-
-- It runs `pnpm run lint`, `pnpm run typecheck`, `pnpm run coverage` (unit
-  suites plus per-file thresholds) and `pnpm run e2e` (the shipped client
-  artifact against the shipped host routes, over real HTTP, on a real SQLite
-  file) concurrently, prints each tool's complete output, and fails when any of
-  them does. The logs stay in `.tmp/check-logs/`.
-- Read the complete output; never tail or truncate it.
-- Coverage policy: **100% per-file** (statements, branches, functions, lines)
-  for `store.js` and `index.js`. `client.js` has a documented floor:
-  99% statements, 98% branches, 99% functions, 99% lines (measured
-  99.79/98.62/99.36/100), as configured in `vitest.config.ts`. The floor is a
-  ratchet: raise it when coverage rises, and never weaken it without a recorded
-  decision in `docs/development.md`.
-- A green run stamps the worktree into `.tmp/check.stamp` with a 60-minute TTL,
-  and its final line names the tree hash: paste that line into the pull
-  request. `pnpm run check --full` forces a full re-run.
-- Never merge a branch with a red gate.
-
-## Layout & responsive
-
-- The plugin pane is the shell's center column, not the viewport — its width
-  follows the sidebar's collapse and drags. Prefer container queries for new
-  responsive work, as the harness itself does.
-- Known gap: the current stylesheet uses viewport media queries
-  (`@media (max-width: 980px)` and `@media (max-width: 720px)`) in `client.js`.
-  They can fire at the wrong pane width; `docs/compatibility.md` records this
-  as a limitation. Do not claim container-query support until it is migrated.
-- Fold, never crush: under width pressure, wrap rows or fold columns instead of
-  truncating into unreadability. No horizontal scrollbars, no overlapping
-  content, and every field stays reachable on the narrowest pane.
-- Verify layout changes visually before shipping: a spread of widths from
-  desktop down to phone (~390px), in both locales (English labels are the
-  truncation stress case), in light and dark themes, on a long tree.
-
-## Build & run
-
-- **No build step.** `index.js` and `store.js` are plain ESM; `client.js` is the
-  shipped client artifact. Do not add a bundler or a dist directory for the
-  runtime.
-- **Setup**: `pnpm install` (installs the pinned dev toolchain and husky hooks).
-- **Syntax check**: `pnpm run verify` runs `node --check` on all three source
-  files.
-- **Gates**: `pnpm run static` (commit hook: lint + typecheck),
-  `pnpm run check` (pull-request gate: static + unit coverage + e2e),
-  `pnpm run test` and `pnpm run e2e` separately. On Windows the gate locates
-  Git Bash via `scripts/run-bash.mjs`; set `DSH_GANTT_BASH` to override the
-  `bash.exe` path. See `docs/development.md` for the full procedure.
-- **CI runs the full gate only on release tags**
-  (`.github/workflows/release.yml`). Pull requests have no CI job: the local
-  pull-request gate is the evidence, and the same gate runs again in CI before
-  a release is published.
-- **Web server**: start DSH with `dsh web`; it prints a tokenized URL such as
-  `http://127.0.0.1:3080/?token=…`. Open that full URL once so the browser
-  receives its session cookie.
-- **Database**: `$DSH_HOME/gantt/tasks.db` by default (`DSH_HOME` defaults to
-  `~/.dsh`). Override with an absolute `DSH_GANTT_DB` path before starting DSH.
-- **Install/update a local bundle**:
-  - in the GUI: `plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }`
-  - in a terminal: `dsh plugin --profile web add /absolute/path/to/dsh-gantt`
-- **Verification**:
-  - `pnpm run test` for the automated suites.
-  - `cordis_inspect_query` → Client `Slots.listSubTree` with
-    `root: "sidebar.panellist"` and `root: "main"` for the live registrations.
-  - Manual GUI checklist in `docs/development.md`; jsdom tests prove behavior,
-    not rendering.
-  - The disposable-profile acceptance pass in `docs/development.md` proves the
-    host routes against a real `dsh web`.
-- **No commits or pushes without being asked.** The Lead owns git operations in
-  shared work.
-
-## Compatibility
-
-- MUST install and work correctly on every supported `@deepseek-ai/dsh` release,
-  with no regressions in the JSON API or any user-visible behavior.
-- **`docs/compatibility.md` is the single source of truth** — supported set,
-  harness seams with evidence pointers, rules, limitations, and verification
-  commands. Read it before any compatibility-relevant change and keep it
-  current whenever the code or the supported set changes.
-- Surfaces this plugin uses:
-  - `window.__ModuleLoader__` client chunk contract (`client.js`).
-  - `ctx.connection.fetch.register` host JSON routes (`index.js`).
-  - `ctx.slots` and locale services in the client half.
-  - `node:sqlite` for the store; `engines.node` is
-    `^22.19.0 || >=24.0.0`, while DSH `0.2.2-rc.1` itself requires Node
-    `>=24.9.0` (the effective floor when running inside DSH).
-- Verified against installed dsh `0.2.2-rc.1`; the package has no runtime
-  dependencies.
-
-## I18n
-
-- `DICT_EN` and `DICT_ZH` in `client.js` are the complete UI dictionary pair;
-  every visible string goes through the locale service (`t(...)`), and both
-  dictionaries must contain the same keys with no unused entries.
-- Keep copy concise and prefer terms used by the harness UI.
-- Other harness UI languages fall back to the registered English dictionary;
-  the plugin does not ship translations beyond `en` and `zh`.
-- Documentation is English.
-
-## Docs
-
-- `docs/` is lowercase and contains plugin and maintainer documentation.
-- `docs/reference/` holds internal study notes about DSH internals; they are
-  not plugin documentation and are not a compatibility contract.
-- There is no uppercase `Docs/` directory; never recreate one.
-- Keep relative links valid, and re-check them when moving files.
-- `CONTRIBUTING.md` is the contribution workflow (branches, commits, pull
-  requests, release checklist); keep it in step with `docs/development.md`.
-
-## Git
-
-- Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`,
-  `chore:`), English, imperative subject.
-- Commit mixed changes separately per concern; do not bundle unrelated work.
-- Run `git push` only when asked. No force-push, no history rewriting.
-
-## Releasing
-
-- Semantic versioning `X.Y.Z`; bump `package.json` `version` in the release
-  commit.
-- Review all commits since the last tag and write the release notes from
-  `.github/release_template.md` (install/update, what's new, commits,
-  contributors).
-- Cut releases with the script: `pnpm run release X.Y.Z --dry-run` validates a
-  clean, synced `main` whose version matches, runs `verify` and the full gate;
-  `pnpm run release X.Y.Z --push` tags, pushes, and waits for
-  `.github/workflows/release.yml` (which fails when the tag does not match the
-  package version, then creates the GitHub Release with generated notes).
-- The package is private (`"private": true`, `"license": "UNLICENSED"`) and is
-  not published to npm. Installation is by repository path.
-
-## Dependencies
-
-- Keep **zero runtime dependencies**: the host uses Node built-ins only, and
-  the client uses the React provided by the DSH client module loader.
-- Dev tooling is pinned in `package.json` (`oxlint` exact, TypeScript `~`,
-  vitest `^`) and locked in `pnpm-lock.yaml`; update deliberately, one concern
-  at a time.
-- `engines.node` is declared; keep it in step with `docs/compatibility.md`.
+- `pnpm install`; `pnpm run verify` = `node --check` on the three sources.
+- Live UI: start `dsh web`, open the printed `http://127.0.0.1:3080/?token=…`
+  URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`;
+  override with an absolute `DSH_GANTT_DB`.
+- Install a checkout: `dsh plugin --profile web add /abs/path` or the GUI
+  `plugin_manager install_bundle { target: "/abs/path" }`; restart `dsh web`.
+- `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
+  manual checklist, acceptance pass, API — in `docs/development.md`,
+  `docs/api.md`, `docs/compatibility.md`.
