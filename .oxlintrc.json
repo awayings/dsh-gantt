@@ -1,0 +1,162 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [],
+  "categories": {
+    "correctness": "off"
+  },
+  "options": {
+    "reportUnusedDisableDirectives": "warn",
+    "typeAware": false
+  },
+  "env": {
+    "builtin": true,
+    "es2024": true,
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/coverage/**",
+    "**/.tmp/**",
+    "**/dist/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "**/*.js"
+      ],
+      "plugins": [
+        "unicorn",
+        "oxc",
+        "import",
+        "promise"
+      ],
+      "rules": {
+        "no-var": "error",
+        "prefer-const": "error",
+        "prefer-rest-params": "error",
+        "prefer-spread": "error",
+        "no-array-constructor": "error",
+        "no-unused-expressions": "error",
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_",
+            "varsIgnorePattern": "^_",
+            "caughtErrorsIgnorePattern": "^_"
+          }
+        ],
+        "no-useless-constructor": "error",
+        "eqeqeq": "error",
+        "no-eval": "error",
+        "no-implied-eval": "error",
+        "no-duplicate-imports": "error",
+        "no-self-compare": "error",
+        "no-unreachable-loop": "error",
+        "no-constant-binary-expression": "error",
+        "no-constant-condition": "error",
+        "no-debugger": "error",
+        "no-console": "off",
+        "max-lines": [
+          "error",
+          {
+            "max": 1000,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "client.js"
+      ],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 2300,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/*.js"
+      ],
+      "jsPlugins": [
+        "@stylistic/eslint-plugin"
+      ],
+      "rules": {
+        "@stylistic/indent": [
+          "error",
+          2
+        ],
+        "@stylistic/semi": [
+          "error",
+          "never"
+        ],
+        "@stylistic/quotes": [
+          "error",
+          "single",
+          {
+            "avoidEscape": true
+          }
+        ],
+        "@stylistic/comma-dangle": [
+          "error",
+          "always-multiline"
+        ],
+        "@stylistic/eol-last": [
+          "error",
+          "always"
+        ],
+        "@stylistic/no-trailing-spaces": "error",
+        "@stylistic/object-curly-spacing": [
+          "error",
+          "always"
+        ],
+        "@stylistic/object-property-newline": [
+          "error",
+          {
+            "allowAllPropertiesOnSameLine": true
+          }
+        ],
+        "@stylistic/arrow-parens": [
+          "error",
+          "as-needed",
+          {
+            "requireForBlockBody": true
+          }
+        ],
+        "@stylistic/max-len": [
+          "error",
+          {
+            "code": 140,
+            "ignoreUrls": true,
+            "ignoreStrings": true,
+            "ignoreTemplateLiterals": true
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/*.js"
+      ],
+      "jsPlugins": [
+        "eslint-plugin-sonarjs"
+      ],
+      "rules": {
+        "sonarjs/no-all-duplicated-branches": "error",
+        "sonarjs/no-duplicate-in-composite": "error",
+        "sonarjs/no-identical-conditions": "error",
+        "sonarjs/no-identical-expressions": "error",
+        "sonarjs/no-identical-functions": "error",
+        "sonarjs/no-duplicated-branches": "error"
+      }
+    }
+  ]
+}
