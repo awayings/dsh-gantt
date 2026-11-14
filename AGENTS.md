@@ -165,6 +165,9 @@ Complete ALL of these before ANY commit:
   typecheck + coverage). On Windows the gate locates Git Bash via
   `scripts/run-bash.mjs`; set `DSH_GANTT_BASH` to override the `bash.exe` path.
   See `docs/development.md` for the full procedure.
+- **CI runs the gate only on release tags** (`.github/workflows/release.yml`).
+  Pull requests have no CI job: the local gate is the evidence, and the same
+  gate runs again in CI before a release is published.
 - **Web server**: start DSH with `dsh web`; it prints a tokenized URL such as
   `http://127.0.0.1:3080/?token=…`. Open that full URL once so the browser
   receives its session cookie.

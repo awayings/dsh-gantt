@@ -106,8 +106,10 @@ does. `.husky/pre-commit` runs the same gate, so a commit cannot slip past it.
 ## Pull requests
 
 Open the pull request against `main` with the repository template filled in.
-The required check is **PR checks** (`.github/workflows/pr-checks.yml`); a pull
-request with a red check is not ready for review.
+Pull requests have no CI job: the local gate `pnpm run check` is the evidence, so
+paste its final `==> check passed:` line into the template. CI re-runs the same
+gate only when a release tag is pushed, so a pull request that skipped the local
+gate is not ready for review.
 
 Reviewers look for:
 
@@ -167,8 +169,8 @@ Branches → Add branch protection rule**, pattern `main`, then:
 
 - require a pull request before merging (approvals optional for a solo
   maintainer, one for a team);
-- require status checks to pass, and select **PR checks**;
-- require branches to be up to date before merging;
+- do not require status checks — pull requests are verified locally and only
+  release tags run CI;
 - disallow force pushes and deletions;
 - optionally include administrators (recommended once the workflow is routine).
 
@@ -178,7 +180,7 @@ Or apply it with the GitHub CLI:
 gh api -X PUT repos/awayings/dsh-gantt/branches/main/protection \
   -H 'Accept: application/vnd.github+json' --input - <<'JSON'
 {
-  "required_status_checks": { "strict": true, "contexts": ["PR checks"] },
+  "required_status_checks": null,
   "enforce_admins": false,
   "required_pull_request_reviews": { "required_approving_review_count": 0 },
   "restrictions": null

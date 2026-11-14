@@ -11,7 +11,7 @@ Fixes #
 
 ## Verification
 
-- [ ] `pnpm run check` is green (paste the final `==> check passed:` line below)
+- [ ] `pnpm run check` is green (paste the final `==> check passed:` line below — pull requests have no CI job, so this output is the evidence)
 - [ ] Tests cover the change, including validation failures and hostile input where relevant
 - [ ] Manual UI check when user-visible: desktop down to ~390px, `en` and `zh`, light and dark, long tree (screenshot below)
 - [ ] Docs kept current: `docs/api.md` (routes), `docs/compatibility.md` (supported set, seams, limitations), `README.md` (user-facing behavior)

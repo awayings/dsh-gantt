@@ -1,7 +1,5 @@
 # DSH Task Gantt
 
-[![PR checks](https://github.com/awayings/dsh-gantt/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/awayings/dsh-gantt/actions/workflows/pr-checks.yml)
-
 A persistent DeepSeek Harness Web UI plugin that adds a **Task Gantt** entry to
 the left sidebar and a full central page with:
 
@@ -189,7 +187,9 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run check` | lint + typecheck + coverage in parallel, with a cached stamp |
 
 Coverage is 100% per-file for `store.js` and `index.js`, with a documented floor
-for `client.js`. Setup, test layout, database/API debugging, and the full
+for `client.js`. CI re-runs the same gate only when a release tag is pushed
+(`.github/workflows/release.yml`); pull requests are verified locally with
+`pnpm run check`. Setup, test layout, database/API debugging, and the full
 verification procedure are in [docs/development.md](docs/development.md).
 
 ## Documentation
