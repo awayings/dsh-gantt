@@ -120,8 +120,10 @@ Full request/response examples, field tables, and error codes:
 
 ```sh
 pnpm run verify    # node --check on the three source files
-pnpm run test      # vitest (host + jsdom client suites)
-pnpm run check     # lint + typecheck + coverage
+pnpm run static    # lint + typecheck (the commit hook)
+pnpm run test      # vitest (host + jsdom client unit suites)
+pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
+pnpm run check     # the full pull-request gate: static + coverage + e2e
 ```
 
 - `cordis_inspect_query` → Client `Slots.listSubTree` with
@@ -183,13 +185,17 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run verify` | Syntax of `index.js`, `store.js`, `client.js` |
 | `pnpm run lint` | oxlint |
 | `pnpm run typecheck` | TypeScript `checkJs` across host, client, and tests |
-| `pnpm run test` | Vitest host + jsdom client suites |
-| `pnpm run check` | lint + typecheck + coverage in parallel, with a cached stamp |
+| `pnpm run static` | lint + typecheck; what the commit hook runs (~3s) |
+| `pnpm run test` | Vitest host + jsdom client unit suites |
+| `pnpm run coverage` | Unit suites plus per-file coverage thresholds |
+| `pnpm run e2e` | Shipped client artifact against real HTTP and a real SQLite file |
+| `pnpm run check` | The pull-request gate: static + coverage + e2e in parallel, with a cached stamp |
 
 Coverage is 100% per-file for `store.js` and `index.js`, with a documented floor
-for `client.js`. CI re-runs the same gate only when a release tag is pushed
-(`.github/workflows/release.yml`); pull requests are verified locally with
-`pnpm run check`. Setup, test layout, database/API debugging, and the full
+for `client.js`. Commits only run the static check; branches are verified with
+the full gate locally before they are merged. CI re-runs the same full gate only
+when a release tag is pushed (`.github/workflows/release.yml`); pull requests
+have no CI job. Setup, test layout, database/API debugging, and the full
 verification procedure are in [docs/development.md](docs/development.md).
 
 ## Documentation

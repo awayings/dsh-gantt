@@ -9,7 +9,7 @@ How to set up, test, run, and verify `dsh-gantt`.
 | Node.js | `^22.19.0 \|\| >=24.0.0` (plugin `engines.node`); DSH `0.2.2-rc.1` requires `>=24.9.0` | The effective floor when running inside DSH is the harness's own. |
 | pnpm | latest (CI pins `latest`; the checked-in `pnpm-lock.yaml` is authoritative) | `corepack enable` or a standalone pnpm install. |
 | DeepSeek Harness | `0.2.2-rc.1` verified | `dsh --version`; install from `@deepseek-ai/dsh`. |
-| Git | any recent version | Husky installs the pre-commit hook on `pnpm install`. |
+| Git | any recent version | Husky installs the static pre-commit hook on `pnpm install`. |
 
 There are no runtime dependencies: the host half uses Node built-ins, and the
 client half uses the React instance provided by the DSH client module loader.
@@ -23,7 +23,8 @@ pnpm install
 pnpm run verify
 ```
 
-`pnpm install` also runs `husky` and installs the `pre-commit` hook.
+`pnpm install` also runs `husky` and installs the `pre-commit` hook, which runs
+`pnpm run static` (lint + typecheck) on every commit.
 
 ## Toolchain
 
@@ -31,9 +32,9 @@ pnpm run verify
 | --- | --- | --- |
 | [oxlint](https://oxc.rs/docs/guide/usage/linter) `1.85.0` | Lint | `.oxlintrc.json` (correctness, unicorn, import, promise rules) |
 | TypeScript `~7.0.2` (`tsc --noEmit`) | Typecheck `checkJs` for host, client, and tests | `tsconfig.json`, `tsconfig.client.json`, `tsconfig.tests.json` |
-| [vitest](https://vitest.dev/) `^5.1.0` | Host (Node) and client (jsdom) test projects | `vitest.config.ts` |
+| [vitest](https://vitest.dev/) `^5.1.0` | Host (Node), client (jsdom), and end-to-end (jsdom + real HTTP) projects | `vitest.config.ts` |
 | `@vitest/coverage-v8` | Per-file coverage thresholds | `vitest.config.ts` |
-| husky `^9.1.7` | Runs the quality gate before commits | `.husky/pre-commit` |
+| husky `^9.1.7` | Runs the static gate before commits | `.husky/pre-commit` |
 | jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
 
 There is **no build step**. All three source files are shipped as-is:
@@ -48,28 +49,33 @@ DSH.
 | `pnpm run lint` | `oxlint` | Lint rules and unused code. |
 | `pnpm run lint:fix` | `oxlint --fix` | Auto-fixes what it can; review the diff afterwards. |
 | `pnpm run typecheck` | `tsc --noEmit` against all three tsconfigs | Host under `strict`; client and tests under `checkJs` with looser settings. |
-| `pnpm run test` | `vitest run` (host + client projects) | Behavior. |
-| `pnpm run coverage` | `vitest run --coverage` | Behavior plus per-file thresholds. |
-| `pnpm run check` | lint + typecheck + coverage in parallel | The full gate; fails if any part fails. |
+| `pnpm run static` | `lint` then `typecheck` | The commit gate: static analysis only, ~3 seconds. |
+| `pnpm run test` | `vitest run --project host --project client` | Unit behavior in Node and jsdom. |
+| `pnpm run coverage` | `vitest run --project host --project client --coverage` | Unit behavior plus per-file thresholds. |
+| `pnpm run e2e` | `vitest run --project e2e` | The shipped client artifact, real HTTP, the real route handlers, and a real SQLite file. |
+| `pnpm run check` | lint + typecheck + coverage + e2e in parallel | The pull-request gate; fails if any part fails. |
 
-`pnpm run check` prints each tool's complete output and keeps the logs in
-`.tmp/check-logs/`. It is implemented as `scripts/check.sh`, launched through
-`scripts/run-bash.mjs` so the same gate also runs on Windows (where the launcher
-locates Git Bash; set `DSH_GANTT_BASH` to a `bash.exe` path to override). A
-green run fingerprints the worktree contents into `.tmp/check.stamp`; the
-`pre-commit` hook skips the gate when the stamp still matches and is under 60
-minutes old, and `pnpm run check --full` forces a full re-run.
+The gates are deliberately split. Committing runs `pnpm run static` from
+`.husky/pre-commit`: fast enough to stay out of the way, strict enough that no
+commit lands with a lint or type error. Behavior is verified once per branch,
+with the full gate `pnpm run check`, before the branch is merged — it runs the
+unit suites with coverage thresholds and the end-to-end suite, prints each
+tool's complete output, and keeps the logs in `.tmp/check-logs/`. It is
+implemented as `scripts/check.sh`, launched through `scripts/run-bash.mjs` so
+the same gate also runs on Windows (where the launcher locates Git Bash; set
+`DSH_GANTT_BASH` to a `bash.exe` path to override). A green run fingerprints
+the worktree contents into `.tmp/check.stamp` and prints the tree hash, so an
+unchanged repeat run can skip; `pnpm run check --full` forces a full re-run.
 
 Release tagging is scripted: `pnpm run release X.Y.Z [--dry-run] [--push]`
 validates the repository, runs the full gate, and creates/pushes the tag (see
 `CONTRIBUTING.md` §Releasing).
 
-CI runs the same gates with coverage thresholds only on release tags:
-`.github/workflows/release.yml` runs `pnpm run lint`, `pnpm run typecheck`, and
-`pnpm run coverage` after checking that the tag matches the package version.
-Pull requests have no CI job — they are verified locally with the single gate
-`pnpm run check`, and the full gate runs again in CI before a release is
-published.
+CI runs the full gate only on release tags: `.github/workflows/release.yml` runs
+`pnpm run lint`, `pnpm run typecheck`, `pnpm run coverage`, and `pnpm run e2e`
+after checking that the tag matches the package version. Pull requests have no
+CI job — the local pull-request gate is the evidence, and the same gate runs
+again in CI before a release is published.
 
 Coverage policy:
 
@@ -88,11 +94,19 @@ Coverage policy:
 | `tests/store/` | `host` (Node) | `store.js`: schema, dates, numbering, rollups, validation, CRUD, split, seed, delete |
 | `tests/host/` | `host` (Node) | `index.js`: route registration, body parsing, status codes, error mapping, store lifecycle |
 | `tests/client/` | `client` (jsdom) | `client.js`: rendering, tree/time-axis behavior, dialogs, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 `tests/client/setup.js` boots jsdom, stubs `window.__ModuleLoader__` so the
 factory can be called with the real React, and resets the document between
 specs. The client suite has no network access; fetch is mocked per spec.
+
+`tests/e2e/setup.js` uses the same loader stub, but the suite is a real
+integration: `tests/e2e/server.js` boots the host half against a temporary
+database file behind a real `node:http` server, and the shipped `client.js`
+requests it over the wire. `tests/e2e/artifact.spec.js` pins the single-file
+classic-script contract that DSH's cache revision depends on. Keep this suite
+small — exhaustive cases belong in the unit projects.
 
 Run a single area or case while iterating:
 
@@ -132,7 +146,8 @@ resolved path, schema version, and row count at runtime.
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
 4. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
-   `pnpm run check` before committing.
+   `pnpm run check` before opening the pull request. The commit hook only runs
+   the static check.
 5. Reinstall the bundle when the installed profile does not link to this
    checkout: `dsh plugin --profile web add /absolute/path/to/dsh-gantt` (or
    `plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }` in
@@ -144,7 +159,7 @@ resolved path, schema version, and row count at runtime.
 
 ```sh
 pnpm run verify
-pnpm run check
+pnpm run check     # lint + typecheck + unit coverage + e2e
 ```
 
 ### Install and host acceptance (disposable profile)

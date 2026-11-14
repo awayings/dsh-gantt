@@ -133,7 +133,8 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
 
 - **Check — syntax:** `pnpm run verify` (`node --check` on the three sources).
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
-  coverage; per-file thresholds in `vitest.config.ts`).
+  coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
+  suite in `tests/e2e/`).
 - **Check — live registrations:** `cordis_inspect_query` → Client
   `Slots.listSubTree` with `root: "sidebar.panellist"` and `root: "main"`.
 - **Check — install and host API:** the disposable-profile procedure in
