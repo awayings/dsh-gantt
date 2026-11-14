@@ -239,9 +239,11 @@ Complete ALL of these before ANY commit:
 - Review all commits since the last tag and write the release notes from
   `.github/release_template.md` (install/update, what's new, commits,
   contributors).
-- Cut releases by tagging: `git tag vX.Y.Z` and push the tag. The
-  `.github/workflows/release.yml` workflow fails when the tag does not match the
-  package version, then creates the GitHub Release with generated notes.
+- Cut releases with the script: `pnpm run release X.Y.Z --dry-run` validates a
+  clean, synced `main` whose version matches, runs `verify` and the full gate;
+  `pnpm run release X.Y.Z --push` tags, pushes, and waits for
+  `.github/workflows/release.yml` (which fails when the tag does not match the
+  package version, then creates the GitHub Release with generated notes).
 - The package is private (`"private": true`, `"license": "UNLICENSED"`) and is
   not published to npm. Installation is by repository path.
 

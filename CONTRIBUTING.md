@@ -126,26 +126,38 @@ delete the branch; the merge commit subject keeps the conventional prefix.
 ## Releasing (maintainers)
 
 The package is private and `UNLICENSED`; it is not published to npm. A release
-is a git tag plus a GitHub Release, and consumers install it from a checkout by
-path.
+is an annotated tag plus a GitHub Release, and consumers install it from a
+checkout by path. `pnpm run release` automates the mechanical part.
 
-1. Confirm `main` is green: CI on the tip commit passed and
-   `pnpm run check --full` passes locally.
-2. Pick the version (semantic versioning) and bump `version` in `package.json`.
-   Land it as a pull request titled `chore(release): X.Y.Z`.
-3. If the supported DSH or Node set changed, update the verified line and rules
-   in `docs/compatibility.md`, and the surface list in `AGENTS.md`.
-4. Tag the merged commit and push the tag:
+1. Pick the version (semantic versioning) and bump `version` in `package.json`,
+   landed through a pull request titled `chore(release): X.Y.Z`. That version
+   commit is the only change a release adds.
+2. If the supported DSH or Node set changed, update the verified line in
+   `docs/compatibility.md` and the surface list in `AGENTS.md` in the same pull
+   request.
+3. After the version commit is merged and `main` is clean, validate:
 
    ```sh
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin vX.Y.Z
+   pnpm run release X.Y.Z --dry-run
    ```
 
-5. `.github/workflows/release.yml` re-runs the full gate, fails when the tag
-   does not equal `v` + `package.json.version`, then creates the GitHub Release
-   with generated notes. If it fails, delete the tag (`git tag -d`, `git push
-   origin :vX.Y.Z`), fix, and re-tag — never move a published tag.
+   The script refuses to continue unless the branch is `main`, the worktree is
+   clean, `main` equals `origin/main`, `package.json` says `X.Y.Z`, and the tag
+   does not exist yet; then it runs `pnpm run verify` and the full gate
+   (`pnpm run check --full`).
+4. Cut and publish:
+
+   ```sh
+   pnpm run release X.Y.Z --push
+   ```
+
+   Without `--push` the tag is created locally and the script stops. With
+   `--push` it pushes the tag and waits for `.github/workflows/release.yml`,
+   which re-runs the gate, fails when the tag does not equal `v` +
+   `package.json.version`, and creates the GitHub Release with generated notes.
+5. If the workflow fails, delete the tag (`git tag -d vX.Y.Z`,
+   `git push origin :vX.Y.Z`), fix the cause, and re-run the script — never move
+   a published tag.
 6. Polish the notes from [.github/release_template.md](.github/release_template.md):
 
    ```sh
@@ -172,7 +184,9 @@ Branches → Add branch protection rule**, pattern `main`, then:
 - do not require status checks — pull requests are verified locally and only
   release tags run CI;
 - disallow force pushes and deletions;
-- optionally include administrators (recommended once the workflow is routine).
+- include administrators, so the rules also bind the maintainer — this
+  repository enforces them, and a direct `git push` to `main` is rejected.
+  Merging a pull request is a server-side operation and is not affected.
 
 Or apply it with the GitHub CLI:
 
@@ -181,7 +195,7 @@ gh api -X PUT repos/awayings/dsh-gantt/branches/main/protection \
   -H 'Accept: application/vnd.github+json' --input - <<'JSON'
 {
   "required_status_checks": null,
-  "enforce_admins": false,
+  "enforce_admins": true,
   "required_pull_request_reviews": { "required_approving_review_count": 0 },
   "restrictions": null
 }

@@ -29,6 +29,7 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "check": "node scripts/run-bash.mjs scripts/check.sh",
+    "release": "node scripts/release.mjs",
     "verify": "node --check index.js && node --check store.js && node --check client.js",
     "prepare": "husky"
   },

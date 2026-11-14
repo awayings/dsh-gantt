@@ -60,6 +60,10 @@ green run fingerprints the worktree contents into `.tmp/check.stamp`; the
 `pre-commit` hook skips the gate when the stamp still matches and is under 60
 minutes old, and `pnpm run check --full` forces a full re-run.
 
+Release tagging is scripted: `pnpm run release X.Y.Z [--dry-run] [--push]`
+validates the repository, runs the full gate, and creates/pushes the tag (see
+`CONTRIBUTING.md` §Releasing).
+
 CI runs the same gates with coverage thresholds only on release tags:
 `.github/workflows/release.yml` runs `pnpm run lint`, `pnpm run typecheck`, and
 `pnpm run coverage` after checking that the tag matches the package version.
