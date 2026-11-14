@@ -1,0 +1,87 @@
+name: Bug Report / 缺陷报告
+description: Report a problem with the dsh-gantt plugin on DeepSeek Harness. / 反馈 dsh-gantt 插件在 DeepSeek Harness 上的问题。
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version / DeepSeek Harness 版本
+      description: The `@deepseek-ai/dsh` version in use, from `dsh --version`. / 正在使用的 `@deepseek-ai/dsh` 版本（`dsh --version`）。
+      placeholder: e.g. 0.2.2-rc.1
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: dsh-gantt version / dsh-gantt 版本
+      description: The installed dsh-gantt plugin version. / 已安装的 dsh-gantt 插件版本。
+      placeholder: e.g. 1.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Node.js version / 操作系统与 Node.js 版本
+      description: The operating system hosting DSH and the Node.js runtime it runs on (`node --version`). / 运行 DSH 的操作系统及其上的 Node.js 运行时（`node --version`）。
+      placeholder: e.g. macOS 15.2 (arm64), Node 24.22.2 / 例如 macOS 15.2 (arm64)、Node 24.22.2
+    validations:
+      required: true
+  - type: input
+    id: database
+    attributes:
+      label: Database path / 数据库路径
+      description: >-
+        The SQLite file the plugin opened — the default `$DSH_HOME/gantt/tasks.db`, or the `DSH_GANTT_DB` override. The
+        Gantt page's API dialog and `GET /api/gantt/meta` both show the resolved path. / 插件打开的 SQLite 文件：默认
+        `$DSH_HOME/gantt/tasks.db`，或 `DSH_GANTT_DB` 覆盖值。Gantt 页面的 API 对话框与 `GET /api/gantt/meta` 都会显示解析后的路径。
+      placeholder: e.g. /Users/me/.dsh/gantt/tasks.db / 例如 /Users/me/.dsh/gantt/tasks.db
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem summary / 问题概述
+      description: A clear and concise statement of the problem. / 清晰、简洁地说明问题。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Minimal, deterministic steps that trigger the problem. / 能够稳定触发问题的最小步骤。
+      placeholder: |
+        1. Open ... / 打开 ...
+        2. Click ... / 点击 ...
+        3. Observe ... / 观察到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期望行为
+      description: What you expected to happen. / 你期望发生什么。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际行为
+      description: What actually happened instead. / 实际发生了什么。
+    validations:
+      required: true
+  - type: textarea
+    id: error-stack
+    attributes:
+      label: Error logs / 错误日志
+      description: The full error message and stack trace from the dsh logs or the browser console, if any. / 来自 dsh 日志或浏览器控制台的完整错误信息与堆栈（如有）。
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / 截图或录屏
+      description: Drag & drop screenshots or screen recordings here. / 请将截图或录屏拖拽到此处。
+    validations:
+      required: true
