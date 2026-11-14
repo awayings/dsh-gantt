@@ -1,15 +1,37 @@
-/**
- * Host half of the Gantt plugin.
- *
- * Provides the authenticated JSON API under `/api/gantt/*`. The Client half
- * calls these routes with the browser's existing signed session cookie; no
- * second server, port, or token is involved.
- */
 import { GanttError, GanttStore, resolveDatabasePath } from './store.js'
+
+/**
+ * @typedef {import('./store.js').SplitChild} SplitChild
+ * @typedef {import('./store.js').TaskInput} TaskInput
+ * @typedef {import('./store.js').TaskPatch} TaskPatch
+ * @typedef {import('./store.js').TaskStatus} TaskStatus
+ */
+
+/**
+ * @typedef {object} GanttEndpoint
+ * @property {'GET' | 'POST'} method
+ * @property {string} path
+ * @property {string} description
+ */
+
+/**
+ * @typedef {object} GanttRoute
+ * @property {string} path
+ * @property {string[]} methods
+ * @property {'buffered'} requestBody
+ * @property {(request: Request) => Response | Promise<Response>} fetch
+ */
+
+/**
+ * @typedef {object} GanttContext
+ * @property {{ fetch: { register: (route: GanttRoute) => unknown } }} connection
+ * @property {(effect: () => () => void, hint?: string) => unknown} effect
+ */
 
 export const name = 'gantt'
 export const inject = ['connection']
 
+/** @type {GanttEndpoint[]} */
 const ENDPOINTS = [
   {
     method: 'GET',
@@ -53,6 +75,11 @@ const ENDPOINTS = [
   },
 ]
 
+/**
+ * @param {unknown} data
+ * @param {number} [status]
+ * @returns {Response}
+ */
 function json(data, status = 200) {
   return Response.json(data, {
     status,
@@ -63,7 +90,12 @@ function json(data, status = 200) {
   })
 }
 
+/**
+ * @param {Request} request
+ * @returns {Promise<Record<string, unknown>>}
+ */
 async function readBody(request) {
+  /** @type {unknown} */
   let body
   try {
     body = await request.json()
@@ -73,13 +105,24 @@ async function readBody(request) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     throw new GanttError('request body must be a JSON object')
   }
-  return body
+  return /** @type {Record<string, unknown>} */ (body)
 }
 
+/**
+ * Register the authenticated Gantt JSON routes on the host connection service.
+ * @param {GanttContext} ctx
+ * @returns {void}
+ */
 export function apply(ctx) {
   const store = new GanttStore(resolveDatabasePath())
   ctx.effect(() => () => store.close(), 'gantt: close SQLite database')
 
+  /**
+   * @param {'GET' | 'POST'} method
+   * @param {string} path
+   * @param {(request: Request) => Response | Promise<Response>} handler
+   * @returns {void}
+   */
   const route = (method, path, handler) => {
     ctx.connection.fetch.register({
       path,
@@ -110,7 +153,7 @@ export function apply(ctx) {
 
   route('POST', '/api/gantt/tasks', async (request) => {
     const body = await readBody(request)
-    const task = store.create(body)
+    const task = store.create(/** @type {TaskInput} */ (body))
     return json({ ok: true, task }, 201)
   })
 
@@ -118,21 +161,25 @@ export function apply(ctx) {
     const body = await readBody(request)
     if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
     const { id, ...patch } = body
-    const task = store.update(id, patch)
+    const task = store.update(id, /** @type {TaskPatch} */ (patch))
     return json({ ok: true, task })
   })
 
   route('POST', '/api/gantt/task/status', async (request) => {
     const body = await readBody(request)
     if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
-    const task = store.setStatus(body.id, body.status, body.progress)
+    const task = store.setStatus(
+      body.id,
+      /** @type {TaskStatus} */ (body.status),
+      /** @type {number | undefined} */ (body.progress),
+    )
     return json({ ok: true, task })
   })
 
   route('POST', '/api/gantt/task/split', async (request) => {
     const body = await readBody(request)
     if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
-    const result = store.split(body.id, body.children)
+    const result = store.split(body.id, /** @type {SplitChild[]} */ (body.children))
     return json({ ok: true, ...result })
   })
 

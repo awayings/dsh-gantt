@@ -1,17 +1,10 @@
-/**
- * SQLite-backed task store for the Gantt plugin.
- *
- * The database is the single source of truth for the task tree. Hierarchical
- * numbers (1, 1.1, 1.1.1, ...) are derived from sibling order at read time, so
- * inserting, moving, or deleting a branch renumbers the tree without any extra
- * bookkeeping.
- */
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
+/** @type {TaskStatus[]} */
 export const STATUSES = ['todo', 'in_progress', 'blocked', 'done']
 export const SCHEMA_VERSION = 1
 
@@ -20,8 +13,115 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 4000
 
+/** @typedef {'todo' | 'in_progress' | 'blocked' | 'done'} TaskStatus */
+
+/**
+ * A task row with camelCase field names, as exposed by the API.
+ * @typedef {object} TaskRow
+ * @property {string} id
+ * @property {string | null} parentId
+ * @property {string} title
+ * @property {string} description
+ * @property {TaskStatus} status
+ * @property {number} progress
+ * @property {string} startDate
+ * @property {string} endDate
+ * @property {number} sortOrder
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ */
+
+/**
+ * A row placed in the nested tree, with its hierarchical number and rollups.
+ * @typedef {TaskRow & { number: string, hasChildren: boolean, children: TaskNode[] }} TaskNode
+ */
+
+/**
+ * Task fields accepted by create().
+ * @typedef {object} TaskInput
+ * @property {string} [title]
+ * @property {string | null} [description]
+ * @property {string | null} [parentId]
+ * @property {TaskStatus} [status]
+ * @property {number} [progress]
+ * @property {string} [startDate]
+ * @property {string} [endDate]
+ */
+
+/**
+ * Task fields accepted by update().
+ * @typedef {object} TaskPatch
+ * @property {string} [title]
+ * @property {string | null} [description]
+ * @property {string | null} [parentId]
+ * @property {TaskStatus} [status]
+ * @property {number} [progress]
+ * @property {string} [startDate]
+ * @property {string} [endDate]
+ */
+
+/**
+ * One child task accepted by split().
+ * @typedef {object} SplitChild
+ * @property {string} title
+ * @property {string | null} [description]
+ * @property {TaskStatus} [status]
+ * @property {number} [progress]
+ * @property {string} [startDate]
+ * @property {string} [endDate]
+ */
+
+/**
+ * @typedef {object} TaskStats
+ * @property {number} total
+ * @property {number} done
+ * @property {number} inProgress
+ * @property {number} blocked
+ * @property {number} overdue
+ * @property {number} progress
+ */
+
+/**
+ * @typedef {object} GanttSnapshot
+ * @property {string} today
+ * @property {TaskStatus[]} statuses
+ * @property {TaskNode[]} tasks
+ * @property {TaskStats} stats
+ */
+
+/**
+ * @typedef {object} GanttMeta
+ * @property {string} dbPath
+ * @property {TaskStatus[]} statuses
+ * @property {number} schemaVersion
+ * @property {number} taskCount
+ * @property {string} engine
+ */
+
+/**
+ * A raw SQLite row from the tasks table.
+ * @typedef {object} TaskSqlRow
+ * @property {string} id
+ * @property {string | null} parent_id
+ * @property {string} title
+ * @property {string} description
+ * @property {TaskStatus} status
+ * @property {number} progress
+ * @property {string} start_date
+ * @property {string} end_date
+ * @property {number} sort_order
+ * @property {string} created_at
+ * @property {string} updated_at
+ */
+
+/** @typedef {{ status: TaskStatus, progress: number, start_date: string, end_date: string }} ChildSummaryRow */
+
 /** A validation or lookup failure with an HTTP-friendly status. */
 export class GanttError extends Error {
+  /**
+   * @param {string} message
+   * @param {number} [status]
+   */
   constructor(message, status = 400) {
     super(message)
     this.name = 'GanttError'
@@ -29,28 +129,54 @@ export class GanttError extends Error {
   }
 }
 
+/**
+ * @param {number} value
+ * @returns {string}
+ */
 function pad(value) {
   return String(value).padStart(2, '0')
 }
 
+/**
+ * @param {Date} [now]
+ * @returns {string}
+ */
 export function todayIso(now = new Date()) {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
+/**
+ * @param {string} iso
+ * @returns {number}
+ */
 export function isoToDay(iso) {
   const [year, month, day] = iso.split('-').map(Number)
   return Date.UTC(year, month - 1, day)
 }
 
+/**
+ * @param {number} day
+ * @returns {string}
+ */
 export function dayToIso(day) {
   const date = new Date(day)
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
 }
 
+/**
+ * @param {string} iso
+ * @param {number} days
+ * @returns {string}
+ */
 export function addDays(iso, days) {
   return dayToIso(isoToDay(iso) + days * DAY_MS)
 }
 
+/**
+ * @param {unknown} value
+ * @param {string} field
+ * @returns {string}
+ */
 function assertDate(value, field) {
   if (typeof value !== 'string' || !DATE_RE.test(value)) {
     throw new GanttError(`${field} must be a YYYY-MM-DD date`)
@@ -62,10 +188,19 @@ function assertDate(value, field) {
   return value
 }
 
+/**
+ * @param {string} startDate
+ * @param {string} endDate
+ * @returns {void}
+ */
 function assertRange(startDate, endDate) {
   if (startDate > endDate) throw new GanttError('endDate must not be before startDate')
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function normalizeTitle(value) {
   if (typeof value !== 'string') throw new GanttError('title is required')
   const title = value.trim().replace(/\s+/g, ' ')
@@ -74,6 +209,10 @@ function normalizeTitle(value) {
   return title
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function normalizeDescription(value) {
   if (value === undefined || value === null) return ''
   if (typeof value !== 'string') throw new GanttError('description must be a string')
@@ -81,13 +220,22 @@ function normalizeDescription(value) {
   return value.trim()
 }
 
+/**
+ * @param {unknown} value
+ * @returns {TaskStatus}
+ */
 function normalizeStatus(value) {
-  if (!STATUSES.includes(value)) {
+  const status = STATUSES.find(candidate => candidate === value)
+  if (status === undefined) {
     throw new GanttError(`status must be one of ${STATUSES.join(', ')}`)
   }
-  return value
+  return status
 }
 
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
 function normalizeProgress(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new GanttError('progress must be a number from 0 to 100')
@@ -95,12 +243,21 @@ function normalizeProgress(value) {
   return Math.max(0, Math.min(100, Math.round(value)))
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 function normalizeParent(value) {
   if (value === undefined || value === null || value === '') return null
   if (typeof value !== 'string') throw new GanttError('parentId must be a task id or null')
   return value
 }
 
+/**
+ * @param {TaskStatus} status
+ * @param {number} [current]
+ * @returns {number}
+ */
 function defaultProgress(status, current = 0) {
   if (status === 'done') return 100
   if (status === 'todo') return 0
@@ -108,28 +265,44 @@ function defaultProgress(status, current = 0) {
   return current > 0 && current < 100 ? current : 50
 }
 
+/**
+ * @param {number} progress
+ * @param {TaskStatus} current
+ * @returns {TaskStatus}
+ */
 function statusFromProgress(progress, current) {
   if (progress >= 100) return 'done'
   if (progress <= 0) return 'todo'
   return current === 'blocked' ? 'blocked' : 'in_progress'
 }
 
-/** Derive the read-time status of a task that owns children. */
+/**
+ * Derive the read-time status of a task that owns children.
+ * @param {{ status: TaskStatus }[]} children
+ * @param {number} progress
+ * @returns {TaskStatus}
+ */
 export function deriveSummaryStatus(children, progress) {
-  if (children.length > 0 && children.every((child) => child.status === 'done')) return 'done'
-  if (children.some((child) => child.status === 'blocked')) return 'blocked'
-  if (children.some((child) => child.status === 'in_progress') || progress > 0) return 'in_progress'
+  if (children.length > 0 && children.every(child => child.status === 'done')) return 'done'
+  if (children.some(child => child.status === 'blocked')) return 'blocked'
+  if (children.some(child => child.status === 'in_progress') || progress > 0) return 'in_progress'
   return 'todo'
 }
 
-/** Build the nested tree, assigning hierarchical numbers and rollup fields. */
+/**
+ * Build the nested tree, assigning hierarchical numbers and rollup fields.
+ * @param {TaskRow[]} rows
+ * @returns {TaskNode[]}
+ */
 export function buildTree(rows) {
-  const ids = new Set(rows.map((row) => row.id))
+  const ids = new Set(rows.map(row => row.id))
+  /** @type {Map<string | null, TaskRow[]>} */
   const byParent = new Map()
   for (const row of rows) {
     const parentId = row.parentId && ids.has(row.parentId) ? row.parentId : null
-    if (!byParent.has(parentId)) byParent.set(parentId, [])
-    byParent.get(parentId).push({ ...row, parentId })
+    const siblings = byParent.get(parentId)
+    if (siblings) siblings.push({ ...row, parentId })
+    else byParent.set(parentId, [{ ...row, parentId }])
   }
   for (const siblings of byParent.values()) {
     siblings.sort((left, right) => (
@@ -139,6 +312,11 @@ export function buildTree(rows) {
     ))
   }
 
+  /**
+   * @param {string | null} parentId
+   * @param {string} prefix
+   * @returns {TaskNode[]}
+   */
   const build = (parentId, prefix) => (byParent.get(parentId) ?? []).map((row, index) => {
     const number = prefix ? `${prefix}.${index + 1}` : String(index + 1)
     const children = build(row.id, number)
@@ -155,6 +333,11 @@ export function buildTree(rows) {
   return build(null, '')
 }
 
+/**
+ * @param {TaskNode[]} nodes
+ * @param {TaskNode[]} [output]
+ * @returns {TaskNode[]}
+ */
 function flatten(nodes, output = []) {
   for (const node of nodes) {
     output.push(node)
@@ -163,6 +346,10 @@ function flatten(nodes, output = []) {
   return output
 }
 
+/**
+ * @param {TaskNode[]} nodes
+ * @returns {TaskStats}
+ */
 export function summarize(nodes) {
   const flat = flatten(nodes)
   const today = todayIso()
@@ -188,14 +375,22 @@ export function summarize(nodes) {
   }
 }
 
-/** Resolve the durable database location; override with DSH_GANTT_DB. */
+/**
+ * Resolve the durable database location; override with DSH_GANTT_DB.
+ * @returns {string}
+ */
 export function resolveDatabasePath() {
   if (process.env.DSH_GANTT_DB) return process.env.DSH_GANTT_DB
   const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
   return path.join(home, 'gantt', 'tasks.db')
 }
 
+/**
+ * SQLite-backed task store. Hierarchical numbers and rollups are derived at
+ * read time, so writes never maintain them.
+ */
 export class GanttStore {
+  /** @param {string} [file] */
   constructor(file = resolveDatabasePath()) {
     this.file = file
     if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -228,6 +423,7 @@ export class GanttStore {
     `)
   }
 
+  /** Close the database handle; safe to call more than once. */
   close() {
     try {
       this.db.close()
@@ -236,6 +432,11 @@ export class GanttStore {
     }
   }
 
+  /**
+   * @template T
+   * @param {() => T} fn
+   * @returns {T}
+   */
   transaction(fn) {
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -252,12 +453,14 @@ export class GanttStore {
     }
   }
 
+  /** @returns {TaskRow[]} */
   listRows() {
-    return this.db.prepare(`
+    const rows = /** @type {TaskSqlRow[]} */ (this.db.prepare(`
       SELECT id, parent_id, title, description, status, progress,
              start_date, end_date, sort_order, created_at, updated_at
       FROM tasks
-    `).all().map((row) => ({
+    `).all())
+    return rows.map(row => ({
       id: row.id,
       parentId: row.parent_id ?? null,
       title: row.title,
@@ -272,14 +475,18 @@ export class GanttStore {
     }))
   }
 
+  /** @returns {number} */
   count() {
-    return this.db.prepare('SELECT COUNT(*) AS count FROM tasks').get().count
+    const row = this.db.prepare('SELECT COUNT(*) AS count FROM tasks').get()
+    return /** @type {number} */ (row?.count ?? 0)
   }
 
+  /** @returns {TaskNode[]} */
   tree() {
     return buildTree(this.listRows())
   }
 
+  /** @returns {GanttSnapshot} */
   snapshot() {
     const tasks = this.tree()
     return {
@@ -290,6 +497,7 @@ export class GanttStore {
     }
   }
 
+  /** @returns {GanttMeta} */
   meta() {
     return {
       dbPath: this.file === ':memory:' ? ':memory:' : path.resolve(this.file),
@@ -300,14 +508,26 @@ export class GanttStore {
     }
   }
 
+  /**
+   * @param {string} id
+   * @returns {TaskRow | null}
+   */
   getRow(id) {
-    return this.listRows().find((row) => row.id === id) ?? null
+    return this.listRows().find(row => row.id === id) ?? null
   }
 
+  /**
+   * @param {string} id
+   * @returns {TaskNode | null}
+   */
   getNode(id) {
-    return flatten(this.tree()).find((node) => node.id === id) ?? null
+    return flatten(this.tree()).find(node => node.id === id) ?? null
   }
 
+  /**
+   * @param {unknown} id
+   * @returns {TaskRow}
+   */
   requireRow(id) {
     if (typeof id !== 'string' || id.length === 0) throw new GanttError('id is required')
     const row = this.getRow(id)
@@ -315,39 +535,58 @@ export class GanttStore {
     return row
   }
 
+  /**
+   * @param {string | null} parentId
+   * @returns {number}
+   */
   nextSortOrder(parentId) {
     const row = parentId === null
       ? this.db.prepare('SELECT MAX(sort_order) AS value FROM tasks WHERE parent_id IS NULL').get()
       : this.db.prepare('SELECT MAX(sort_order) AS value FROM tasks WHERE parent_id = ?').get(parentId)
-    return (row?.value ?? -1) + 1
+    const value = /** @type {number | null} */ (row?.value ?? null)
+    return (value ?? -1) + 1
   }
 
+  /**
+   * @param {string} candidateId
+   * @param {string} ancestorId
+   * @returns {boolean}
+   */
   isDescendant(candidateId, ancestorId) {
+    /** @type {string | null} */
     let current = candidateId
+    /** @type {Set<string>} */
     const seen = new Set()
     while (current) {
       if (current === ancestorId) return true
       if (seen.has(current)) return true
       seen.add(current)
-      const row = this.db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(current)
+      const row = /** @type {{ parent_id: string | null } | undefined} */ (
+        this.db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(current)
+      )
       current = row?.parent_id ?? null
     }
     return false
   }
 
+  /** @param {string | null} parentId */
   recomputeAncestors(parentId) {
     const now = new Date().toISOString()
+    /** @type {string | null} */
     let current = parentId
+    /** @type {Set<string>} */
     const seen = new Set()
     while (current) {
       if (seen.has(current)) break
       seen.add(current)
-      const row = this.db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(current)
+      const row = /** @type {{ parent_id: string | null } | undefined} */ (
+        this.db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(current)
+      )
       if (!row) break
-      const children = this.db.prepare(`
+      const children = /** @type {ChildSummaryRow[]} */ (this.db.prepare(`
         SELECT status, progress, start_date, end_date
         FROM tasks WHERE parent_id = ?
-      `).all(current)
+      `).all(current))
       if (children.length > 0) {
         const startDate = children.reduce((min, child) => (child.start_date < min ? child.start_date : min), children[0].start_date)
         const endDate = children.reduce((max, child) => (child.end_date > max ? child.end_date : max), children[0].end_date)
@@ -363,6 +602,10 @@ export class GanttStore {
     }
   }
 
+  /**
+   * @param {TaskInput} [input]
+   * @returns {TaskNode | null}
+   */
   create(input = {}) {
     const parentId = normalizeParent(input.parentId)
     if (parentId !== null) this.requireRow(parentId)
@@ -393,6 +636,11 @@ export class GanttStore {
     return this.getNode(id)
   }
 
+  /**
+   * @param {string} id
+   * @param {TaskPatch} [patch]
+   * @returns {TaskNode | null}
+   */
   update(id, patch = {}) {
     const row = this.requireRow(id)
     const next = { ...row }
@@ -445,12 +693,24 @@ export class GanttStore {
     return this.getNode(id)
   }
 
+  /**
+   * @param {string} id
+   * @param {TaskStatus} status
+   * @param {number} [progress]
+   * @returns {TaskNode | null}
+   */
   setStatus(id, status, progress) {
+    /** @type {TaskPatch} */
     const patch = { status }
     if (progress !== undefined) patch.progress = progress
     return this.update(id, patch)
   }
 
+  /**
+   * @param {string} id
+   * @param {SplitChild[]} children
+   * @returns {{ parent: TaskNode | null, children: TaskNode[] }}
+   */
   split(id, children) {
     const parent = this.requireRow(id)
     if (!Array.isArray(children) || children.length === 0) {
@@ -474,6 +734,7 @@ export class GanttStore {
       }
     })
     const now = new Date().toISOString()
+    /** @type {string[]} */
     const created = []
     this.transaction(() => {
       const base = this.nextSortOrder(id)
@@ -493,10 +754,14 @@ export class GanttStore {
     })
     return {
       parent: this.getNode(id),
-      children: created.map((childId) => this.getNode(childId)).filter(Boolean),
+      children: /** @type {TaskNode[]} */ (created.map(childId => this.getNode(childId)).filter(Boolean)),
     }
   }
 
+  /**
+   * @param {string} id
+   * @returns {{ id: string, parentId: string | null }}
+   */
   delete(id) {
     const row = this.requireRow(id)
     this.transaction(() => {
@@ -506,6 +771,7 @@ export class GanttStore {
     return { id, parentId: row.parentId }
   }
 
+  /** @returns {{ seeded: boolean, taskCount: number }} */
   seed() {
     if (this.count() > 0) {
       return { seeded: false, taskCount: this.count() }
@@ -514,6 +780,17 @@ export class GanttStore {
     const now = new Date().toISOString()
     let created = 0
 
+    /**
+     * @param {string | null} parentId
+     * @param {string} title
+     * @param {string} description
+     * @param {TaskStatus} status
+     * @param {number} progress
+     * @param {string} startDate
+     * @param {string} endDate
+     * @param {number} sortOrder
+     * @returns {string}
+     */
     const insert = (parentId, title, description, status, progress, startDate, endDate, sortOrder) => {
       const id = randomUUID()
       this.db.prepare(`

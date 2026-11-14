@@ -27,175 +27,172 @@ window.__ModuleLoader__.load({
       done: 'var(--dsw-alias-state-success-primary)',
     }
 
-    /** 英文文案。 */
     const DICT_EN = {
-        'nav.label': 'Task Gantt',
-        'page.title': 'Task Gantt',
-        'page.subtitle': 'Plan, split, and track hierarchical work on a weekly or monthly timeline.',
-        'actions.new': 'New task',
-        'actions.today': 'Today',
-        'actions.prev': 'Previous window',
-        'actions.next': 'Next window',
-        'actions.refresh': 'Refresh',
-        'actions.api': 'API',
-        'actions.seed': 'Load demo data',
-        'actions.close': 'Close',
-        'scale.label': 'Timeline scale',
-        'scale.week': 'Week',
-        'scale.month': 'Month',
-        'scale.weekShort': 'Weekly view',
-        'scale.monthShort': 'Monthly view',
-        'stats.total': 'Total',
-        'stats.inProgress': 'In progress',
-        'stats.done': 'Done',
-        'stats.overdue': 'Overdue',
-        'stats.progress': 'Completion',
-        'stats.tasks': 'tasks',
-        'status.todo': 'To do',
-        'status.in_progress': 'In progress',
-        'status.blocked': 'Blocked',
-        'status.done': 'Done',
-        'status.summaryHint': 'Status is rolled up from subtasks',
-        'status.cycleHint': 'Click to cycle status',
-        'tree.task': 'Task',
-        'tree.expand': 'Expand subtasks',
-        'tree.collapse': 'Collapse subtasks',
-        'tree.addChild': 'Add subtask',
-        'empty.title': 'No tasks yet',
-        'empty.body': 'Create the first task, or load a small demo tree to explore the timeline.',
-        'empty.new': 'Create a task',
-        'empty.seed': 'Load demo data',
-        'loading': 'Loading tasks…',
-        'error.title': 'Could not load tasks',
-        'error.retry': 'Retry',
-        'dialog.createTitle': 'New task',
-        'dialog.editTitle': 'Edit task',
-        'dialog.splitTitle': 'Split task',
-        'dialog.apiTitle': 'Data API',
-        'field.title': 'Title',
-        'field.titlePlaceholder': 'What needs to be done?',
-        'field.description': 'Description',
-        'field.descriptionPlaceholder': 'Notes, acceptance criteria, links…',
-        'field.parent': 'Parent task',
-        'field.parentNone': 'No parent (top level)',
-        'field.start': 'Start date',
-        'field.end': 'End date',
-        'field.status': 'Status',
-        'field.progress': 'Progress',
-        'field.progressHint': 'Drag to update; 100% marks the task done.',
-        'field.summaryDates': 'Dates, status, and progress are rolled up from subtasks.',
-        'dialog.save': 'Save',
-        'dialog.create': 'Create',
-        'dialog.cancel': 'Cancel',
-        'dialog.delete': 'Delete',
-        'dialog.deleteConfirm': 'Confirm delete',
-        'dialog.split': 'Split',
-        'dialog.addRow': 'Add subtask row',
-        'dialog.removeRow': 'Remove row',
-        'dialog.splitHint': 'Each row becomes a child task. The parent dates and progress follow its subtasks.',
-        'dialog.splitChildTitle': 'Subtask title',
-        'dialog.apiIntro': 'These JSON endpoints are mounted on the authenticated /api channel. The page and external callers share one task store.',
-        'dialog.apiDb': 'SQLite database',
-        'dialog.apiAuth': 'Authentication: the browser session cookie; no separate port or token.',
-        'dialog.apiEmpty': 'Loading endpoint catalog…',
-        'notice.created': 'Task created',
-        'notice.saved': 'Task saved',
-        'notice.deleted': 'Task deleted',
-        'notice.split': 'Subtasks created',
-        'notice.seeded': 'Demo data loaded',
-        'notice.statusUpdated': 'Status updated',
-        'validation.title': 'Enter a title.',
-        'validation.dates': 'The end date cannot be before the start date.',
-        'validation.splitChild': 'Every subtask needs a title and a valid date range.',
-        'window.week': 'Weekly',
-        'window.month': 'Monthly',
+      'nav.label': 'Task Gantt',
+      'page.title': 'Task Gantt',
+      'page.subtitle': 'Plan, split, and track hierarchical work on a weekly or monthly timeline.',
+      'actions.new': 'New task',
+      'actions.today': 'Today',
+      'actions.prev': 'Previous window',
+      'actions.next': 'Next window',
+      'actions.refresh': 'Refresh',
+      'actions.api': 'API',
+      'actions.seed': 'Load demo data',
+      'actions.close': 'Close',
+      'scale.label': 'Timeline scale',
+      'scale.week': 'Week',
+      'scale.month': 'Month',
+      'scale.weekShort': 'Weekly view',
+      'scale.monthShort': 'Monthly view',
+      'stats.total': 'Total',
+      'stats.inProgress': 'In progress',
+      'stats.done': 'Done',
+      'stats.overdue': 'Overdue',
+      'stats.progress': 'Completion',
+      'stats.tasks': 'tasks',
+      'status.todo': 'To do',
+      'status.in_progress': 'In progress',
+      'status.blocked': 'Blocked',
+      'status.done': 'Done',
+      'status.summaryHint': 'Status is rolled up from subtasks',
+      'status.cycleHint': 'Click to cycle status',
+      'tree.task': 'Task',
+      'tree.expand': 'Expand subtasks',
+      'tree.collapse': 'Collapse subtasks',
+      'tree.addChild': 'Add subtask',
+      'empty.title': 'No tasks yet',
+      'empty.body': 'Create the first task, or load a small demo tree to explore the timeline.',
+      'empty.new': 'Create a task',
+      'empty.seed': 'Load demo data',
+      'loading': 'Loading tasks…',
+      'error.title': 'Could not load tasks',
+      'error.retry': 'Retry',
+      'dialog.createTitle': 'New task',
+      'dialog.editTitle': 'Edit task',
+      'dialog.splitTitle': 'Split task',
+      'dialog.apiTitle': 'Data API',
+      'field.title': 'Title',
+      'field.titlePlaceholder': 'What needs to be done?',
+      'field.description': 'Description',
+      'field.descriptionPlaceholder': 'Notes, acceptance criteria, links…',
+      'field.parent': 'Parent task',
+      'field.parentNone': 'No parent (top level)',
+      'field.start': 'Start date',
+      'field.end': 'End date',
+      'field.status': 'Status',
+      'field.progress': 'Progress',
+      'field.progressHint': 'Drag to update; 100% marks the task done.',
+      'field.summaryDates': 'Dates, status, and progress are rolled up from subtasks.',
+      'dialog.save': 'Save',
+      'dialog.create': 'Create',
+      'dialog.cancel': 'Cancel',
+      'dialog.delete': 'Delete',
+      'dialog.deleteConfirm': 'Confirm delete',
+      'dialog.split': 'Split',
+      'dialog.addRow': 'Add subtask row',
+      'dialog.removeRow': 'Remove row',
+      'dialog.splitHint': 'Each row becomes a child task. The parent dates and progress follow its subtasks.',
+      'dialog.splitChildTitle': 'Subtask title',
+      'dialog.apiIntro': 'These JSON endpoints are mounted on the authenticated /api channel. The page and external callers share one task store.',
+      'dialog.apiDb': 'SQLite database',
+      'dialog.apiAuth': 'Authentication: the browser session cookie; no separate port or token.',
+      'dialog.apiEmpty': 'Loading endpoint catalog…',
+      'notice.created': 'Task created',
+      'notice.saved': 'Task saved',
+      'notice.deleted': 'Task deleted',
+      'notice.split': 'Subtasks created',
+      'notice.seeded': 'Demo data loaded',
+      'notice.statusUpdated': 'Status updated',
+      'validation.title': 'Enter a title.',
+      'validation.dates': 'The end date cannot be before the start date.',
+      'validation.splitChild': 'Every subtask needs a title and a valid date range.',
+      'window.week': 'Weekly',
+      'window.month': 'Monthly',
     }
 
-    /** 中文文案。 */
     const DICT_ZH = {
-        'nav.label': '任务甘特图',
-        'page.title': '任务甘特图',
-        'page.subtitle': '在周/月时间线上规划、拆分和跟踪层级任务，数据保存在本地 SQLite 数据库。',
-        'actions.new': '新建任务',
-        'actions.today': '今天',
-        'actions.prev': '上一段',
-        'actions.next': '下一段',
-        'actions.refresh': '刷新',
-        'actions.api': '接口',
-        'actions.seed': '载入示例',
-        'actions.close': '关闭',
-        'scale.label': '时间粒度',
-        'scale.week': '周',
-        'scale.month': '月',
-        'scale.weekShort': '周视图',
-        'scale.monthShort': '月视图',
-        'stats.total': '全部',
-        'stats.inProgress': '进行中',
-        'stats.done': '已完成',
-        'stats.overdue': '已逾期',
-        'stats.progress': '完成度',
-        'stats.tasks': '个任务',
-        'status.todo': '待开始',
-        'status.in_progress': '进行中',
-        'status.blocked': '受阻',
-        'status.done': '已完成',
-        'status.summaryHint': '状态由子任务汇总',
-        'status.cycleHint': '点击切换状态',
-        'tree.task': '任务',
-        'tree.expand': '展开子任务',
-        'tree.collapse': '收起子任务',
-        'tree.addChild': '添加子任务',
-        'empty.title': '还没有任务',
-        'empty.body': '先创建一个任务，或者载入一组示例数据来体验时间线。',
-        'empty.new': '创建任务',
-        'empty.seed': '载入示例数据',
-        'loading': '正在加载任务…',
-        'error.title': '任务加载失败',
-        'error.retry': '重试',
-        'dialog.createTitle': '新建任务',
-        'dialog.editTitle': '编辑任务',
-        'dialog.splitTitle': '拆分任务',
-        'dialog.apiTitle': '数据接口',
-        'field.title': '标题',
-        'field.titlePlaceholder': '要完成什么？',
-        'field.description': '描述',
-        'field.descriptionPlaceholder': '备注、验收标准、相关链接…',
-        'field.parent': '父任务',
-        'field.parentNone': '无父任务（顶层）',
-        'field.start': '开始日期',
-        'field.end': '结束日期',
-        'field.status': '状态',
-        'field.progress': '进度',
-        'field.progressHint': '拖动调整；100% 会自动标记为已完成。',
-        'field.summaryDates': '日期、状态和进度由子任务自动汇总。',
-        'dialog.save': '保存',
-        'dialog.create': '创建',
-        'dialog.cancel': '取消',
-        'dialog.delete': '删除',
-        'dialog.deleteConfirm': '确认删除',
-        'dialog.split': '拆分',
-        'dialog.addRow': '添加一行',
-        'dialog.removeRow': '删除这一行',
-        'dialog.splitHint': '每一行会变成一个子任务，父任务的日期和进度将自动汇总。',
-        'dialog.splitChildTitle': '子任务标题',
-        'dialog.apiIntro': '以下 JSON 接口挂载在已认证的 /api 通道上，页面与外部调用共用同一个任务库。',
-        'dialog.apiDb': 'SQLite 数据库',
-        'dialog.apiAuth': '认证：浏览器会话 Cookie；不需要单独端口或令牌。',
-        'dialog.apiEmpty': '正在读取接口目录…',
-        'notice.created': '任务已创建',
-        'notice.saved': '任务已保存',
-        'notice.deleted': '任务已删除',
-        'notice.split': '子任务已创建',
-        'notice.seeded': '示例数据已载入',
-        'notice.statusUpdated': '状态已更新',
-        'validation.title': '请填写标题。',
-        'validation.dates': '结束日期不能早于开始日期。',
-        'validation.splitChild': '每个子任务都需要标题和有效的日期范围。',
-        'window.week': '周视图',
-        'window.month': '月视图',
+      'nav.label': '任务甘特图',
+      'page.title': '任务甘特图',
+      'page.subtitle': '在周/月时间线上规划、拆分和跟踪层级任务，数据保存在本地 SQLite 数据库。',
+      'actions.new': '新建任务',
+      'actions.today': '今天',
+      'actions.prev': '上一段',
+      'actions.next': '下一段',
+      'actions.refresh': '刷新',
+      'actions.api': '接口',
+      'actions.seed': '载入示例',
+      'actions.close': '关闭',
+      'scale.label': '时间粒度',
+      'scale.week': '周',
+      'scale.month': '月',
+      'scale.weekShort': '周视图',
+      'scale.monthShort': '月视图',
+      'stats.total': '全部',
+      'stats.inProgress': '进行中',
+      'stats.done': '已完成',
+      'stats.overdue': '已逾期',
+      'stats.progress': '完成度',
+      'stats.tasks': '个任务',
+      'status.todo': '待开始',
+      'status.in_progress': '进行中',
+      'status.blocked': '受阻',
+      'status.done': '已完成',
+      'status.summaryHint': '状态由子任务汇总',
+      'status.cycleHint': '点击切换状态',
+      'tree.task': '任务',
+      'tree.expand': '展开子任务',
+      'tree.collapse': '收起子任务',
+      'tree.addChild': '添加子任务',
+      'empty.title': '还没有任务',
+      'empty.body': '先创建一个任务，或者载入一组示例数据来体验时间线。',
+      'empty.new': '创建任务',
+      'empty.seed': '载入示例数据',
+      'loading': '正在加载任务…',
+      'error.title': '任务加载失败',
+      'error.retry': '重试',
+      'dialog.createTitle': '新建任务',
+      'dialog.editTitle': '编辑任务',
+      'dialog.splitTitle': '拆分任务',
+      'dialog.apiTitle': '数据接口',
+      'field.title': '标题',
+      'field.titlePlaceholder': '要完成什么？',
+      'field.description': '描述',
+      'field.descriptionPlaceholder': '备注、验收标准、相关链接…',
+      'field.parent': '父任务',
+      'field.parentNone': '无父任务（顶层）',
+      'field.start': '开始日期',
+      'field.end': '结束日期',
+      'field.status': '状态',
+      'field.progress': '进度',
+      'field.progressHint': '拖动调整；100% 会自动标记为已完成。',
+      'field.summaryDates': '日期、状态和进度由子任务自动汇总。',
+      'dialog.save': '保存',
+      'dialog.create': '创建',
+      'dialog.cancel': '取消',
+      'dialog.delete': '删除',
+      'dialog.deleteConfirm': '确认删除',
+      'dialog.split': '拆分',
+      'dialog.addRow': '添加一行',
+      'dialog.removeRow': '删除这一行',
+      'dialog.splitHint': '每一行会变成一个子任务，父任务的日期和进度将自动汇总。',
+      'dialog.splitChildTitle': '子任务标题',
+      'dialog.apiIntro': '以下 JSON 接口挂载在已认证的 /api 通道上，页面与外部调用共用同一个任务库。',
+      'dialog.apiDb': 'SQLite 数据库',
+      'dialog.apiAuth': '认证：浏览器会话 Cookie；不需要单独端口或令牌。',
+      'dialog.apiEmpty': '正在读取接口目录…',
+      'notice.created': '任务已创建',
+      'notice.saved': '任务已保存',
+      'notice.deleted': '任务已删除',
+      'notice.split': '子任务已创建',
+      'notice.seeded': '示例数据已载入',
+      'notice.statusUpdated': '状态已更新',
+      'validation.title': '请填写标题。',
+      'validation.dates': '结束日期不能早于开始日期。',
+      'validation.splitChild': '每个子任务都需要标题和有效的日期范围。',
+      'window.week': '周视图',
+      'window.month': '月视图',
     }
 
-    /** 语言标签 → 字典，注册给 Client locale 服务。 */
     const DICTS = { en: DICT_EN, zh: DICT_ZH }
 
     const API_TEXT = {
@@ -323,8 +320,18 @@ window.__ModuleLoader__.load({
       }).format(new Date(isoToDay(iso)))
     }
 
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value))
+    function groupUnits(units, keyLength) {
+      const groups = []
+      for (const unit of units) {
+        const key = unit.startIso.slice(0, keyLength)
+        let group = groups[groups.length - 1]
+        if (!group || group.key !== key) {
+          group = { key, startIso: unit.startIso, width: 0 }
+          groups.push(group)
+        }
+        group.width += unit.width
+      }
+      return groups
     }
 
     function buildWindow(scale, anchor, today) {
@@ -346,16 +353,7 @@ window.__ModuleLoader__.load({
             isToday: iso === today,
           })
         }
-        const groups = []
-        for (const unit of units) {
-          const key = unit.startIso.slice(0, 7)
-          let group = groups[groups.length - 1]
-          if (!group || group.key !== key) {
-            group = { key, startIso: unit.startIso, width: 0 }
-            groups.push(group)
-          }
-          group.width += unit.width
-        }
+        const groups = groupUnits(units, 7)
         const boundaries = []
         for (let index = 1; index < totalDays; index += 1) {
           const iso = addDays(start, index)
@@ -404,16 +402,7 @@ window.__ModuleLoader__.load({
         totalWidth += width
         totalDays += days
       }
-      const groups = []
-      for (const unit of units) {
-        const key = unit.startIso.slice(0, 4)
-        let group = groups[groups.length - 1]
-        if (!group || group.key !== key) {
-          group = { key, startIso: unit.startIso, width: 0 }
-          groups.push(group)
-        }
-        group.width += unit.width
-      }
+      const groups = groupUnits(units, 4)
       const startMs = isoToDay(first)
       const endMs = startMs + totalDays * DAY_MS
       const todayMs = isoToDay(today)
@@ -470,7 +459,7 @@ window.__ModuleLoader__.load({
 
     function useLocale(ctx) {
       const subscribe = useCallback(
-        (listener) => (ctx ? ctx.locale.subscribe(listener) : () => {}),
+        listener => (ctx ? ctx.locale.subscribe(listener) : () => {}),
         [ctx],
       )
       const readRevision = useCallback(
@@ -478,7 +467,7 @@ window.__ModuleLoader__.load({
         [ctx],
       )
       useSyncExternalStore(subscribe, readRevision, readRevision)
-      if (!ctx) return { locale: 'en', t: (key) => key }
+      if (!ctx) return { locale: 'en', t: key => key }
       const snapshot = ctx.locale.getSnapshot()
       return {
         locale: snapshot.locale,
@@ -489,12 +478,12 @@ window.__ModuleLoader__.load({
     function useGanttData() {
       const [state, setState] = useState({ status: 'loading', data: null, error: null })
       const [revision, setRevision] = useState(0)
-      const refresh = useCallback(() => setRevision((value) => value + 1), [])
+      const refresh = useCallback(() => setRevision(value => value + 1), [])
 
       useEffect(() => {
         const controller = new AbortController()
         let active = true
-        setState((previous) => ({
+        setState(previous => ({
           ...previous,
           status: previous.data ? 'refreshing' : 'loading',
           error: null,
@@ -505,7 +494,7 @@ window.__ModuleLoader__.load({
           })
           .catch((error) => {
             if (!active || error.name === 'AbortError') return
-            setState((previous) => ({
+            setState(previous => ({
               ...previous,
               status: 'error',
               error: error instanceof Error ? error.message : String(error),
@@ -585,10 +574,10 @@ window.__ModuleLoader__.load({
         'aria-hidden': 'true',
         style: { display: 'block' },
       },
-        h('rect', { x: 3.5, y: 4.5, width: 9, height: 3.4, rx: 1.7, fill: 'currentColor' }),
-        h('rect', { x: 8.5, y: 10.3, width: 12, height: 3.4, rx: 1.7, fill: 'currentColor', opacity: 0.72 }),
-        h('rect', { x: 5.5, y: 16.1, width: 8, height: 3.4, rx: 1.7, fill: 'currentColor', opacity: 0.46 }),
-        h('path', { d: 'M3.5 2.8v18.4', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', opacity: 0.42 })
+      h('rect', { x: 3.5, y: 4.5, width: 9, height: 3.4, rx: 1.7, fill: 'currentColor' }),
+      h('rect', { x: 8.5, y: 10.3, width: 12, height: 3.4, rx: 1.7, fill: 'currentColor', opacity: 0.72 }),
+      h('rect', { x: 5.5, y: 16.1, width: 8, height: 3.4, rx: 1.7, fill: 'currentColor', opacity: 0.46 }),
+      h('path', { d: 'M3.5 2.8v18.4', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', opacity: 0.42 }),
       )
     }
 
@@ -604,10 +593,10 @@ window.__ModuleLoader__.load({
         'aria-hidden': 'true',
         style: { display: 'block', opacity: active ? 1 : 0.85 },
       },
-        h('rect', { x: 4, y: 4, width: 9, height: 3.4, rx: 1.7 }),
-        h('rect', { x: 9, y: 10.3, width: 11, height: 3.4, rx: 1.7 }),
-        h('rect', { x: 6, y: 16.6, width: 8, height: 3.4, rx: 1.7 }),
-        h('path', { d: 'M3.5 3v18', opacity: 0.4 })
+      h('rect', { x: 4, y: 4, width: 9, height: 3.4, rx: 1.7 }),
+      h('rect', { x: 9, y: 10.3, width: 11, height: 3.4, rx: 1.7 }),
+      h('rect', { x: 6, y: 16.6, width: 8, height: 3.4, rx: 1.7 }),
+      h('path', { d: 'M3.5 3v18', opacity: 0.4 }),
       )
     }
 
@@ -648,10 +637,10 @@ window.__ModuleLoader__.load({
           onSelect(task)
         },
       },
-        h('span', { className: 'gantt-bar-fill', style: { width: `${task.progress}%` } }),
-        !task.hasChildren && range.width > 58
-          ? h('span', { className: 'gantt-bar-label' }, task.title)
-          : null
+      h('span', { className: 'gantt-bar-fill', style: { width: `${task.progress}%` } }),
+      !task.hasChildren && range.width > 58
+        ? h('span', { className: 'gantt-bar-label' }, task.title)
+        : null,
       )
     }
 
@@ -673,42 +662,42 @@ window.__ModuleLoader__.load({
         tabIndex: 0,
         'aria-label': `${task.number} ${task.title}`,
       },
-        h('div', { className: 'gantt-task-cell', style: { paddingLeft: `${10 + depth * 16}px` } },
-          hasChildren
-            ? h('button', {
-              className: 'gantt-chevron',
-              type: 'button',
-              'aria-label': collapsed ? t('tree.expand') : t('tree.collapse'),
-              'aria-expanded': collapsed ? 'false' : 'true',
-              onClick: (event) => {
-                event.stopPropagation()
-                onToggle(task.id)
-              },
-            }, collapsed ? '▸' : '▾')
-            : h('span', { className: 'gantt-chevron gantt-chevron-empty', 'aria-hidden': 'true' }),
-          h('span', { className: 'gantt-number' }, task.number),
-          h('span', { className: 'gantt-task-title', title: task.title }, task.title),
-          h(StatusPill, {
-            status: task.status,
-            label: t(`status.${task.status}`),
-            interactive: !hasChildren,
-            title: hasChildren ? t('status.summaryHint') : t('status.cycleHint'),
-            onClick: () => onCycleStatus(task),
-          }),
-          h('button', {
-            className: 'gantt-add-child',
+      h('div', { className: 'gantt-task-cell', style: { paddingLeft: `${10 + depth * 16}px` } },
+        hasChildren
+          ? h('button', {
+            className: 'gantt-chevron',
             type: 'button',
-            title: t('tree.addChild'),
-            'aria-label': t('tree.addChild'),
+            'aria-label': collapsed ? t('tree.expand') : t('tree.collapse'),
+            'aria-expanded': collapsed ? 'false' : 'true',
             onClick: (event) => {
               event.stopPropagation()
-              onAddChild(task)
+              onToggle(task.id)
             },
-          }, '+')
-        ),
-        h('div', { className: 'gantt-track', style: { width: `${timeline.totalWidth}px` } },
-          h(TaskBar, { task, timeline, onSelect })
-        )
+          }, collapsed ? '▸' : '▾')
+          : h('span', { className: 'gantt-chevron gantt-chevron-empty', 'aria-hidden': 'true' }),
+        h('span', { className: 'gantt-number' }, task.number),
+        h('span', { className: 'gantt-task-title', title: task.title }, task.title),
+        h(StatusPill, {
+          status: task.status,
+          label: t(`status.${task.status}`),
+          interactive: !hasChildren,
+          title: hasChildren ? t('status.summaryHint') : t('status.cycleHint'),
+          onClick: () => onCycleStatus(task),
+        }),
+        h('button', {
+          className: 'gantt-add-child',
+          type: 'button',
+          title: t('tree.addChild'),
+          'aria-label': t('tree.addChild'),
+          onClick: (event) => {
+            event.stopPropagation()
+            onAddChild(task)
+          },
+        }, '+'),
+      ),
+      h('div', { className: 'gantt-track', style: { width: `${timeline.totalWidth}px` } },
+        h(TaskBar, { task, timeline, onSelect }),
+      ),
       )
     }
 
@@ -716,35 +705,35 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'gantt-header' },
         h('div', { className: 'gantt-corner' },
           h('span', { className: 'gantt-corner-title' }, t('tree.task')),
-          h('span', { className: 'gantt-corner-sub' }, `${taskCount} ${t('stats.tasks')}`)
+          h('span', { className: 'gantt-corner-sub' }, `${taskCount} ${t('stats.tasks')}`),
         ),
         h('div', { className: 'gantt-header-timeline', style: { width: `${timeline.totalWidth}px` } },
           h('div', { className: 'gantt-group-row' },
-            timeline.groups.map((group) => h('div', {
+            timeline.groups.map(group => h('div', {
               key: group.key,
               className: 'gantt-group-cell',
               style: { width: `${group.width}px` },
             }, timeline.scale === 'week'
               ? formatMonthYear(group.startIso, locale)
-              : formatYear(group.startIso, locale)))
+              : formatYear(group.startIso, locale))),
           ),
           h('div', { className: 'gantt-unit-row' },
-            timeline.units.map((unit) => h('div', {
+            timeline.units.map(unit => h('div', {
               key: unit.key,
               className: 'gantt-unit-cell',
               'data-today': unit.isToday ? 'true' : undefined,
               'data-weekend': unit.isWeekend ? 'true' : undefined,
               style: { width: `${unit.width}px` },
             },
-              h('span', { className: 'gantt-unit-main' }, timeline.scale === 'week'
-                ? String(Number(unit.startIso.slice(8, 10)))
-                : formatMonth(unit.startIso, locale)),
-              timeline.scale === 'week'
-                ? h('span', { className: 'gantt-unit-sub' }, formatWeekday(unit.startIso, locale))
-                : null
-            ))
-          )
-        )
+            h('span', { className: 'gantt-unit-main' }, timeline.scale === 'week'
+              ? String(Number(unit.startIso.slice(8, 10)))
+              : formatMonth(unit.startIso, locale)),
+            timeline.scale === 'week'
+              ? h('span', { className: 'gantt-unit-sub' }, formatWeekday(unit.startIso, locale))
+              : null,
+            )),
+          ),
+        ),
       )
     }
 
@@ -754,15 +743,15 @@ window.__ModuleLoader__.load({
         style: { left: 'var(--gantt-left)', width: `${timeline.totalWidth}px` },
         'aria-hidden': 'true',
       },
-        timeline.boundaries.map((line, index) => h('span', {
-          key: index,
-          className: 'gantt-vline',
-          'data-strong': line.strong ? 'true' : undefined,
-          style: { left: `${line.x}px` },
-        })),
-        timeline.todayX !== null
-          ? h('span', { className: 'gantt-today-line', style: { left: `${timeline.todayX}px` } })
-          : null
+      timeline.boundaries.map((line, index) => h('span', {
+        key: index,
+        className: 'gantt-vline',
+        'data-strong': line.strong ? 'true' : undefined,
+        style: { left: `${line.x}px` },
+      })),
+      timeline.todayX !== null
+        ? h('span', { className: 'gantt-today-line', style: { left: `${timeline.todayX}px` } })
+        : null,
       )
     }
 
@@ -770,7 +759,7 @@ window.__ModuleLoader__.load({
       return h('label', { className: `gantt-field${full ? ' gantt-field-full' : ''}` },
         h('span', { className: 'gantt-label' }, label),
         children,
-        hint ? h('span', { className: 'gantt-hint' }, hint) : null
+        hint ? h('span', { className: 'gantt-hint' }, hint) : null,
       )
     }
 
@@ -792,25 +781,25 @@ window.__ModuleLoader__.load({
           if (event.target === event.currentTarget) onClose()
         },
       },
-        h('div', {
-          className: `gantt-dialog${wide ? ' gantt-dialog-wide' : ''}`,
-          role: 'dialog',
-          'aria-modal': 'true',
-          'aria-label': title,
-        },
-          h('div', { className: 'gantt-dialog-head' },
-            h('h2', { className: 'gantt-dialog-title' }, title),
-            h('button', {
-              className: 'gantt-btn gantt-icon-btn',
-              type: 'button',
-              'aria-label': closeLabel,
-              title: closeLabel,
-              onClick: onClose,
-            }, '×')
-          ),
-          h('div', { className: 'gantt-dialog-body' }, children),
-          footer ? h('div', { className: 'gantt-dialog-foot' }, footer) : null
-        )
+      h('div', {
+        className: `gantt-dialog${wide ? ' gantt-dialog-wide' : ''}`,
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': title,
+      },
+      h('div', { className: 'gantt-dialog-head' },
+        h('h2', { className: 'gantt-dialog-title' }, title),
+        h('button', {
+          className: 'gantt-btn gantt-icon-btn',
+          type: 'button',
+          'aria-label': closeLabel,
+          title: closeLabel,
+          onClick: onClose,
+        }, '×'),
+      ),
+      h('div', { className: 'gantt-dialog-body' }, children),
+      footer ? h('div', { className: 'gantt-dialog-foot' }, footer) : null,
+      ),
       )
     }
 
@@ -940,7 +929,7 @@ window.__ModuleLoader__.load({
                 disabled: saving,
                 onClick: () => onSplit(task),
               }, t('dialog.split'))
-              : null
+              : null,
           ),
           h('div', { className: 'gantt-dialog-foot-right' },
             h('button', {
@@ -954,90 +943,90 @@ window.__ModuleLoader__.load({
               type: 'button',
               disabled: saving,
               onClick: submit,
-            }, saving ? '…' : (mode === 'create' ? t('dialog.create') : t('dialog.save')))
-          )
+            }, saving ? '…' : (mode === 'create' ? t('dialog.create') : t('dialog.save'))),
+          ),
         ),
       },
-        error ? h('div', { className: 'gantt-form-error' }, error) : null,
-        h('div', { className: 'gantt-form-grid' },
-          h(Field, { label: t('field.title'), full: true },
-            h('input', {
-              className: 'gantt-input',
-              value: title,
-              autoFocus: true,
-              maxLength: 200,
-              placeholder: t('field.titlePlaceholder'),
-              onChange: (event) => setTitle(event.target.value),
-            })
+      error ? h('div', { className: 'gantt-form-error' }, error) : null,
+      h('div', { className: 'gantt-form-grid' },
+        h(Field, { label: t('field.title'), full: true },
+          h('input', {
+            className: 'gantt-input',
+            value: title,
+            autoFocus: true,
+            maxLength: 200,
+            placeholder: t('field.titlePlaceholder'),
+            onChange: event => setTitle(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.description'), full: true },
+          h('textarea', {
+            className: 'gantt-textarea',
+            value: description,
+            maxLength: 4000,
+            placeholder: t('field.descriptionPlaceholder'),
+            onChange: event => setDescription(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.parent'), full: true, hint: hasChildren ? t('field.summaryDates') : null },
+          h('select', {
+            className: 'gantt-select',
+            value: parent,
+            onChange: event => setParent(event.target.value),
+          },
+          h('option', { value: '' }, t('field.parentNone')),
+          parentChoices.map(option => h('option', {
+            key: option.id,
+            value: option.id,
+          }, `${'\u00a0\u00a0'.repeat(option.depth)}${option.label}`)),
           ),
-          h(Field, { label: t('field.description'), full: true },
-            h('textarea', {
-              className: 'gantt-textarea',
-              value: description,
-              maxLength: 4000,
-              placeholder: t('field.descriptionPlaceholder'),
-              onChange: (event) => setDescription(event.target.value),
-            })
-          ),
-          h(Field, { label: t('field.parent'), full: true, hint: hasChildren ? t('field.summaryDates') : null },
-            h('select', {
-              className: 'gantt-select',
-              value: parent,
-              onChange: (event) => setParent(event.target.value),
+        ),
+        h(Field, { label: t('field.start') },
+          h('input', {
+            className: 'gantt-input',
+            type: 'date',
+            value: startDate,
+            disabled: hasChildren,
+            onChange: (event) => {
+              const next = event.target.value
+              setStartDate(next)
+              if (next > endDate) setEndDate(next)
             },
-              h('option', { value: '' }, t('field.parentNone')),
-              parentChoices.map((option) => h('option', {
-                key: option.id,
-                value: option.id,
-              }, `${'\u00a0\u00a0'.repeat(option.depth)}${option.label}`))
-            )
+          }),
+        ),
+        h(Field, { label: t('field.end') },
+          h('input', {
+            className: 'gantt-input',
+            type: 'date',
+            value: endDate,
+            disabled: hasChildren,
+            min: startDate,
+            onChange: event => setEndDate(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.status') },
+          h('select', {
+            className: 'gantt-select',
+            value: status,
+            disabled: hasChildren,
+            onChange: event => changeStatus(event.target.value),
+          },
+          STATUSES.map(value => h('option', { key: value, value }, t(`status.${value}`))),
           ),
-          h(Field, { label: t('field.start') },
-            h('input', {
-              className: 'gantt-input',
-              type: 'date',
-              value: startDate,
-              disabled: hasChildren,
-              onChange: (event) => {
-                const next = event.target.value
-                setStartDate(next)
-                if (next > endDate) setEndDate(next)
-              },
-            })
-          ),
-          h(Field, { label: t('field.end') },
-            h('input', {
-              className: 'gantt-input',
-              type: 'date',
-              value: endDate,
-              disabled: hasChildren,
-              min: startDate,
-              onChange: (event) => setEndDate(event.target.value),
-            })
-          ),
-          h(Field, { label: t('field.status') },
-            h('select', {
-              className: 'gantt-select',
-              value: status,
-              disabled: hasChildren,
-              onChange: (event) => changeStatus(event.target.value),
-            },
-              STATUSES.map((value) => h('option', { key: value, value }, t(`status.${value}`)))
-            )
-          ),
-          h(Field, { label: `${t('field.progress')} · ${progress}%`, hint: hasChildren ? null : t('field.progressHint') },
-            h('input', {
-              className: 'gantt-range',
-              type: 'range',
-              min: 0,
-              max: 100,
-              step: 1,
-              value: progress,
-              disabled: hasChildren,
-              onChange: (event) => changeProgress(event.target.value),
-            })
-          )
-        )
+        ),
+        h(Field, { label: `${t('field.progress')} · ${progress}%`, hint: hasChildren ? null : t('field.progressHint') },
+          h('input', {
+            className: 'gantt-range',
+            type: 'range',
+            min: 0,
+            max: 100,
+            step: 1,
+            value: progress,
+            disabled: hasChildren,
+            onChange: event => changeProgress(event.target.value),
+          }),
+        ),
+      ),
       )
     }
 
@@ -1064,14 +1053,14 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null)
 
       const updateRow = (key, patch) => {
-        setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)))
+        setRows(current => current.map(row => (row.key === key ? { ...row, ...patch } : row)))
       }
 
       const addRow = () => {
         const last = rows[rows.length - 1]
         const startDate = last ? addDays(last.endDate, 1) : task.startDate
         const endDate = task.endDate > startDate ? task.endDate : addDays(startDate, 1)
-        setRows((current) => [...current, {
+        setRows(current => [...current, {
           key: `row-${splitRowSequence += 1}`,
           title: '',
           startDate,
@@ -1080,7 +1069,7 @@ window.__ModuleLoader__.load({
       }
 
       const removeRow = (key) => {
-        setRows((current) => (current.length > 1 ? current.filter((row) => row.key !== key) : current))
+        setRows(current => (current.length > 1 ? current.filter(row => row.key !== key) : current))
       }
 
       const submit = async () => {
@@ -1097,7 +1086,7 @@ window.__ModuleLoader__.load({
             method: 'POST',
             body: JSON.stringify({
               id: task.id,
-              children: rows.map((row) => ({
+              children: rows.map(row => ({
                 title: row.title.trim(),
                 startDate: row.startDate,
                 endDate: row.endDate,
@@ -1121,61 +1110,61 @@ window.__ModuleLoader__.load({
         wide: true,
         footer: h(React.Fragment, null,
           h('div', { className: 'gantt-dialog-foot-left' },
-            h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: addRow }, `+ ${t('dialog.addRow')}`)
+            h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: addRow }, `+ ${t('dialog.addRow')}`),
           ),
           h('div', { className: 'gantt-dialog-foot-right' },
             h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: onClose }, t('dialog.cancel')),
-            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', disabled: saving, onClick: submit }, saving ? '…' : t('dialog.split'))
-          )
+            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', disabled: saving, onClick: submit }, saving ? '…' : t('dialog.split')),
+          ),
         ),
       },
-        error ? h('div', { className: 'gantt-form-error' }, error) : null,
-        h('p', { className: 'gantt-dialog-note' }, t('dialog.splitHint')),
-        h('div', { className: 'gantt-split-head' },
-          h('span', null, t('dialog.splitChildTitle')),
-          h('span', null, t('field.start')),
-          h('span', null, t('field.end')),
-          h('span', null, '')
-        ),
-        rows.map((row) => h('div', { className: 'gantt-split-row', key: row.key },
-          h('input', {
-            className: 'gantt-input',
-            'aria-label': t('dialog.splitChildTitle'),
-            value: row.title,
-            autoFocus: row === rows[0],
-            placeholder: t('dialog.splitChildTitle'),
-            onChange: (event) => updateRow(row.key, { title: event.target.value }),
-          }),
-          h('input', {
-            className: 'gantt-input',
-            type: 'date',
-            'aria-label': t('field.start'),
-            value: row.startDate,
-            onChange: (event) => {
-              const next = event.target.value
-              updateRow(row.key, {
-                startDate: next,
-                endDate: next > row.endDate ? next : row.endDate,
-              })
-            },
-          }),
-          h('input', {
-            className: 'gantt-input',
-            type: 'date',
-            'aria-label': t('field.end'),
-            value: row.endDate,
-            min: row.startDate,
-            onChange: (event) => updateRow(row.key, { endDate: event.target.value }),
-          }),
-          h('button', {
-            className: 'gantt-btn gantt-icon-btn',
-            type: 'button',
-            title: t('dialog.removeRow'),
-            'aria-label': t('dialog.removeRow'),
-            disabled: rows.length <= 1,
-            onClick: () => removeRow(row.key),
-          }, '×')
-        ))
+      error ? h('div', { className: 'gantt-form-error' }, error) : null,
+      h('p', { className: 'gantt-dialog-note' }, t('dialog.splitHint')),
+      h('div', { className: 'gantt-split-head' },
+        h('span', null, t('dialog.splitChildTitle')),
+        h('span', null, t('field.start')),
+        h('span', null, t('field.end')),
+        h('span', null, ''),
+      ),
+      rows.map(row => h('div', { className: 'gantt-split-row', key: row.key },
+        h('input', {
+          className: 'gantt-input',
+          'aria-label': t('dialog.splitChildTitle'),
+          value: row.title,
+          autoFocus: row === rows[0],
+          placeholder: t('dialog.splitChildTitle'),
+          onChange: event => updateRow(row.key, { title: event.target.value }),
+        }),
+        h('input', {
+          className: 'gantt-input',
+          type: 'date',
+          'aria-label': t('field.start'),
+          value: row.startDate,
+          onChange: (event) => {
+            const next = event.target.value
+            updateRow(row.key, {
+              startDate: next,
+              endDate: next > row.endDate ? next : row.endDate,
+            })
+          },
+        }),
+        h('input', {
+          className: 'gantt-input',
+          type: 'date',
+          'aria-label': t('field.end'),
+          value: row.endDate,
+          min: row.startDate,
+          onChange: event => updateRow(row.key, { endDate: event.target.value }),
+        }),
+        h('button', {
+          className: 'gantt-btn gantt-icon-btn',
+          type: 'button',
+          title: t('dialog.removeRow'),
+          'aria-label': t('dialog.removeRow'),
+          disabled: rows.length <= 1,
+          onClick: () => removeRow(row.key),
+        }, '×'),
+      )),
       )
     }
 
@@ -1203,38 +1192,36 @@ window.__ModuleLoader__.load({
         onClose,
         wide: true,
         footer: h('div', { className: 'gantt-dialog-foot-right' },
-          h('button', { className: 'gantt-btn', type: 'button', onClick: onClose }, t('actions.close'))
+          h('button', { className: 'gantt-btn', type: 'button', onClick: onClose }, t('actions.close')),
         ),
       },
-        h('p', { className: 'gantt-dialog-note' }, t('dialog.apiIntro')),
-        h('div', { className: 'gantt-api-meta' },
-          h('div', null,
-            h('span', { className: 'gantt-label' }, t('dialog.apiDb')),
-            h('code', { className: 'gantt-code' }, meta?.dbPath ?? '—')
-          ),
-          h('div', null,
-            h('span', { className: 'gantt-label' }, 'Engine'),
-            h('code', { className: 'gantt-code' }, meta?.engine ?? '—')
-          )
+      h('p', { className: 'gantt-dialog-note' }, t('dialog.apiIntro')),
+      h('div', { className: 'gantt-api-meta' },
+        h('div', null,
+          h('span', { className: 'gantt-label' }, t('dialog.apiDb')),
+          h('code', { className: 'gantt-code' }, meta?.dbPath ?? '—'),
         ),
-        h('p', { className: 'gantt-hint' }, t('dialog.apiAuth')),
-        error ? h('div', { className: 'gantt-form-error' }, error) : null,
-        !meta && !error ? h('p', { className: 'gantt-hint' }, t('dialog.apiEmpty')) : null,
-        meta
-          ? h('div', { className: 'gantt-api-list' },
-            (meta.endpoints ?? []).map((endpoint) => h('div', { className: 'gantt-api-row', key: `${endpoint.method} ${endpoint.path}` },
-              h('span', { className: 'gantt-method', 'data-method': endpoint.method }, endpoint.method),
-              h('code', { className: 'gantt-code gantt-api-path' }, endpoint.path),
-              h('span', { className: 'gantt-api-desc' }, API_TEXT[endpoint.path]
-                ? API_TEXT[endpoint.path][String(locale).toLowerCase().startsWith('zh') ? 'zh' : 'en']
-                : endpoint.description)
-            )))
-          : null
+        h('div', null,
+          h('span', { className: 'gantt-label' }, 'Engine'),
+          h('code', { className: 'gantt-code' }, meta?.engine ?? '—'),
+        ),
+      ),
+      h('p', { className: 'gantt-hint' }, t('dialog.apiAuth')),
+      error ? h('div', { className: 'gantt-form-error' }, error) : null,
+      !meta && !error ? h('p', { className: 'gantt-hint' }, t('dialog.apiEmpty')) : null,
+      meta
+        ? h('div', { className: 'gantt-api-list' },
+          (meta.endpoints ?? []).map(endpoint => h('div', { className: 'gantt-api-row', key: `${endpoint.method} ${endpoint.path}` },
+            h('span', { className: 'gantt-method', 'data-method': endpoint.method }, endpoint.method),
+            h('code', { className: 'gantt-code gantt-api-path' }, endpoint.path),
+            h('span', { className: 'gantt-api-desc' }, API_TEXT[endpoint.path]
+              ? API_TEXT[endpoint.path][String(locale).toLowerCase().startsWith('zh') ? 'zh' : 'en']
+              : endpoint.description),
+          )))
+        : null,
       )
     }
 
-    // ── 样式表：按界面区域分段，运行时一次性拼成一张 <style> ──
-    /** 主题变量、盒模型与焦点样式。 */
     const CSS_BASE = `
       .gantt-page {
         --gantt-left: 340px;
@@ -1268,7 +1255,6 @@ window.__ModuleLoader__.load({
       }
     `
 
-    /** 顶栏：品牌、标题、操作按钮与周/月切换。 */
     const CSS_HEAD = `
       .gantt-head {
         display: flex;
@@ -1344,7 +1330,6 @@ window.__ModuleLoader__.load({
       }
     `
 
-    /** 统计条：时间窗、计数、完成度与错误横幅。 */
     const CSS_STATS = `
       .gantt-stats {
         display: flex;
@@ -1383,7 +1368,6 @@ window.__ModuleLoader__.load({
       .gantt-banner span { flex: 1; min-width: 0; }
     `
 
-    /** 主体：任务树、时间线表头、网格线、任务条。 */
     const CSS_GRID = `
       .gantt-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
       .gantt-grid { position: relative; min-width: max-content; }
@@ -1604,7 +1588,6 @@ window.__ModuleLoader__.load({
       }
     `
 
-    /** 空态、加载中、遮罩层与转圈动画。 */
     const CSS_EMPTY = `
       .gantt-empty-wrap { flex: 1; display: grid; place-items: center; padding: 32px 24px; min-height: 0; }
       .gantt-empty {
@@ -1639,7 +1622,6 @@ window.__ModuleLoader__.load({
       @keyframes gantt-spin { to { transform: rotate(360deg); } }
     `
 
-    /** 对话框、表单控件、拆分面板与数据接口面板。 */
     const CSS_DIALOG = `
       .gantt-backdrop {
         position: absolute;
@@ -1760,7 +1742,6 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-state-success-primary);
     `
 
-    /** 轻提示与响应式断点。 */
     const CSS_MISC = `
       }
       .gantt-method[data-method="POST"] {
@@ -1843,7 +1824,7 @@ window.__ModuleLoader__.load({
       const stats = data?.stats ?? { total: 0, done: 0, inProgress: 0, blocked: 0, overdue: 0, progress: 0 }
       const today = data?.today ?? todayIso()
       const allTasks = useMemo(() => flattenTree(tasks), [tasks])
-      const byId = useMemo(() => new Map(allTasks.map((task) => [task.id, task])), [allTasks])
+      const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
       const options = useMemo(() => taskOptions(tasks), [tasks])
       const rows = useMemo(() => visibleRows(tasks, collapsed), [tasks, collapsed])
       const timeline = useMemo(() => {
@@ -1917,22 +1898,22 @@ window.__ModuleLoader__.load({
       }, [])
 
       const shift = useCallback((direction) => {
-        setAnchor((current) => (scale === 'week'
+        setAnchor(current => (scale === 'week'
           ? addDays(current, direction * 14)
           : addMonths(current, direction * 3)))
       }, [scale])
 
       const goToday = useCallback(() => setAnchor(today), [today])
 
-      const shell = (children) => h('div', { className: 'gantt-page' },
+      const shell = children => h('div', { className: 'gantt-page' },
         h('style', { key: 'gantt-css' }, CSS),
-        children
+        children,
       )
 
       if (status === 'loading' && data === null) {
         return shell(h('div', { className: 'gantt-center' },
           h('span', { className: 'gantt-spinner' }),
-          h('span', null, t('loading'))
+          h('span', null, t('loading')),
         ))
       }
 
@@ -1940,15 +1921,14 @@ window.__ModuleLoader__.load({
         return shell(h('div', { className: 'gantt-center' },
           h('div', { className: 'gantt-empty-title' }, t('error.title')),
           h('div', { className: 'gantt-empty-body' }, error),
-          h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: refresh }, t('error.retry'))
+          h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: refresh }, t('error.retry')),
         ))
       }
 
-      const selectedTask = selectedId ? byId.get(selectedId) : null
       const dialogTask = dialog && dialog.id ? byId.get(dialog.id) : null
       const parentExcluded = dialogTask ? collectSubtree(dialogTask) : null
       const parentChoices = parentExcluded
-        ? options.filter((option) => !parentExcluded.has(option.id))
+        ? options.filter(option => !parentExcluded.has(option.id))
         : options
 
       let dialogNode = null
@@ -1972,7 +1952,7 @@ window.__ModuleLoader__.load({
           t,
           onClose: () => setDialog(null),
           onSaved: handleSaved,
-          onSplit: (task) => setDialog({ type: 'split', id: task.id }),
+          onSplit: task => setDialog({ type: 'split', id: task.id }),
         })
       } else if (dialog?.type === 'split' && dialogTask) {
         dialogNode = h(SplitDialog, {
@@ -1999,33 +1979,33 @@ window.__ModuleLoader__.load({
             h('div', { className: 'gantt-empty-body' }, t('empty.body')),
             h('div', { className: 'gantt-empty-actions' },
               h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: () => openCreate(null) }, t('empty.new')),
-              h('button', { className: 'gantt-btn', type: 'button', onClick: seed }, t('empty.seed'))
-            )
-          )
+              h('button', { className: 'gantt-btn', type: 'button', onClick: seed }, t('empty.seed')),
+            ),
+          ),
         )
         : h('div', { className: 'gantt-body' },
           h('div', {
             className: 'gantt-grid',
             style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
           },
-            h(TimelineHeader, { timeline, t, locale, taskCount: allTasks.length }),
-            h('div', { className: 'gantt-rows' },
-              h(GridLines, { timeline }),
-              rows.map(({ task, depth }) => h(GanttRow, {
-                key: task.id,
-                task,
-                depth,
-                timeline,
-                selected: task.id === selectedId,
-                collapsed: collapsed.has(task.id),
-                t,
-                onSelect: openEdit,
-                onToggle: toggleCollapse,
-                onAddChild: openCreate,
-                onCycleStatus: cycleStatus,
-              }))
-            )
-          )
+          h(TimelineHeader, { timeline, t, locale, taskCount: allTasks.length }),
+          h('div', { className: 'gantt-rows' },
+            h(GridLines, { timeline }),
+            rows.map(({ task, depth }) => h(GanttRow, {
+              key: task.id,
+              task,
+              depth,
+              timeline,
+              selected: task.id === selectedId,
+              collapsed: collapsed.has(task.id),
+              t,
+              onSelect: openEdit,
+              onToggle: toggleCollapse,
+              onAddChild: openCreate,
+              onCycleStatus: cycleStatus,
+            })),
+          ),
+          ),
         )
 
       return shell(h(React.Fragment, null,
@@ -2034,8 +2014,8 @@ window.__ModuleLoader__.load({
             h('span', { className: 'gantt-brand-mark' }, h(GanttGlyph, { size: 22 })),
             h('div', { className: 'gantt-brand-text' },
               h('h1', { className: 'gantt-title' }, t('page.title')),
-              h('p', { className: 'gantt-subtitle' }, t('page.subtitle'))
-            )
+              h('p', { className: 'gantt-subtitle' }, t('page.subtitle')),
+            ),
           ),
           h('div', { className: 'gantt-actions' },
             h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('scale.label') },
@@ -2050,7 +2030,7 @@ window.__ModuleLoader__.load({
                 type: 'button',
                 'data-active': scale === 'month' ? 'true' : undefined,
                 onClick: () => setScale('month'),
-              }, t('scale.month'))
+              }, t('scale.month')),
             ),
             h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.prev'), 'aria-label': t('actions.prev'), onClick: () => shift(-1) }, '‹'),
             h('button', { className: 'gantt-btn', type: 'button', onClick: goToday }, t('actions.today')),
@@ -2064,38 +2044,38 @@ window.__ModuleLoader__.load({
               disabled: status === 'refreshing',
               onClick: refresh,
             }, status === 'refreshing' ? '…' : '⟳'),
-            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: () => openCreate(null) }, `+ ${t('actions.new')}`)
-          )
+            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: () => openCreate(null) }, `+ ${t('actions.new')}`),
+          ),
         ),
         h('section', { className: 'gantt-stats' },
           h('div', { className: 'gantt-window' },
             h('span', { className: 'gantt-window-scale' }, scale === 'week' ? t('scale.weekShort') : t('scale.monthShort')),
-            h('span', { className: 'gantt-window-label' }, windowTitle(timeline, locale))
+            h('span', { className: 'gantt-window-label' }, windowTitle(timeline, locale)),
           ),
           h('div', { className: 'gantt-stat' },
             h('span', { className: 'gantt-dot', style: { '--st': 'var(--dsw-alias-label-secondary)' } }),
-            t('stats.total'), h('b', null, stats.total)
+            t('stats.total'), h('b', null, stats.total),
           ),
           h('div', { className: 'gantt-stat' },
             h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.in_progress } }),
-            t('stats.inProgress'), h('b', null, stats.inProgress)
+            t('stats.inProgress'), h('b', null, stats.inProgress),
           ),
           h('div', { className: 'gantt-stat' },
             h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.done } }),
-            t('stats.done'), h('b', null, stats.done)
+            t('stats.done'), h('b', null, stats.done),
           ),
           h('div', { className: 'gantt-stat' },
             h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.blocked } }),
-            t('stats.overdue'), h('b', null, stats.overdue)
+            t('stats.overdue'), h('b', null, stats.overdue),
           ),
           h('div', { className: 'gantt-stat-progress' },
             h('span', null, `${t('stats.progress')} ${stats.progress}%`),
-            h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } }))
-          )
+            h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } })),
+          ),
         ),
         error && data ? h('div', { className: 'gantt-banner' },
           h('span', null, error),
-          h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry'))
+          h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
         ) : null,
         content,
         dialogNode,
@@ -2103,7 +2083,7 @@ window.__ModuleLoader__.load({
           className: 'gantt-toast',
           'data-error': toast.kind === 'error' ? 'true' : undefined,
           role: 'status',
-        }, toast.text) : null
+        }, toast.text) : null,
       ))
     }
 
