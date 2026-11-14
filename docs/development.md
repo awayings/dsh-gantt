@@ -269,3 +269,11 @@ If a page shows old client code after an edit, check that you are looking at
 the file DSH serves (the installed profile copy), not a stale checkout, and
 reload the page. Adding a bundler or build directory is out of scope; the
 single-file client is deliberate (`docs/compatibility.md`).
+
+### Direct pushes to `main` are rejected
+
+`main` is protected with the rules applied to administrators, so `git push
+origin main` fails with `GH006: Protected branch update failed for
+refs/heads/main … Changes must be made through a pull request`. That is
+expected: push a branch, open a pull request, and merge it. Release tags are not
+branches, so `pnpm run release X.Y.Z --push` still pushes the tag directly.
