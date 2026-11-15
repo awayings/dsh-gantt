@@ -148,10 +148,10 @@ describe('parseEstimate and nextEightAm', () => {
     expect(parseEstimate(7)).toBe(0)
   })
 
-  it('finds the next local 08:00', () => {
-    expect(nextEightAm(new Date(2026, 10, 16, 7, 59, 0, 0))).toEqual(new Date(2026, 10, 16, 8, 0, 0, 0))
-    expect(nextEightAm(new Date(2026, 10, 16, 8, 0, 0, 0))).toEqual(new Date(2026, 10, 17, 8, 0, 0, 0))
-    expect(nextEightAm(new Date(2026, 10, 16, 9, 30, 0, 0))).toEqual(new Date(2026, 10, 17, 8, 0, 0, 0))
+  it('finds the next 08:00 in the task-day zone', () => {
+    expect(nextEightAm(new Date('2026-11-15T23:59:00.000Z')).toISOString()).toBe('2026-11-16T00:00:00.000Z')
+    expect(nextEightAm(new Date('2026-11-16T00:00:00.000Z')).toISOString()).toBe('2026-11-17T00:00:00.000Z')
+    expect(nextEightAm(new Date('2026-11-16T01:30:00.000Z')).toISOString()).toBe('2026-11-17T00:00:00.000Z')
   })
 })
 
@@ -444,7 +444,7 @@ describe('store dailyBrief / computeDailyBrief', () => {
 describe('startScheduler', () => {
   it('recomputes at the next local 08:00 and disposes idempotently', () => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 10, 16, 7, 59, 0, 0))
+    vi.setSystemTime(new Date('2026-11-15T23:59:00.000Z'))
     const schedulerStore = new GanttStore(':memory:')
     const dispose = schedulerStore.startScheduler()
     expect(vi.getTimerCount()).toBe(1)

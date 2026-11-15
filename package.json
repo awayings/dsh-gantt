@@ -19,6 +19,7 @@
     "client.js",
     "tracker.js",
     "tree.js",
+    "clock.js",
     "store.js",
     "daily.js",
     "chat.js",
@@ -37,7 +38,7 @@
     "check": "node scripts/run-bash.mjs scripts/check.sh",
     "deploy": "node scripts/deploy.mjs",
     "release": "node scripts/release.mjs",
-    "verify": "node --check index.js && node --check store.js && node --check tracker.js && node --check tree.js && node --check daily.js && node --check chat.js && node --check client.js",
+    "verify": "node --check index.js && node --check store.js && node --check tracker.js && node --check tree.js && node --check clock.js && node --check daily.js && node --check chat.js && node --check client.js",
     "prepare": "husky"
   },
   "devDependencies": {

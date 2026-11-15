@@ -4,6 +4,7 @@
 // Everything here is pure except the type definitions; store.js owns persistence
 // and the 08:00 scheduler. The tracker wording mirrors Hermes RULES.md / TREE.md.
 import { compareRefs, computeBrief, flattenTree, slotForStart } from './tree.js'
+import { nextEightAm } from './clock.js'
 
 /** @typedef {import('./tree.js').BriefEntry} BriefEntry */
 /** @typedef {import('./tree.js').TreeTaskNode} TreeTaskNode */
@@ -246,17 +247,7 @@ export function parseEstimate(value) {
   return Math.round(match[2].toLowerCase().startsWith('h') ? amount * 60 : amount)
 }
 
-/**
- * The next local 08:00 strictly after `now` (today's if it has not passed yet,
- * otherwise tomorrow's).
- * @param {Date} [now]
- * @returns {Date}
- */
-export function nextEightAm(now = new Date()) {
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0, 0, 0)
-  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
-  return next
-}
+export { nextEightAm }
 
 /**
  * @param {TreeTaskNode} left

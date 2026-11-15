@@ -4,6 +4,8 @@
 // Kept free of SQLite and of store.js so store.js can import from here; every
 // function in this module is a pure transformation of its arguments.
 
+import { todayIso } from './clock.js'
+
 /** @typedef {'todo' | 'in_progress' | 'blocked' | 'done'} TaskStatus */
 /** @typedef {'track' | 'node' | 'task'} TaskKind */
 /** @typedef {'memory' | 'file' | 'url' | 'task' | 'note'} LinkType */
@@ -288,13 +290,7 @@ function pad(value) {
   return String(value).padStart(2, '0')
 }
 
-/**
- * @param {Date} [now]
- * @returns {string}
- */
-export function todayIso(now = new Date()) {
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
+export { todayIso }
 
 /**
  * @param {string} iso

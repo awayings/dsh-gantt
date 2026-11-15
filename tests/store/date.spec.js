@@ -4,10 +4,12 @@ import { addDays, dayToIso, isoToDay, todayIso } from '../../store.js'
 const DAY = 86_400_000
 
 describe('todayIso', () => {
-  it('formats the local calendar day with two-digit month and day', () => {
-    expect(todayIso(new Date(2024, 0, 5, 12))).toBe('2024-01-05')
-    expect(todayIso(new Date(2024, 8, 9, 0))).toBe('2024-09-09')
-    expect(todayIso(new Date(2024, 11, 31, 23))).toBe('2024-12-31')
+  it('formats the task-day calendar day with two-digit month and day', () => {
+    expect(todayIso(new Date('2024-01-05T04:00:00Z'))).toBe('2024-01-05')
+    expect(todayIso(new Date('2024-09-08T16:00:00Z'))).toBe('2024-09-09')
+    expect(todayIso(new Date('2024-12-31T15:59:00Z'))).toBe('2024-12-31')
+    expect(todayIso(new Date('2024-12-31T16:00:00Z'))).toBe('2025-01-01')
+    expect(todayIso(new Date('2024-12-31T23:00:00Z'), 'UTC')).toBe('2024-12-31')
   })
 
   it('defaults to the current clock', () => {
