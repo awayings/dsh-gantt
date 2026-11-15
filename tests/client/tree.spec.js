@@ -5,19 +5,21 @@ import { createElement } from 'react'
 import {
   buttonByText,
   click,
-  dialog,
+  deferred,
   flush,
   installFetch,
   jsonResponse,
   mount,
   q,
   qa,
+  requestBody,
   row,
   setupApp,
   text,
   unmountAll,
 } from './harness.js'
 import {
+  makeDailyBrief,
   makeUnifiedTree,
   unifiedTreePayload,
 } from './fixtures.js'
@@ -26,8 +28,8 @@ const TREE = 'api/gantt/tree'
 
 afterEach(unmountAll)
 
-async function renderTree(payload = unifiedTreePayload(), options = {}) {
-  const fetchState = installFetch({ [TREE]: () => jsonResponse(payload) })
+async function renderTree(payload = unifiedTreePayload(), options = {}, routes = {}) {
+  const fetchState = installFetch({ [TREE]: () => jsonResponse(payload), ...routes })
   const app = setupApp(options)
   const view = mount(createElement(app.page().component))
   await flush()
@@ -47,7 +49,7 @@ describe('unified tree rendering', () => {
     expect(track.getAttribute('data-kind')).toBe('track')
     expect(track.getAttribute('data-task-id')).toBe('t1')
     expect(chipTexts(track)).toEqual(['赚钱', '进行'])
-    expect(qa(track, '.gantt-row-action')).toHaveLength(0)
+    expect(qa(track, '.gantt-row-action').map(button => button.getAttribute('data-action'))).toEqual(['ai'])
 
     const leafTrack = row(view.container, '2 生活系统')
     expect(chipTexts(leafTrack)).toEqual(['生活', '卡住'])
@@ -79,7 +81,7 @@ describe('unified tree rendering', () => {
     expect(chips[7].getAttribute('title')).toBe('Links: file:invest/data.md')
 
     expect(qa(node, '.gantt-row-action').map(button => button.getAttribute('data-action')))
-      .toEqual(['decompose', 'schedule'])
+      .toEqual(['ai', 'decompose', 'schedule'])
     expect(q(node, '.gantt-row-action[data-action="decompose"]').getAttribute('title'))
       .toBe('Decompose into subtasks')
     expect(qa(view.container, '.gantt-bar').length).toBeGreaterThan(0)
@@ -164,28 +166,64 @@ describe('tree depth switch', () => {
   })
 })
 
-describe('frontier and next strip', () => {
-  it('renders per-lane frontier and next picks with the pending count', async () => {
+describe('brief strip', () => {
+  function cssText(container) {
+    return qa(container, 'style').map(node => node.textContent).join('\n')
+  }
+
+  it('renders the header block with the pending count, generated time, and recompute action', async () => {
     const { view } = await renderTree()
-    const strip = q(view.container, '.gantt-brief')
+    const head = q(view.container, '.gantt-brief-head')
 
-    expect(strip).not.toBeNull()
-    expect(text(strip, '.gantt-brief-title')).toBe('Frontier / next')
-    expect(text(strip, '.gantt-brief-pending')).toBe('3 pending leaves')
-    expect(qa(strip, '.gantt-brief-lane')).toHaveLength(1)
-    expect(text(strip, '.gantt-brief-lane-name')).toBe('投资系统')
-    expect(chipTexts(strip)).toEqual(['赚钱'])
-
-    const picks = qa(strip, '.gantt-brief-pick')
-    expect(picks.map(pick => pick.getAttribute('data-kind'))).toEqual(['frontier', 'next'])
-    expect(picks.map(pick => pick.textContent)).toEqual([
-      'Frontier1.8.4读数收口',
-      'Next1.1数据底座',
-    ])
-    expect(picks[0].getAttribute('title')).toBe('1.8.4 读数收口')
+    expect(text(head, '.gantt-brief-title')).toBe('Frontier / next')
+    expect(text(head, '.gantt-brief-pending')).toBe('3 pending leaves')
+    expect(text(head, '.gantt-brief-computed')).toContain('Generated')
+    expect(text(head, '.gantt-brief-computed')).toContain('Nov 18')
+    expect(buttonByText(head, 'Recompute')).not.toBeNull()
   })
 
-  it('selects the picked node and expands its ancestors when collapsed', async () => {
+  it('renders the lanes grid with real column headers and grid-based ellipsis alignment', async () => {
+    const { view } = await renderTree()
+    const grid = q(view.container, '.gantt-brief-lanes')
+    const rows = qa(grid, '.gantt-brief-lane')
+
+    expect(qa(grid, '.gantt-brief-col').map(cell => cell.textContent)).toEqual(['Track', 'Frontier', 'Next'])
+    expect(rows).toHaveLength(2)
+    expect(text(rows[0], '.gantt-brief-lane-name')).toBe('投资系统')
+    expect(qa(rows[0], '.gantt-brief-pick').map(pick => pick.textContent)).toEqual(['1.8.4读数收口', '1.1数据底座'])
+    expect(qa(rows[0], '.gantt-brief-pick')[0].getAttribute('title')).toBe('1.8.4 读数收口')
+    expect(qa(rows[1], '.gantt-brief-none')).toHaveLength(2)
+    expect(qa(rows[1], '.gantt-brief-pick')).toHaveLength(0)
+
+    const css = cssText(view.container)
+    const laneRule = (css.match(/\.gantt-brief-lanes-head,\s*\.gantt-brief-lane\s*\{[^}]*\}/) ?? [''])[0]
+    const cellRule = (css.match(/\.gantt-brief-lane-name,\s*\.gantt-brief-cell\s*\{[^}]*\}/) ?? [''])[0]
+    expect(laneRule).toContain('display: grid')
+    expect(laneRule).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr)')
+    expect(cellRule).toContain('white-space: nowrap')
+    expect(cellRule).toContain('text-overflow: ellipsis')
+    expect(css).toMatch(/\.gantt-brief-lane\s*\{[^}]*height:\s*34px/)
+  })
+
+  it('renders today windows with time, role badge, task, and unfilled markers', async () => {
+    const { view } = await renderTree()
+    const block = q(view.container, '.gantt-brief-today')
+    const windows = qa(block, '.gantt-brief-window')
+
+    expect(text(block, '.gantt-brief-title')).toBe("Today's windows")
+    expect(windows).toHaveLength(4)
+    expect(text(windows[0], '.gantt-brief-window-time')).toBe('09:00–12:00')
+    expect(text(windows[0], '.gantt-brief-role')).toBe('Core')
+    expect(text(windows[0], '.gantt-brief-window-task')).toBe('1.1数据底座')
+    expect(windows[0].getAttribute('data-filled')).toBe('true')
+    expect(text(windows[1], '.gantt-brief-unfilled')).toBe('Unfilled')
+    expect(windows[1].getAttribute('data-filled')).toBe('false')
+    expect(windows[1].getAttribute('data-role')).toBe('core')
+    expect(text(windows[2], '.gantt-brief-role')).toBe('Definition')
+    expect(text(windows[3], '.gantt-brief-window-time')).toBe('--:--')
+  })
+
+  it('reveals the picked task when a window card is clicked', async () => {
     const scroll = vi.fn()
     const hadScroll = 'scrollIntoView' in Element.prototype
     const originalScroll = Element.prototype.scrollIntoView
@@ -196,80 +234,124 @@ describe('frontier and next strip', () => {
       click(buttonByText(view.container, 'One level'))
       expect(row(view.container, '1.8.4 读数收口')).toBeNull()
 
-      click(q(view.container, '.gantt-brief-pick[data-kind="frontier"]'))
+      click(qa(view.container, '.gantt-brief-window-task')[1])
       expect(row(view.container, '1.8.4 读数收口')).not.toBeNull()
-      expect(row(view.container, '1 投资系统')).not.toBeNull()
       expect(row(view.container, '1.8.4 读数收口').getAttribute('data-selected')).toBe('true')
-      expect(dialog(view.container)).toBeNull()
       expect(scroll).toHaveBeenCalled()
-
-      click(q(view.container, '.gantt-brief-pick[data-kind="next"]'))
-      expect(row(view.container, '1.1 数据底座').getAttribute('data-selected')).toBe('true')
     } finally {
       if (hadScroll) Element.prototype.scrollIntoView = originalScroll
       else delete Element.prototype.scrollIntoView
     }
   })
 
-  it('skips lanes without picks and picks whose node left the tree', async () => {
-    const brief = {
-      lanes: [
-        { id: 't1', name: '投资系统', lane: '', next: { id: 'n1', number: '1.1', title: '数据底座' } },
-        { id: 't2', name: '生活系统', lane: '', frontier: null, next: null },
-      ],
-    }
-    const { view } = await renderTree(unifiedTreePayload({ brief }))
+  it('recomputes the brief and refreshes the tree', async () => {
+    const gate = deferred()
+    const { calls, view } = await renderTree(unifiedTreePayload(), {}, {
+      'api/gantt/brief/compute': () => gate.promise,
+    })
+    const button = buttonByText(view.container, 'Recompute')
 
-    expect(qa(view.container, '.gantt-brief-lane')).toHaveLength(1)
-    expect(qa(view.container, '.gantt-brief-pick')).toHaveLength(1)
-    expect(text(view.container, '.gantt-brief-pending')).toBeNull()
+    click(button)
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('…')
 
-    click(q(view.container, '.gantt-brief-pick[data-kind="next"]'))
-    click(q(view.container, '.gantt-brief-pick[data-kind="next"]'))
-    expect(row(view.container, '1.1 数据底座').getAttribute('data-selected')).toBe('true')
+    gate.resolve(jsonResponse({ ok: true, brief: makeDailyBrief() }))
+    await flush()
+
+    const compute = calls.find(call => call.path === 'api/gantt/brief/compute')
+    expect(compute.options.method).toBe('POST')
+    expect(requestBody(compute)).toEqual({ date: '2026-11-18' })
+    expect(calls.filter(call => call.path === TREE)).toHaveLength(2)
+    expect(buttonByText(view.container, 'Recompute').disabled).toBe(false)
   })
 
-  it('degrades gracefully when brief is absent or malformed', async () => {
-    const withoutBrief = await renderTree(unifiedTreePayload({ brief: undefined }))
+  it('reports a recompute failure in an error toast', async () => {
+    const { view } = await renderTree(unifiedTreePayload(), {}, {
+      'api/gantt/brief/compute': () => jsonResponse({ ok: false, error: 'brief is locked' }, 409),
+    })
+
+    click(buttonByText(view.container, 'Recompute'))
+    await flush()
+
+    const toast = q(view.container, '.gantt-toast')
+    expect(toast.textContent).toBe('brief is locked')
+    expect(toast.getAttribute('data-error')).toBe('true')
+    view.unmount()
+
+    const exploding = await renderTree(unifiedTreePayload(), {}, {
+      'api/gantt/brief/compute': () => Promise.reject('compute exploded'),
+    })
+    click(buttonByText(exploding.view.container, 'Recompute'))
+    await flush()
+    expect(text(exploding.view.container, '.gantt-toast')).toBe('compute exploded')
+  })
+
+  it('reveals a lane pick, ignores a stale pick, and degrades pick labels without ids', async () => {
+    const base = makeDailyBrief()
+    const dailyBrief = makeDailyBrief({
+      generatedAt: 'not-a-date',
+      tracks: [
+        {
+          trackId: 't1',
+          ref: 'track:1',
+          name: '投资系统',
+          state: '进行',
+          role: 'core',
+          picks: 1,
+          frontier: { id: 'n21', title: '读数收口' },
+          next: { id: 'ghost', title: '幽灵节点' },
+        },
+        { trackId: 't2', ref: 'track:2', name: '生活系统', state: '卡住', role: 'blocked', picks: 0, frontier: null, next: null },
+      ],
+      items: [{ ...base.items[0], ref: '' }],
+    })
+    const { view } = await renderTree(unifiedTreePayload({ dailyBrief }))
+    const lane = qa(view.container, '.gantt-brief-lane')[0]
+
+    expect(q(view.container, '.gantt-brief-computed')).toBeNull()
+    expect(text(lane, '.gantt-brief-pick')).toBe('读数收口')
+    expect(q(lane, '.gantt-brief-pick').getAttribute('title')).toBe(' 读数收口')
+    expect(q(view.container, '.gantt-brief-window-task').getAttribute('title')).toBe('n1 数据底座')
+
+    click(q(lane, '.gantt-brief-pick[data-kind="frontier"]'))
+    expect(row(view.container, '1.8.4 读数收口').getAttribute('data-selected')).toBe('true')
+
+    click(q(lane, '.gantt-brief-pick[data-kind="next"]'))
+    expect(row(view.container, '1.8.4 读数收口').getAttribute('data-selected')).toBe('true')
+  })
+
+  it('degrades gracefully when dailyBrief is absent or malformed', async () => {
+    const withoutBrief = await renderTree(unifiedTreePayload({ dailyBrief: undefined, brief: undefined }))
     expect(q(withoutBrief.view.container, '.gantt-brief')).toBeNull()
     withoutBrief.view.unmount()
 
-    const badBrief = await renderTree(unifiedTreePayload({ brief: { lanes: 'nope' } }))
-    expect(q(badBrief.view.container, '.gantt-brief')).toBeNull()
-    badBrief.view.unmount()
+    const malformed = await renderTree(unifiedTreePayload({
+      dailyBrief: { tracks: 'nope', slots: 'nope', items: 'nope' },
+    }))
+    expect(q(malformed.view.container, '.gantt-brief-lanes')).toBeNull()
+    expect(text(malformed.view.container, '.gantt-brief-empty')).toBe('No windows for today.')
+    expect(q(malformed.view.container, '.gantt-brief-pending')).not.toBeNull()
+    malformed.view.unmount()
 
-    const emptyBrief = await renderTree(unifiedTreePayload({ brief: { lanes: [] } }))
-    expect(q(emptyBrief.view.container, '.gantt-brief')).toBeNull()
-  })
-
-  it('degrades pick labels and lane keys when the brief omits ids', async () => {
-    const brief = {
-      lanes: [
-        { id: 't1', name: '投资系统', lane: '赚钱', frontier: { id: 'n21', title: '读数收口' } },
-        { ref: 'track:2', name: '生活系统', next: { id: 'n1', ref: 'node:1.1', title: '数据底座' } },
-        { name: '元能力', frontier: { id: 'ghost', number: '9.9', ref: 'node:9.9', title: '幽灵节点' } },
-      ],
-    }
-    const { view } = await renderTree(unifiedTreePayload({ brief }))
-    const lanes = qa(view.container, '.gantt-brief-lane')
-
-    expect(lanes).toHaveLength(3)
-    expect(qa(view.container, '.gantt-brief-pick')).toHaveLength(3)
-    const firstPick = q(view.container, '.gantt-brief-pick[data-kind="frontier"]')
-    expect(firstPick.getAttribute('title')).toBe(' 读数收口')
-    expect(text(firstPick, '.gantt-brief-id')).toBe('')
-    expect(qa(lanes[0], '.gantt-row-chip')).toHaveLength(1)
-
-    click(qa(view.container, '.gantt-brief-pick[data-kind="frontier"]')[1])
-    expect(q(view.container, '.gantt-row[data-selected="true"]')).toBeNull()
-    click(q(view.container, '.gantt-brief-pick[data-kind="frontier"]'))
-    expect(row(view.container, '1.8.4 读数收口').getAttribute('data-selected')).toBe('true')
+    const bare = await renderTree(unifiedTreePayload({
+      brief: undefined,
+      dailyBrief: { slots: [], items: [], tracks: [] },
+    }))
+    expect(q(bare.view.container, '.gantt-brief-pending')).toBeNull()
+    expect(q(bare.view.container, '.gantt-brief-computed')).toBeNull()
+    expect(text(bare.view.container, '.gantt-brief-empty')).toBe('No windows for today.')
   })
 
   it('renders the strip in the Chinese dictionary', async () => {
     const { view } = await renderTree(unifiedTreePayload(), { locale: 'zh' })
-    expect(text(view.container, '.gantt-brief-title')).toBe('前沿 / 该动')
-    expect(text(view.container, '.gantt-brief-pending')).toBe('3 个待办叶子')
-    expect(qa(view.container, '.gantt-brief-tag').map(tag => tag.textContent)).toEqual(['前沿', '该动'])
+    const strip = q(view.container, '.gantt-brief')
+
+    expect(text(strip, '.gantt-brief-title')).toBe('前沿 / 该动')
+    expect(text(strip, '.gantt-brief-pending')).toBe('3 个待办叶子')
+    expect(text(strip, '.gantt-brief-computed')).toContain('生成于')
+    expect(qa(strip, '.gantt-brief-col').map(cell => cell.textContent)).toEqual(['支线', '前沿', '该动'])
+    expect(text(strip, '.gantt-brief-window .gantt-brief-role')).toBe('主攻')
+    expect(text(strip, '.gantt-brief-unfilled')).toBe('未填')
+    expect(buttonByText(strip, '重新计算')).not.toBeNull()
   })
 })

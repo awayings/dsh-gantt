@@ -286,6 +286,73 @@ export function makeBrief() {
   }
 }
 
+/** Daily brief report (CONTRACT §1.1): windows, picks and per-track rows. */
+export function makeDailyBrief(overrides = {}) {
+  const frontier = {
+    id: 'n21',
+    ref: 'node:1.8.4',
+    number: '1.8.4',
+    title: '读数收口',
+    trackId: 't1',
+    trackName: '投资系统',
+  }
+  const next = {
+    id: 'n1',
+    ref: 'node:1.1',
+    number: '1.1',
+    title: '数据底座',
+    trackId: 't1',
+    trackName: '投资系统',
+  }
+  return {
+    date: TODAY,
+    generatedAt: '2026-11-18T00:05:00.000Z',
+    source: 'auto',
+    dayKind: 'workday',
+    slots: [
+      { slot: 'morning', startTime: '09:00', endTime: '12:00', minutes: 180, kind: 'core', blockId: '2026-11-18|09:00|0' },
+      { slot: 'daytime', startTime: '14:00', endTime: '17:00', minutes: 180, kind: 'core', blockId: '' },
+      { slot: 'evening', startTime: '21:00', endTime: '22:00', minutes: 60, kind: 'definition', blockId: '2026-11-18|21:00|1' },
+      { slot: 'other', startTime: '', endTime: '', minutes: 0, kind: 'definition', blockId: '' },
+    ],
+    items: [
+      {
+        slot: 'morning',
+        startTime: '09:00',
+        endTime: '12:00',
+        minutes: 180,
+        blockId: '2026-11-18|09:00|0',
+        taskId: 'n1',
+        ref: 'node:1.1',
+        title: '数据底座',
+        trackId: 't1',
+        trackName: '投资系统',
+        role: 'core',
+      },
+      {
+        slot: 'evening',
+        startTime: '21:00',
+        endTime: '22:00',
+        minutes: 60,
+        blockId: '2026-11-18|21:00|1',
+        taskId: 'n21',
+        ref: 'node:1.8.4',
+        title: '读数收口',
+        trackId: 't1',
+        trackName: '投资系统',
+        role: 'definition',
+      },
+    ],
+    tracks: [
+      { trackId: 't1', ref: 'track:1', name: '投资系统', state: '进行', role: 'core', picks: 2, frontier, next },
+      { trackId: 't2', ref: 'track:2', name: '生活系统', state: '卡住', role: 'blocked', picks: 0, frontier: null, next: null },
+    ],
+    unfilled: [1, 3],
+    notes: ['no ready leaves for 生活系统'],
+    ...overrides,
+  }
+}
+
 /** Successful GET /api/gantt/tree payload for the unified tree. */
 export function unifiedTreePayload(overrides = {}) {
   return {
@@ -295,6 +362,85 @@ export function unifiedTreePayload(overrides = {}) {
     tasks: makeUnifiedTree(),
     stats: makeUnifiedStats(),
     brief: makeBrief(),
+    dailyBrief: makeDailyBrief(),
+    ...overrides,
+  }
+}
+
+/** Three tracks / eight rows where the frontier and today filters prune differently. */
+export function makeFilterTree() {
+  const tree = makeUnifiedTree()
+  tree[1].children = [task({
+    id: 'n31',
+    number: '2.1',
+    kind: 'node',
+    ref: 'node:2.1',
+    title: '生活实验',
+    lane: '生活',
+    state: '未开始',
+    status: 'todo',
+    progress: 0,
+    startDate: '2026-11-16',
+    endDate: '2026-11-17',
+    parentId: 't2',
+    hasChildren: false,
+    doneWhen: '实验可复现',
+  })]
+  tree[1].hasChildren = true
+  tree.push(task({
+    id: 't3',
+    number: '3',
+    kind: 'track',
+    ref: 'track:3',
+    title: '元能力',
+    lane: '赚钱',
+    state: '进行',
+    status: 'in_progress',
+    progress: 20,
+    startDate: '2026-11-10',
+    endDate: '2026-11-12',
+    hasChildren: true,
+    children: [task({
+      id: 'n41',
+      number: '3.1',
+      kind: 'node',
+      ref: 'node:3.1',
+      title: '复盘节奏',
+      lane: '赚钱',
+      state: '进行',
+      status: 'in_progress',
+      progress: 20,
+      startDate: '2026-11-10',
+      endDate: '2026-11-12',
+      parentId: 't3',
+      hasChildren: false,
+      doneWhen: '每周复盘',
+    })],
+  }))
+  return tree
+}
+
+/** GET /tree payload for filter pruning: frontier keeps t1, today keeps t1+t2. */
+export function filterTreePayload(overrides = {}) {
+  const dailyBrief = makeDailyBrief()
+  const [t1, t2] = dailyBrief.tracks
+  dailyBrief.tracks = [
+    t1,
+    t2,
+    { trackId: 't3', ref: 'track:3', name: '元能力', state: '进行', role: 'rotation', picks: 0, frontier: null, next: null },
+  ]
+  dailyBrief.items = [
+    dailyBrief.items[0],
+    { ...dailyBrief.items[1], taskId: 'n31', ref: 'node:2.1', title: '生活实验', trackId: 't2', trackName: '生活系统', role: 'rotation' },
+  ]
+  return {
+    ok: true,
+    today: TODAY,
+    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    tasks: makeFilterTree(),
+    stats: { total: 8, done: 0, inProgress: 3, blocked: 2, overdue: 0, progress: 20 },
+    brief: makeBrief(),
+    dailyBrief,
     ...overrides,
   }
 }
@@ -528,6 +674,7 @@ export function dayPayload(overrides = {}) {
     }],
     integrity: [{ code: 'landing-missing', blockId: 'b2' }],
     stats: { total: 5, done: 1, inProgress: 1, skipped: 1, remaining: 3 },
+    brief: makeDailyBrief({ date: TODAY_DATE, generatedAt: '2026-11-15T00:05:00.000Z' }),
     ...overrides,
   }
 }
@@ -553,6 +700,96 @@ export function unplannedDayPayload(overrides = {}) {
     tracks: [],
     integrity: [{ code: 'unplanned-day' }],
     stats: { ...PLAN_ZEROS },
+    brief: null,
     ...overrides,
   })
+}
+
+// ---- AI decompose chat payloads (mirrors POST /api/gantt/chat) ----
+
+/** One proposal child with a plan cell; planDate is separate on the proposal. */
+export function chatProposal(overrides = {}) {
+  return {
+    planDate: '2026-11-18',
+    children: [
+      {
+        title: '拆出三个数据源',
+        doneWhen: '三个数据源都能查到当天数据',
+        landing: 'invest/data.md',
+        estimate: '30min',
+        category: 'A 主攻片',
+        inspiration: '#21',
+        plan: { date: '2026-11-18', startTime: '21:00', endTime: '21:30', slot: 'evening' },
+      },
+      {
+        title: '写校验脚本',
+        doneWhen: '脚本跑通且输出对比表',
+      },
+      {
+        title: '定义读数口径',
+        doneWhen: '口径写进策略账本',
+        estimate: '20min',
+        plan: { date: '2026-11-19', startTime: '', endTime: '', slot: 'other' },
+      },
+    ],
+    ...overrides,
+  }
+}
+
+/** Successful POST /api/gantt/chat payload (reply prose + one proposal). */
+export function chatPayload(overrides = {}) {
+  return {
+    ok: true,
+    reply: '先拆成三个可以今天执行的小任务。',
+    proposal: chatProposal(),
+    model: { provider: 'mock', model: 'mock-chat-model' },
+    ...overrides,
+  }
+}
+
+/** Successful POST /api/gantt/task/decompose payload. */
+export function decomposePayload(overrides = {}) {
+  return { ok: true, parent: { id: 'n1' }, children: [], blocks: [], ...overrides }
+}
+
+/** Unified tree with a fourth-level node under 1.1 for the depth-cap note. */
+export function deepTreePayload(overrides = {}) {
+  const tasks = makeUnifiedTree()
+  const n1 = tasks[0].children[0]
+  const n11 = task({
+    id: 'n11',
+    number: '1.1.1',
+    kind: 'node',
+    ref: 'node:1.1.1',
+    title: '拆分细节',
+    lane: '赚钱',
+    state: '进行',
+    status: 'todo',
+    progress: 0,
+    startDate: '2026-11-16',
+    endDate: '2026-11-17',
+    parentId: 'n1',
+    hasChildren: true,
+    doneWhen: '细节可执行',
+    children: [
+      task({
+        id: 'n111',
+        number: '1.1.1.1',
+        kind: 'node',
+        ref: 'node:1.1.1.1',
+        title: '叶子任务',
+        lane: '赚钱',
+        state: '进行',
+        status: 'todo',
+        progress: 0,
+        startDate: '2026-11-16',
+        endDate: '2026-11-16',
+        parentId: 'n11',
+        doneWhen: '叶子可验证',
+      }),
+    ],
+  })
+  n1.children.push(n11)
+  n1.hasChildren = true
+  return unifiedTreePayload({ tasks, ...overrides })
 }

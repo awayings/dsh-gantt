@@ -22,6 +22,7 @@ import {
   TODAY_DATE,
   dayPayload,
   emptyDayPayload,
+  makeDailyBrief,
   makePlanBlocks,
   makeTaskBlock,
   planDay,
@@ -31,6 +32,7 @@ import {
 const DAY = 'api/gantt/day'
 const STATUS = 'api/gantt/plan/status'
 const IMPORT = 'api/gantt/plan/import'
+const BRIEF_COMPUTE = 'api/gantt/brief/compute'
 
 afterEach(unmountAll)
 
@@ -73,6 +75,13 @@ const TODAY_KEYS = [
   'today.remaining',
   'today.doneCount',
   'today.fromTree',
+  'today.brief.title',
+  'today.brief.recompute',
+  'today.brief.empty',
+  'today.brief.generated',
+  'today.brief.source.auto',
+  'today.brief.source.manual',
+  'today.brief.unfilled',
 ]
 
 function dayCalls(calls) {
@@ -95,6 +104,7 @@ async function renderToday(routes = {}, options = {}) {
     [DAY]: () => jsonResponse(dayPayload()),
     [STATUS]: () => jsonResponse({ ok: true, block: {} }),
     [IMPORT]: () => jsonResponse({ ok: true, dir: '/tracker', imported: { tracks: 6, nodes: 24, days: 7, blocks: 30 } }),
+    [BRIEF_COMPUTE]: () => jsonResponse({ ok: true, brief: makeDailyBrief() }),
     ...routes,
   })
   const app = setupApp(options)
@@ -274,6 +284,108 @@ describe('day rendering', () => {
     expect(qa(view.container, '.today-block')).toHaveLength(0)
     expect(qa(view.container, '.today-slot')).toHaveLength(0)
     expect(q(view.container, '.gantt-progress > span').style.width).toBe('0%')
+  })
+})
+
+describe('daily brief section', () => {
+  it('renders per-window rows with time, role, track, task, and unfilled markers', async () => {
+    const { view } = await renderToday()
+    const section = q(view.container, '.today-brief')
+
+    expect(text(section, '.today-section-title')).toBe("Today's brief")
+    const rows = qa(section, '.today-brief-row')
+    expect(rows).toHaveLength(4)
+    expect(rows[0].getAttribute('data-filled')).toBe('true')
+    expect(text(rows[0], '.today-brief-time')).toBe('09:00–12:00')
+    expect(text(rows[0], '.today-brief-role')).toBe('Core')
+    expect(text(rows[0], '.today-brief-track')).toBe('投资系统')
+    expect(text(rows[0], '.today-brief-task')).toBe('1.1 数据底座')
+    expect(rows[1].getAttribute('data-filled')).toBe('false')
+    expect(text(rows[1], '.today-brief-unfilled')).toBe('Unfilled')
+    expect(rows[1].getAttribute('data-role')).toBe('core')
+    expect(text(rows[2], '.today-brief-role')).toBe('Definition')
+    expect(text(rows[2], '.today-brief-task')).toBe('1.8.4 读数收口')
+    expect(text(rows[3], '.today-brief-time')).toBe('--:--')
+    expect(text(section, '.today-brief-meta')).toContain('Generated')
+    expect(text(section, '.today-brief-meta')).toContain('auto')
+    expect(q(section, '[data-action="recompute-brief"]')).not.toBeNull()
+  })
+
+  it('falls back to the task id and shows a source-only meta line', async () => {
+    const base = makeDailyBrief()
+    const brief = makeDailyBrief({
+      generatedAt: '',
+      source: 'manual',
+      items: [{ ...base.items[0], ref: '', title: '手动任务' }],
+    })
+    const { view } = await renderToday({ [DAY]: () => jsonResponse(dayPayload({ brief })) })
+
+    expect(text(view.container, '.today-brief-task')).toBe('n1 手动任务')
+    expect(text(view.container, '.today-brief-meta')).toBe('manual')
+  })
+
+  it('recomputes the brief and refreshes the day', async () => {
+    const gate = deferred()
+    const { calls, view } = await renderToday({ [BRIEF_COMPUTE]: () => gate.promise })
+    const button = q(view.container, '[data-action="recompute-brief"]')
+
+    click(button)
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('…')
+
+    gate.resolve(jsonResponse({ ok: true, brief: makeDailyBrief() }))
+    await flush()
+
+    const compute = calls.find(call => call.path === BRIEF_COMPUTE)
+    expect(compute.options.method).toBe('POST')
+    expect(requestBody(compute)).toEqual({ date: dayDates(calls)[0] })
+    expect(dayCalls(calls)).toHaveLength(2)
+    expect(q(view.container, '[data-action="recompute-brief"]').disabled).toBe(false)
+  })
+
+  it('reports a recompute failure in a banner', async () => {
+    const { view } = await renderToday({
+      [BRIEF_COMPUTE]: () => jsonResponse({ ok: false, error: 'brief engine down' }, 503),
+    })
+    click(q(view.container, '[data-action="recompute-brief"]'))
+    await flush()
+
+    expect(text(view.container, '.gantt-banner')).toBe('brief engine down')
+    expect(q(view.container, '[data-action="recompute-brief"]').disabled).toBe(false)
+    view.unmount()
+
+    const exploding = await renderToday({ [BRIEF_COMPUTE]: () => Promise.reject('brief exploded') })
+    click(q(exploding.view.container, '[data-action="recompute-brief"]'))
+    await flush()
+    expect(text(exploding.view.container, '.gantt-banner')).toBe('brief exploded')
+  })
+
+  it('shows the empty hint and a working recompute button without a brief', async () => {
+    const { calls, view } = await renderToday({ [DAY]: () => jsonResponse(dayPayload({ brief: null })) })
+
+    expect(text(view.container, '.today-brief .today-muted')).toBe('No daily brief yet.')
+    click(q(view.container, '[data-action="recompute-brief"]'))
+    await flush()
+
+    expect(calls.some(call => call.path === BRIEF_COMPUTE)).toBe(true)
+    expect(dayCalls(calls)).toHaveLength(2)
+  })
+
+  it('shows the empty-window hint for a report without slots', async () => {
+    const { view } = await renderToday({
+      [DAY]: () => jsonResponse(dayPayload({ brief: makeDailyBrief({ slots: [] }) })),
+    })
+    expect(text(view.container, '.today-brief .today-muted')).toBe('No windows for today.')
+  })
+
+  it('renders the Chinese dictionary for the brief section', async () => {
+    const { view } = await renderToday({}, { locale: 'zh' })
+
+    expect(text(view.container, '.today-brief .today-section-title')).toBe('今日该动')
+    expect(text(view.container, '.today-brief-role')).toBe('主攻')
+    expect(text(view.container, '.today-brief-unfilled')).toBe('未填')
+    expect(text(view.container, '.today-brief-meta')).toContain('生成于')
+    expect(q(view.container, '[data-action="recompute-brief"]').textContent).toBe('重新计算')
   })
 })
 

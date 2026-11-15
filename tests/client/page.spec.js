@@ -22,7 +22,7 @@ import {
   unmountAll,
   unparsableResponse,
 } from './harness.js'
-import { emptyTreePayload, treePayload } from './fixtures.js'
+import { emptyTreePayload, filterTreePayload, makeFilterTree, treePayload } from './fixtures.js'
 
 const TREE = 'api/gantt/tree'
 const STATUS = 'api/gantt/task/status'
@@ -483,5 +483,119 @@ describe('timeline window', () => {
     expect(calls.filter(call => call.path === TREE)).toHaveLength(3)
     expect(qa(view.container, '.gantt-row')).toHaveLength(6)
     expect(q(view.container, '.gantt-banner')).toBeNull()
+  })
+})
+
+describe('task filter', () => {
+  async function renderFiltered(payload = filterTreePayload(), options = {}) {
+    const fetchState = installFetch({ [TREE]: () => jsonResponse(payload) })
+    const app = setupApp(options)
+    const view = mount(createElement(app.page().component))
+    await flush()
+    return { ...fetchState, app, view }
+  }
+
+  function filterButton(view, value) {
+    return q(view.container, `.gantt-filter [data-filter="${value}"]`)
+  }
+
+  it('shows the three perspectives and prunes to focus paths in To do', async () => {
+    const { view } = await renderFiltered()
+
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+    expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.getAttribute('data-filter')))
+      .toEqual(['all', 'todo', 'done'])
+    expect(filterButton(view, 'all').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '.gantt-filter-count')).toBeNull()
+
+    click(filterButton(view, 'todo'))
+    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+      '1 投资系统',
+      '1.1 数据底座',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+      '2 生活系统',
+      '2.1 生活实验',
+    ])
+    expect(row(view.container, '3 元能力')).toBeNull()
+    expect(qa(view.container, '.gantt-track')).toHaveLength(6)
+    expect(text(view.container, '.gantt-filter-count')).toBe('3 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('6 tasks')
+    expect(filterButton(view, 'todo').getAttribute('data-active')).toBe('true')
+  })
+
+  it('keeps only done nodes and their ancestors in Done', async () => {
+    const tasks = makeFilterTree()
+    tasks[0].children[0].status = 'done'
+    tasks[0].children[0].progress = 100
+    const { view } = await renderFiltered(filterTreePayload({ tasks }))
+
+    click(filterButton(view, 'done'))
+    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+      '1 投资系统',
+      '1.1 数据底座',
+    ])
+    expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
+    expect(q(view.container, '.gantt-banner')).toBeNull()
+  })
+
+  it('shows a mode-specific hint when a perspective is empty', async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'done'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+    expect(q(view.container, '.gantt-body')).toBeNull()
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing is done yet.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All or To do to keep planning.')
+    expect(q(view.container, '.gantt-filter-count')).toBeNull()
+
+    click(filterButton(view, 'all'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+  })
+
+  it('treats a tree without brief data as an empty To do view', async () => {
+    const fetchState = installFetch({ [TREE]: () => jsonResponse(treePayload()) })
+    const app = setupApp()
+    const view = mount(createElement(app.page().component))
+    await flush()
+
+    click(q(view.container, '.gantt-filter [data-filter="todo"]'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No focus paths in this view.')
+    expect(q(view.container, '.gantt-filter-count')).toBeNull()
+    expect(fetchState.calls.filter(call => call.path === TREE)).toHaveLength(1)
+  })
+
+  it('clears collapse for a perspective and reapplies the level for All', async () => {
+    const { view } = await renderFiltered()
+    click(buttonByText(view.container, 'One level'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(3)
+
+    click(filterButton(view, 'todo'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(6)
+
+    click(filterButton(view, 'all'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(3)
+
+    // The source tree was never mutated: expanding again restores every row.
+    click(buttonByText(view.container, 'All levels'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+  })
+
+  it('is hidden for an empty tree and localizes the perspectives', async () => {
+    const emptyFetch = installFetch({ [TREE]: () => jsonResponse(emptyTreePayload()) })
+    const emptyApp = setupApp()
+    const emptyView = mount(createElement(emptyApp.page().component))
+    await flush()
+    expect(q(emptyView.container, '.gantt-filter')).toBeNull()
+    expect(emptyFetch.calls.filter(call => call.path === TREE)).toHaveLength(1)
+    emptyView.unmount()
+
+    const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
+    expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.textContent))
+      .toEqual(['全部', '待做', '已完成'])
+    click(filterButton(view, 'todo'))
+    expect(text(view.container, '.gantt-filter-count')).toBe('3 条路径')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('6 个任务')
   })
 })

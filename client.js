@@ -149,6 +149,13 @@ window.__ModuleLoader__.load({
       'today.remaining': 'Remaining',
       'today.doneCount': 'Done',
       'today.fromTree': 'From task tree',
+      'today.brief.title': "Today's brief",
+      'today.brief.recompute': 'Recompute',
+      'today.brief.empty': 'No daily brief yet.',
+      'today.brief.generated': 'Generated',
+      'today.brief.source.auto': 'auto',
+      'today.brief.source.manual': 'manual',
+      'today.brief.unfilled': 'Unfilled',
       'level.label': 'Tree depth',
       'level.all': 'All levels',
       'level.two': 'Two levels',
@@ -157,6 +164,26 @@ window.__ModuleLoader__.load({
       'brief.pending': 'pending leaves',
       'brief.frontier': 'Frontier',
       'brief.next': 'Next',
+      'brief.today': "Today's windows",
+      'brief.computed': 'Generated',
+      'brief.recompute': 'Recompute',
+      'brief.unfilled': 'Unfilled',
+      'brief.emptyWindows': 'No windows for today.',
+      'brief.col.track': 'Track',
+      'brief.col.frontier': 'Frontier',
+      'brief.col.next': 'Next',
+      'brief.role.core': 'Core',
+      'brief.role.rotation': 'Rotation',
+      'brief.role.definition': 'Definition',
+      'filter.label': 'Filter',
+      'filter.all': 'All',
+      'filter.todo': 'To do',
+      'filter.done': 'Done',
+      'filter.paths': 'paths',
+      'filter.empty.todo': 'No focus paths in this view.',
+      'filter.empty.done': 'Nothing is done yet.',
+      'filter.hint.todo': 'Switch to All to see the whole tree.',
+      'filter.hint.done': 'Switch to All or To do to keep planning.',
       'tree.decompose': 'Decompose into subtasks',
       'tree.schedule': 'Schedule into a day plan',
       'field.state': 'Raw state',
@@ -194,6 +221,22 @@ window.__ModuleLoader__.load({
       'notice.decomposed': 'Decomposed {n} subtasks, {m} scheduled into {date}',
       'notice.decomposedNoPlan': 'Decomposed {n} subtasks (none scheduled yet)',
       'notice.scheduled': 'Scheduled into {date}',
+      'actions.ai': 'AI decompose',
+      'chat.title': 'AI decompose',
+      'chat.welcome': 'Focus a task with ✦ and ask the model to break it into executable subtasks, or just describe what you want to plan.',
+      'chat.focus': 'Focus',
+      'chat.clearFocus': 'Clear focus',
+      'chat.placeholder': 'Describe what to decompose… (Enter sends, Shift+Enter adds a line)',
+      'chat.send': 'Send',
+      'chat.sending': 'Thinking…',
+      'chat.clear': 'Clear chat',
+      'chat.error': 'The chat request failed.',
+      'chat.noModel': 'No model is configured, or the model is unavailable.',
+      'chat.proposal': 'Proposed decomposition',
+      'chat.apply': 'Apply decomposition',
+      'chat.applied': 'Applied',
+      'chat.depth': 'This task already sits at the 4-level cap; decompose a higher-level task instead.',
+      'chat.empty': 'Focus a task first to apply the decomposition.',
     }
 
     const DICT_ZH = {
@@ -315,6 +358,13 @@ window.__ModuleLoader__.load({
       'today.remaining': '剩余',
       'today.doneCount': '已完成',
       'today.fromTree': '来自树节点',
+      'today.brief.title': '今日该动',
+      'today.brief.recompute': '重新计算',
+      'today.brief.empty': '还没有今日该动。',
+      'today.brief.generated': '生成于',
+      'today.brief.source.auto': '自动',
+      'today.brief.source.manual': '手动',
+      'today.brief.unfilled': '未填',
       'level.label': '显示层级',
       'level.all': '全部',
       'level.two': '两层',
@@ -323,6 +373,26 @@ window.__ModuleLoader__.load({
       'brief.pending': '个待办叶子',
       'brief.frontier': '前沿',
       'brief.next': '该动',
+      'brief.today': '今日窗口',
+      'brief.computed': '生成于',
+      'brief.recompute': '重新计算',
+      'brief.unfilled': '未填',
+      'brief.emptyWindows': '今天还没有窗口。',
+      'brief.col.track': '支线',
+      'brief.col.frontier': '前沿',
+      'brief.col.next': '该动',
+      'brief.role.core': '主攻',
+      'brief.role.rotation': '轮动',
+      'brief.role.definition': '定义',
+      'filter.label': '筛选',
+      'filter.all': '全部',
+      'filter.todo': '待做',
+      'filter.done': '已完成',
+      'filter.paths': '条路径',
+      'filter.empty.todo': '当前视图没有聚焦路径。',
+      'filter.empty.done': '还没有已完成的任务。',
+      'filter.hint.todo': '切回「全部」查看完整任务树。',
+      'filter.hint.done': '切回「全部」或「待做」继续推进。',
       'tree.decompose': '拆解为子任务',
       'tree.schedule': '排入某天计划',
       'field.state': '原始状态',
@@ -360,6 +430,22 @@ window.__ModuleLoader__.load({
       'notice.decomposed': '已拆解 {n} 项，{m} 项已排入 {date}',
       'notice.decomposedNoPlan': '已拆解 {n} 项（暂未排期）',
       'notice.scheduled': '已排入 {date}',
+      'actions.ai': 'AI 拆解',
+      'chat.title': 'AI 拆解',
+      'chat.welcome': '先点任务的 ✦ 聚焦，再让模型拆成今天能执行的小任务；也可以直接描述你想安排的事。',
+      'chat.focus': '聚焦',
+      'chat.clearFocus': '取消聚焦',
+      'chat.placeholder': '描述要拆解的内容…（Enter 发送，Shift+Enter 换行）',
+      'chat.send': '发送',
+      'chat.sending': '思考中…',
+      'chat.clear': '清空对话',
+      'chat.error': '对话请求失败。',
+      'chat.noModel': '没有配置模型，或模型暂不可用。',
+      'chat.proposal': '拆解建议',
+      'chat.apply': '应用拆解',
+      'chat.applied': '已生成',
+      'chat.depth': '这个任务已在第 4 层，达到拆解上限；请改拆更上层的任务。',
+      'chat.empty': '先聚焦一个任务，才能应用拆解。',
     }
 
     const DICTS = { en: DICT_EN, zh: DICT_ZH }
@@ -470,6 +556,19 @@ window.__ModuleLoader__.load({
         day: 'numeric',
         timeZone: 'UTC',
       }).format(new Date(isoToDay(iso)))
+    }
+
+    function formatDateTime(iso, locale) {
+      if (!iso) return ''
+      const date = new Date(iso)
+      if (Number.isNaN(date.getTime())) return ''
+      return new Intl.DateTimeFormat(localeTag(locale), {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+      }).format(date)
     }
 
     function formatMonth(iso, locale) {
@@ -640,7 +739,9 @@ window.__ModuleLoader__.load({
         const message = payload && typeof payload.error === 'string' && payload.error.length > 0
           ? payload.error
           : `HTTP ${response.status}`
-        throw new Error(message)
+        const failure = /** @type {Error & { status: number }} */ (new Error(message))
+        failure.status = response.status
+        throw failure
       }
       return payload
     }
@@ -758,6 +859,36 @@ window.__ModuleLoader__.load({
       }
       walk(nodes, 0)
       return output
+    }
+
+    /**
+     * Prune the tree to the branches that contain one of `keepIds`. Ancestors of
+     * a kept task are retained so the branch can render; every other node is
+     * dropped outright, unlike a collapsed row which still exists.
+     */
+    function filterTree(nodes, keepIds) {
+      const kept = []
+      for (const node of nodes) {
+        const children = filterTree(node.children, keepIds)
+        if (keepIds.has(node.id) || children.length > 0) {
+          kept.push({ ...node, children, hasChildren: children.length > 0 })
+        }
+      }
+      return kept
+    }
+
+    /** Pair each brief window with the task item picked for it, if any. */
+    function briefWindows(report) {
+      const slots = report && Array.isArray(report.slots) ? report.slots : []
+      const items = report && Array.isArray(report.items) ? report.items : []
+      return slots.map(window => ({
+        window,
+        item: items.find(item => item && item.slot === window.slot && item.startTime === window.startTime) ?? null,
+      }))
+    }
+
+    function briefTimeRange(window) {
+      return [window.startTime, window.endTime].filter(Boolean).join('–') || '--:--'
     }
 
     function taskOptions(nodes) {
@@ -921,37 +1052,216 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'gantt-task-meta' }, chips)
     }
 
-    function BriefStrip({ brief, t, onReveal }) {
-      const lanes = brief && Array.isArray(brief.lanes)
-        ? brief.lanes.filter(lane => lane && (lane.frontier || lane.next))
-        : []
-      if (lanes.length === 0) return null
-      const pick = (entry, label, kind) => h('button', {
-        key: kind,
-        type: 'button',
-        className: 'gantt-brief-pick',
-        'data-kind': kind,
-        title: `${entry.number || refIdOf(entry.ref)} ${entry.title}`,
-        onClick: () => onReveal(entry.id),
-      },
-      h('span', { className: 'gantt-brief-tag' }, label),
-      h('span', { className: 'gantt-brief-id' }, entry.number || refIdOf(entry.ref)),
-      h('span', { className: 'gantt-brief-name' }, entry.title),
-      )
+    function BriefStrip({ dailyBrief, pending, t, locale, onReveal, onRecompute, recomputing }) {
+      if (!dailyBrief) return null
+      const tracks = Array.isArray(dailyBrief.tracks) ? dailyBrief.tracks : []
+      const windows = briefWindows(dailyBrief)
+      const generated = formatDateTime(dailyBrief.generatedAt, locale)
+      const pick = (entry, kind) => (entry
+        ? h('button', {
+          type: 'button',
+          className: 'gantt-brief-pick',
+          'data-kind': kind,
+          title: `${entry.number || refIdOf(entry.ref)} ${entry.title}`,
+          onClick: () => onReveal(entry.id),
+        },
+        h('span', { className: 'gantt-brief-id' }, entry.number || refIdOf(entry.ref)),
+        h('span', { className: 'gantt-brief-name' }, entry.title),
+        )
+        : h('span', { className: 'gantt-brief-none' }, '—'))
       return h('section', { className: 'gantt-brief' },
-        h('div', { className: 'gantt-brief-head' },
+        h('div', { className: 'gantt-brief-head', 'data-block': 'head' },
           h('span', { className: 'gantt-brief-title' }, t('brief.title')),
-          typeof brief.pending === 'number'
-            ? h('span', { className: 'gantt-brief-pending' }, `${brief.pending} ${t('brief.pending')}`)
+          typeof pending === 'number'
+            ? h('span', { className: 'gantt-brief-pending' }, `${pending} ${t('brief.pending')}`)
             : null,
+          generated ? h('span', { className: 'gantt-brief-computed' }, `${t('brief.computed')} ${generated}`) : null,
+          h('button', {
+            className: 'gantt-btn gantt-brief-recompute',
+            type: 'button',
+            'data-action': 'recompute-brief',
+            disabled: recomputing,
+            onClick: onRecompute,
+          }, recomputing ? '…' : t('brief.recompute')),
         ),
-        h('div', { className: 'gantt-brief-lanes' },
-          lanes.map(lane => h('div', { key: lane.id || lane.ref || lane.name, className: 'gantt-brief-lane' },
-            h('span', { className: 'gantt-brief-lane-name' }, lane.name),
-            lane.lane ? h('span', { className: 'gantt-row-chip' }, lane.lane) : null,
-            lane.frontier ? pick(lane.frontier, t('brief.frontier'), 'frontier') : null,
-            lane.next ? pick(lane.next, t('brief.next'), 'next') : null,
+        tracks.length > 0
+          ? h('div', { className: 'gantt-brief-lanes', role: 'table', 'aria-label': t('brief.title') },
+            h('div', { className: 'gantt-brief-lanes-head', role: 'row' },
+              h('span', { className: 'gantt-brief-col', role: 'columnheader' }, t('brief.col.track')),
+              h('span', { className: 'gantt-brief-col', role: 'columnheader' }, t('brief.col.frontier')),
+              h('span', { className: 'gantt-brief-col', role: 'columnheader' }, t('brief.col.next')),
+            ),
+            tracks.map((track, index) => h('div', {
+              key: index,
+              className: 'gantt-brief-lane',
+              role: 'row',
+              'data-role': track.role,
+            },
+            h('span', { className: 'gantt-brief-lane-name', role: 'cell', title: track.name }, track.name),
+            h('span', { className: 'gantt-brief-cell', role: 'cell' }, pick(track.frontier, 'frontier')),
+            h('span', { className: 'gantt-brief-cell', role: 'cell' }, pick(track.next, 'next')),
+            )),
+          )
+          : null,
+        h('div', { className: 'gantt-brief-today', 'data-block': 'today' },
+          h('span', { className: 'gantt-brief-title' }, t('brief.today')),
+          windows.length === 0
+            ? h('p', { className: 'gantt-brief-empty' }, t('brief.emptyWindows'))
+            : h('div', { className: 'gantt-brief-windows' }, windows.map(({ window, item }, index) => {
+              const role = item ? item.role : window.kind
+              return h('div', {
+                key: index,
+                className: 'gantt-brief-window',
+                'data-filled': item ? 'true' : 'false',
+                'data-role': role,
+              },
+              h('div', { className: 'gantt-brief-window-head' },
+                h('span', { className: 'gantt-brief-window-time' }, briefTimeRange(window)),
+                h('span', { className: 'gantt-brief-role', 'data-role': role }, t(`brief.role.${role}`)),
+              ),
+              item
+                ? h('button', {
+                  type: 'button',
+                  className: 'gantt-brief-window-task',
+                  title: `${item.ref || item.taskId} ${item.title}`,
+                  onClick: () => onReveal(item.taskId),
+                },
+                h('span', { className: 'gantt-brief-window-ref' }, refIdOf(item.ref)),
+                h('span', { className: 'gantt-brief-window-name' }, item.title),
+                )
+                : h('span', { className: 'gantt-brief-unfilled' }, t('brief.unfilled')),
+              )
+            })),
+        ),
+      )
+    }
+
+    /** One proposal child's plan line: date plus its time range when known. */
+    function chatPlanLabel(plan) {
+      const range = [plan.startTime, plan.endTime].filter(Boolean).join('–')
+      return [plan.date, range].filter(Boolean).join(' ')
+    }
+
+    function ChatProposal({ message, index, appliedKey, busy, canApply, t, onApply }) {
+      const { proposal } = message
+      const applied = appliedKey === index
+      return h('div', {
+        className: 'gantt-chat-proposal',
+        'data-applied': applied ? 'true' : undefined,
+      },
+      h('div', { className: 'gantt-chat-proposal-head' },
+        h('span', null, t('chat.proposal')),
+        proposal.planDate ? h('span', { className: 'gantt-chat-proposal-date' }, proposal.planDate) : null,
+      ),
+      proposal.children.map((child, childIndex) => h('div', { key: childIndex, className: 'gantt-chat-child' },
+        h('span', { className: 'gantt-chat-child-title' }, child.title),
+        h('span', { className: 'gantt-chat-child-done' }, child.doneWhen),
+        h('div', { className: 'gantt-chat-child-meta' },
+          child.estimate ? h('span', null, child.estimate) : null,
+          child.plan ? h('span', null, chatPlanLabel(child.plan)) : null,
+        ),
+      )),
+      applied
+        ? h('span', { className: 'gantt-chat-applied' }, t('chat.applied'))
+        : h(React.Fragment, null,
+          h('button', {
+            className: 'gantt-btn gantt-btn-primary',
+            type: 'button',
+            disabled: busy || !canApply,
+            onClick: () => onApply(message, index),
+          }, t('chat.apply')),
+          canApply ? null : h('span', { className: 'gantt-chat-note' }, t('chat.empty')),
+        ),
+      )
+    }
+
+    function ChatPanel({
+      t,
+      focusTask,
+      focusRef,
+      focusDepth,
+      messages,
+      busy,
+      error,
+      appliedKey,
+      onClose,
+      onClearFocus,
+      onClear,
+      onSend,
+      onApply,
+    }) {
+      const [draft, setDraft] = useState('')
+      const canApply = focusTask !== null
+      const send = () => {
+        const message = draft.trim()
+        if (message === '' || busy) return
+        setDraft('')
+        onSend(message)
+      }
+      const onKeyDown = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          send()
+        }
+      }
+      return h('aside', { className: 'gantt-chat', 'aria-label': t('chat.title') },
+        h('div', { className: 'gantt-chat-head' },
+          h('span', { className: 'gantt-chat-title' }, t('chat.title')),
+          h('button', {
+            className: 'gantt-btn gantt-icon-btn',
+            type: 'button',
+            title: t('actions.close'),
+            'aria-label': t('actions.close'),
+            onClick: onClose,
+          }, '×'),
+        ),
+        h('div', { className: 'gantt-chat-focus' },
+          focusTask
+            ? h(React.Fragment, null,
+              h('span', { className: 'gantt-chat-focus-label' }, t('chat.focus')),
+              h('span', { className: 'gantt-chat-chip' },
+                h('span', { className: 'gantt-chat-chip-ref' }, focusRef),
+                h('span', { className: 'gantt-chat-chip-title', title: focusTask.title }, focusTask.title),
+              ),
+              h('button', { className: 'gantt-btn gantt-chat-clear-focus', type: 'button', onClick: onClearFocus }, t('chat.clearFocus')),
+            )
+            : h('span', { className: 'gantt-chat-focus-none' }, t('chat.empty')),
+          focusDepth >= 4 ? h('span', { className: 'gantt-chat-depth' }, t('chat.depth')) : null,
+        ),
+        h('div', { className: 'gantt-chat-body', role: 'log' },
+          messages.length === 0 ? h('p', { className: 'gantt-chat-welcome' }, t('chat.welcome')) : null,
+          messages.map((message, index) => h('div', {
+            key: `${message.role}-${index}`,
+            className: 'gantt-chat-msg',
+            'data-role': message.role,
+          },
+          h('div', { className: 'gantt-chat-bubble' }, message.content),
+          message.proposal
+            ? h(ChatProposal, { message, index, appliedKey, busy, canApply, t, onApply })
+            : null,
           )),
+          error ? h('div', { className: 'gantt-chat-error' }, error) : null,
+        ),
+        h('div', { className: 'gantt-chat-compose' },
+          h('textarea', {
+            className: 'gantt-textarea gantt-chat-input',
+            value: draft,
+            placeholder: t('chat.placeholder'),
+            'aria-label': t('chat.placeholder'),
+            disabled: busy,
+            onChange: event => setDraft(event.target.value),
+            onKeyDown,
+          }),
+          h('div', { className: 'gantt-chat-compose-row' },
+            busy ? h('span', { className: 'gantt-chat-sending' }, t('chat.sending')) : null,
+            h('button', { className: 'gantt-btn', type: 'button', disabled: busy, onClick: onClear }, t('chat.clear')),
+            h('button', {
+              className: 'gantt-btn gantt-btn-primary',
+              type: 'button',
+              disabled: busy || draft.trim() === '',
+              onClick: send,
+            }, t('chat.send')),
+          ),
         ),
       )
     }
@@ -997,6 +1307,7 @@ window.__ModuleLoader__.load({
       onCycleStatus,
       onDecompose,
       onSchedule,
+      onAiDecompose,
     }) {
       const hasChildren = task.hasChildren
       const number = rowNumber(task)
@@ -1043,6 +1354,17 @@ window.__ModuleLoader__.load({
             onClick: () => onCycleStatus(task),
           }),
           h('div', { className: 'gantt-row-actions' },
+            h('button', {
+              className: 'gantt-row-action',
+              type: 'button',
+              'data-action': 'ai',
+              title: t('actions.ai'),
+              'aria-label': t('actions.ai'),
+              onClick: (event) => {
+                event.stopPropagation()
+                onAiDecompose(task)
+              },
+            }, '✦'),
             isTrack ? null : h('button', {
               className: 'gantt-row-action',
               type: 'button',
@@ -2608,37 +2930,131 @@ window.__ModuleLoader__.load({
       .gantt-brief {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
         padding: 8px 22px 10px;
         border-bottom: 1px solid var(--gantt-line);
         background: color-mix(in srgb, var(--gantt-accent) 4%, var(--gantt-bg));
       }
-      .gantt-brief-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .gantt-brief-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .gantt-brief-title { font-size: 11.5px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gantt-muted); }
-      .gantt-brief-pending { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
-      .gantt-brief-lanes { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
-      .gantt-brief-lane { flex: 1 1 330px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-      .gantt-brief-lane-name { font-size: 11.5px; font-weight: 600; min-width: 86px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .gantt-brief-pick {
-        display: inline-flex;
+      .gantt-brief-pending, .gantt-brief-computed { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-brief-recompute { margin-left: auto; }
+      .gantt-brief-lanes {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--gantt-line);
+        border-radius: 9px;
+        overflow: hidden;
+        background: var(--gantt-surface);
+      }
+      .gantt-brief-lanes-head, .gantt-brief-lane {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
         align-items: center;
-        gap: 6px;
-        max-width: min(360px, 100%);
-        height: 24px;
-        padding: 0 9px;
-        border-radius: 7px;
+        gap: 8px;
+        min-width: 0;
+      }
+      .gantt-brief-lanes-head {
+        height: 26px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--gantt-line);
+        background: color-mix(in srgb, var(--gantt-bg) 55%, transparent);
+      }
+      .gantt-brief-col { font-size: 10.5px; font-weight: 650; color: var(--gantt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gantt-brief-lane { height: 34px; padding: 0 10px; border-top: 1px solid var(--gantt-line); }
+      .gantt-brief-lane:nth-child(even) { background: color-mix(in srgb, var(--gantt-muted) 4%, transparent); }
+      .gantt-brief-lane:hover { background: color-mix(in srgb, var(--gantt-accent) 7%, transparent); }
+      .gantt-brief-lane-name, .gantt-brief-cell { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gantt-brief-cell { display: flex; align-items: center; }
+      .gantt-brief-pick {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+        height: 22px;
+        padding: 0 7px;
+        border-radius: 6px;
         border: 1px solid var(--gantt-line-strong);
         background: var(--gantt-surface);
         color: var(--gantt-text);
         font-size: 11px;
         cursor: pointer;
-        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
       }
       .gantt-brief-pick:hover { border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent); }
-      .gantt-brief-tag { flex: 0 0 auto; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--gantt-accent) 14%, transparent); color: var(--gantt-accent); }
-      .gantt-brief-pick[data-kind="next"] .gantt-brief-tag { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
       .gantt-brief-id { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--gantt-muted); }
       .gantt-brief-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gantt-brief-none { color: var(--gantt-muted); opacity: 0.6; }
+      .gantt-brief-today { display: flex; flex-direction: column; gap: 6px; }
+      .gantt-brief-windows { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+      .gantt-brief-window {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        padding: 7px 9px;
+        border: 1px solid var(--gantt-line);
+        border-radius: 9px;
+        background: var(--gantt-surface);
+      }
+      .gantt-brief-window[data-filled="true"] { border-left: 3px solid var(--gantt-accent); }
+      .gantt-brief-window-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .gantt-brief-window-time { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .gantt-brief-role {
+        flex: 0 0 auto;
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--gantt-line-strong);
+        color: var(--gantt-muted);
+        white-space: nowrap;
+      }
+      .gantt-brief-role[data-role="core"] { color: var(--gantt-accent); border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent); }
+      .gantt-brief-window-task {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--gantt-text);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .gantt-brief-window-task:hover .gantt-brief-window-name { color: var(--gantt-accent); }
+      .gantt-brief-window-ref { flex: 0 0 auto; color: var(--gantt-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+      .gantt-brief-window-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gantt-brief-unfilled { font-size: 11.5px; color: var(--gantt-muted); font-style: italic; }
+      .gantt-brief-empty { margin: 0; font-size: 11.5px; color: var(--gantt-muted); }
+      .gantt-filter {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 7px 22px;
+        border-bottom: 1px solid var(--gantt-line);
+        background: var(--gantt-bg);
+      }
+      .gantt-filter-label { font-size: 11px; color: var(--gantt-muted); }
+      .gantt-filter-count { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-filter-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 42px 24px;
+        text-align: center;
+        color: var(--gantt-muted);
+      }
       .gantt-parent-summary {
         display: flex;
         align-items: center;
@@ -2692,10 +3108,102 @@ window.__ModuleLoader__.load({
         .gantt-decompose-head { grid-template-columns: 18px minmax(0, 1fr) 32px; }
         .gantt-decompose-head > [data-field="doneWhen"] { grid-column: 2 / 4; }
         .gantt-brief-lane-name { min-width: 0; }
+        .gantt-brief-lanes-head, .gantt-brief-lane { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
+        .gantt-brief-windows { grid-template-columns: 1fr; }
+        .gantt-filter { padding-left: 14px; padding-right: 14px; }
       }
     `
 
-    const CSS = [CSS_BASE, CSS_HEAD, CSS_STATS, CSS_GRID, CSS_EMPTY, CSS_DIALOG, CSS_MISC].join('\n')
+    const CSS_CHAT = `
+      .gantt-work { display: flex; flex: 1; min-height: 0; min-width: 0; }
+      .gantt-work-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+      .gantt-btn[data-active="true"] {
+        color: var(--gantt-accent);
+        border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent);
+        background: color-mix(in srgb, var(--gantt-accent) 13%, transparent);
+      }
+      .gantt-chat {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 360px;
+        width: 360px;
+        min-width: 0;
+        min-height: 0;
+        border-left: 1px solid var(--gantt-line-strong);
+        background: var(--gantt-bg);
+      }
+      .gantt-chat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--gantt-line); background: var(--gantt-surface); }
+      .gantt-chat-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gantt-chat-focus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--gantt-line); font-size: 11.5px; color: var(--gantt-muted); }
+      .gantt-chat-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        max-width: 100%;
+        padding: 3px 8px;
+        border: 1px solid color-mix(in srgb, var(--gantt-accent) 40%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--gantt-accent) 10%, transparent);
+        color: var(--gantt-text);
+      }
+      .gantt-chat-chip-ref { flex: 0 0 auto; color: var(--gantt-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+      .gantt-chat-chip-title { min-width: 0; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gantt-chat-clear-focus { margin-left: auto; height: 26px; padding: 0 8px; font-size: 11px; }
+      .gantt-chat-focus-label { flex: 0 0 auto; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; }
+      .gantt-chat-focus-none { font-size: 11.5px; }
+      .gantt-chat-depth { flex: 1 1 100%; font-size: 11px; font-style: italic; }
+      .gantt-chat-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+      .gantt-chat-welcome { margin: 0; font-size: 12px; line-height: 1.6; color: var(--gantt-muted); }
+      .gantt-chat-msg { display: flex; flex-direction: column; gap: 6px; }
+      .gantt-chat-msg[data-role="user"] { align-items: flex-end; }
+      .gantt-chat-bubble {
+        max-width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--gantt-line);
+        border-radius: 10px;
+        background: var(--gantt-surface);
+        font-size: 12px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .gantt-chat-msg[data-role="user"] .gantt-chat-bubble {
+        border-color: color-mix(in srgb, var(--gantt-accent) 35%, transparent);
+        background: color-mix(in srgb, var(--gantt-accent) 11%, transparent);
+      }
+      .gantt-chat-error {
+        padding: 7px 9px;
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+        color: var(--dsw-alias-state-error-primary);
+        font-size: 11.5px;
+      }
+      .gantt-chat-proposal { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; border: 1px solid var(--gantt-line-strong); border-radius: 10px; background: var(--gantt-surface); }
+      .gantt-chat-proposal[data-applied="true"] { border-style: dashed; }
+      .gantt-chat-proposal-head { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 650; }
+      .gantt-chat-proposal-date { margin-left: auto; font-size: 10.5px; font-weight: 400; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-chat-child { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--gantt-line); border-radius: 8px; background: color-mix(in srgb, var(--gantt-bg) 55%, transparent); }
+      .gantt-chat-child-title { font-size: 12px; font-weight: 600; }
+      .gantt-chat-child-done { font-size: 11px; color: var(--gantt-muted); }
+      .gantt-chat-child-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10.5px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-chat-applied { font-size: 11px; font-weight: 600; color: var(--dsw-alias-state-success-primary); }
+      .gantt-chat-note { font-size: 11px; color: var(--gantt-muted); }
+      .gantt-chat-compose { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--gantt-line); background: var(--gantt-bg); }
+      .gantt-chat-input { min-height: 56px; max-height: 120px; }
+      .gantt-chat-compose-row { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+      .gantt-chat-sending { margin-right: auto; font-size: 11px; color: var(--gantt-muted); }
+      @container (max-width: 900px) {
+        .gantt-work { flex-direction: column; }
+        .gantt-chat { flex: 1 1 auto; width: auto; max-height: 46vh; border-left: 0; border-top: 1px solid var(--gantt-line-strong); }
+      }
+      @container (max-width: 720px) {
+        .gantt-chat { width: 100%; max-height: 52vh; }
+        .gantt-chat-compose { padding: 8px 10px; }
+      }
+    `
+
+    const CSS = [CSS_BASE, CSS_HEAD, CSS_STATS, CSS_GRID, CSS_EMPTY, CSS_DIALOG, CSS_MISC, CSS_CHAT].join('\n')
 
     const CSS_TODAY = `
       .today-page { container-type: inline-size; }
@@ -2714,6 +3222,28 @@ window.__ModuleLoader__.load({
       .today-integrity { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border: 1px solid var(--gantt-line); border-radius: 10px; background: var(--gantt-surface); }
       .today-integrity-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
       .today-integrity-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--gantt-muted); }
+      .today-brief { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--gantt-line); border-radius: 10px; background: var(--gantt-surface); }
+      .today-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+      .today-brief-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .today-brief-meta { font-size: 11.5px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .today-brief-list { display: flex; flex-direction: column; gap: 6px; }
+      .today-brief-row {
+        display: grid;
+        grid-template-columns: 96px auto minmax(90px, 0.6fr) minmax(0, 1.4fr);
+        gap: 8px;
+        align-items: center;
+        padding: 7px 9px;
+        border: 1px solid var(--gantt-line);
+        border-radius: 9px;
+        font-size: 12px;
+      }
+      .today-brief-row[data-filled="false"] { border-style: dashed; }
+      .today-brief-time { color: var(--gantt-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .today-brief-role { justify-self: start; font-size: 10px; line-height: 1; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--gantt-line-strong); color: var(--gantt-muted); white-space: nowrap; }
+      .today-brief-role[data-role="core"] { color: var(--gantt-accent); border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent); }
+      .today-brief-track { color: var(--gantt-muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .today-brief-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .today-brief-unfilled { color: var(--gantt-muted); font-style: italic; }
       .today-blocks, .today-slot, .today-nodes { display: flex; flex-direction: column; }
       .today-blocks { gap: 10px; }
       .today-slot { gap: 7px; }
@@ -2756,6 +3286,7 @@ window.__ModuleLoader__.load({
         .today-block { grid-template-columns: 1fr; }
         .today-meta .gantt-stat-progress { margin-left: 0; max-width: none; }
         .today-node-title { flex-basis: 100%; }
+        .today-brief-row { grid-template-columns: 1fr; gap: 4px; }
       }
     `
 
@@ -2766,10 +3297,18 @@ window.__ModuleLoader__.load({
       const [anchor, setAnchor] = useState(() => todayIso())
       const [collapsed, setCollapsed] = useState(() => new Set())
       const [level, setLevel] = useState(99)
+      const [filter, setFilter] = useState('all')
+      const [recomputing, setRecomputing] = useState(false)
       const [selectedId, setSelectedId] = useState(null)
       const [focusId, setFocusId] = useState(null)
       const [dialog, setDialog] = useState(null)
       const [toast, setToast] = useState(null)
+      const [chatOpen, setChatOpen] = useState(false)
+      const [chatFocusId, setChatFocusId] = useState(null)
+      const [messages, setMessages] = useState(/** @type {any[]} */ ([]))
+      const [chatBusy, setChatBusy] = useState(false)
+      const [chatError, setChatError] = useState(null)
+      const [appliedProposalKey, setAppliedProposalKey] = useState(null)
       const initialized = useRef(false)
       const pageRef = useRef(null)
 
@@ -2795,10 +3334,37 @@ window.__ModuleLoader__.load({
       const tasks = data?.tasks ?? []
       const stats = data?.stats ?? { total: 0, done: 0, inProgress: 0, blocked: 0, overdue: 0, progress: 0 }
       const today = data?.today ?? todayIso()
+      const dailyBrief = data?.dailyBrief ?? null
       const allTasks = useMemo(() => flattenTree(tasks), [tasks])
       const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
       const options = useMemo(() => taskOptions(tasks), [tasks])
-      const rows = useMemo(() => visibleRows(tasks, collapsed), [tasks, collapsed])
+      const chatFocusTask = chatFocusId ? byId.get(chatFocusId) ?? null : null
+      const chatFocusDepth = chatFocusTask ? rowNumber(chatFocusTask).split('.').length : 0
+      const focusIds = useMemo(() => {
+        const ids = new Set()
+        for (const lane of data?.brief?.lanes ?? []) {
+          if (lane?.frontier) ids.add(lane.frontier.id)
+          if (lane?.next) ids.add(lane.next.id)
+        }
+        for (const item of dailyBrief?.items ?? []) ids.add(item.taskId)
+        return ids
+      }, [data?.brief, dailyBrief])
+      const doneIds = useMemo(
+        () => new Set(allTasks.filter(task => task.status === 'done').map(task => task.id)),
+        [allTasks],
+      )
+      const filterIds = useMemo(() => {
+        if (filter === 'todo') return focusIds
+        if (filter === 'done') return doneIds
+        return null
+      }, [filter, focusIds, doneIds])
+      const filterCount = filterIds === null ? 0 : [...filterIds].filter(id => byId.has(id)).length
+      const filteredTasks = useMemo(
+        () => (filterIds === null ? tasks : filterTree(tasks, filterIds)),
+        [tasks, filterIds],
+      )
+      const visibleTaskCount = useMemo(() => flattenTree(filteredTasks).length, [filteredTasks])
+      const rows = useMemo(() => visibleRows(filteredTasks, collapsed), [filteredTasks, collapsed])
       const timeline = useMemo(() => {
         const value = buildWindow(scale, anchor, today)
         return { ...value, today }
@@ -2859,6 +3425,21 @@ window.__ModuleLoader__.load({
         }
       }, [refreshWithToast, t])
 
+      const recomputeBrief = useCallback(async () => {
+        setRecomputing(true)
+        try {
+          await requestJson('api/gantt/brief/compute', {
+            method: 'POST',
+            body: JSON.stringify({ date: today }),
+          })
+          refresh()
+        } catch (failure) {
+          setToast({ text: failure instanceof Error ? failure.message : String(failure), kind: 'error' })
+        } finally {
+          setRecomputing(false)
+        }
+      }, [refresh, today])
+
       const toggleCollapse = useCallback((id) => {
         setCollapsed((current) => {
           const next = new Set(current)
@@ -2873,6 +3454,11 @@ window.__ModuleLoader__.load({
         setCollapsed(collapseForLevel(tasks, next))
       }, [tasks])
 
+      const changeFilter = useCallback((next) => {
+        setFilter(next)
+        setCollapsed(next === 'all' ? collapseForLevel(tasks, level) : new Set())
+      }, [tasks, level])
+
       const revealTask = useCallback((id) => {
         const path = taskPath(tasks, id)
         if (path === null) return
@@ -2884,6 +3470,12 @@ window.__ModuleLoader__.load({
         setSelectedId(id)
         setFocusId(id)
       }, [tasks])
+
+      const openChatFor = useCallback((task) => {
+        revealTask(task.id)
+        setChatFocusId(task.id)
+        setChatOpen(true)
+      }, [revealTask])
 
       const openCreate = useCallback((parentTask) => {
         setDialog({ type: 'create', parentId: parentTask?.id ?? null })
@@ -2902,6 +3494,51 @@ window.__ModuleLoader__.load({
       const openSchedule = useCallback((task) => {
         setSelectedId(task.id)
         setDialog({ type: 'schedule', id: task.id })
+      }, [])
+
+      const sendChat = useCallback(async (message) => {
+        const history = messages.slice(-8).map(({ role, content }) => ({ role, content }))
+        const body = chatFocusId ? { message, history, taskId: chatFocusId } : { message, history }
+        setChatBusy(true)
+        setChatError(null)
+        setMessages(current => [...current, { role: 'user', content: message }])
+        try {
+          const payload = await requestJson('api/gantt/chat', { method: 'POST', body: JSON.stringify(body) })
+          setMessages(current => [
+            ...current,
+            { role: 'assistant', content: payload.reply, proposal: payload.proposal ?? null },
+          ])
+        } catch (failure) {
+          const detail = failure instanceof Error ? failure.message : String(failure)
+          setChatError(failure.status === 503 ? `${t('chat.noModel')} ${detail}` : t('chat.error'))
+        } finally {
+          setChatBusy(false)
+        }
+      }, [messages, chatFocusId, t])
+
+      const applyChatProposal = useCallback(async (message, index) => {
+        const proposal = message.proposal
+        const body = proposal.planDate
+          ? { id: chatFocusId, planDate: proposal.planDate, children: proposal.children }
+          : { id: chatFocusId, children: proposal.children }
+        setChatBusy(true)
+        setChatError(null)
+        try {
+          await requestJson('api/gantt/task/decompose', { method: 'POST', body: JSON.stringify(body) })
+          setAppliedProposalKey(index)
+          refresh()
+          setToast({ text: t('chat.applied'), kind: 'ok' })
+        } catch {
+          setChatError(t('chat.error'))
+        } finally {
+          setChatBusy(false)
+        }
+      }, [chatFocusId, refresh, t])
+
+      const clearChat = useCallback(() => {
+        setMessages([])
+        setChatError(null)
+        setAppliedProposalKey(null)
       }, [])
 
       const shift = useCallback((direction) => {
@@ -3011,32 +3648,38 @@ window.__ModuleLoader__.load({
             ),
           ),
         )
-        : h('div', { className: 'gantt-body' },
-          h('div', {
-            className: 'gantt-grid',
-            style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
-          },
-          h(TimelineHeader, { timeline, t, locale, taskCount: allTasks.length }),
-          h('div', { className: 'gantt-rows' },
-            h(GridLines, { timeline }),
-            rows.map(({ task, depth }) => h(GanttRow, {
-              key: task.id,
-              task,
-              depth,
-              timeline,
-              selected: task.id === selectedId,
-              collapsed: collapsed.has(task.id),
-              t,
-              onSelect: openEdit,
-              onToggle: toggleCollapse,
-              onAddChild: openCreate,
-              onCycleStatus: cycleStatus,
-              onDecompose: openDecompose,
-              onSchedule: openSchedule,
-            })),
-          ),
-          ),
-        )
+        : filteredTasks.length === 0
+          ? h('div', { className: 'gantt-filter-empty' },
+            h('div', { className: 'gantt-empty-title' }, t(`filter.empty.${filter}`)),
+            h('p', { className: 'gantt-hint' }, t(`filter.hint.${filter}`)),
+          )
+          : h('div', { className: 'gantt-body' },
+            h('div', {
+              className: 'gantt-grid',
+              style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
+            },
+            h(TimelineHeader, { timeline, t, locale, taskCount: visibleTaskCount }),
+            h('div', { className: 'gantt-rows' },
+              h(GridLines, { timeline }),
+              rows.map(({ task, depth }) => h(GanttRow, {
+                key: task.id,
+                task,
+                depth,
+                timeline,
+                selected: task.id === selectedId,
+                collapsed: collapsed.has(task.id),
+                t,
+                onSelect: openEdit,
+                onToggle: toggleCollapse,
+                onAddChild: openCreate,
+                onCycleStatus: cycleStatus,
+                onDecompose: openDecompose,
+                onSchedule: openSchedule,
+                onAiDecompose: openChatFor,
+              })),
+            ),
+            ),
+          )
 
       return shell(h(React.Fragment, null,
         h('header', { className: 'gantt-head' },
@@ -3075,6 +3718,13 @@ window.__ModuleLoader__.load({
             h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.prev'), 'aria-label': t('actions.prev'), onClick: () => shift(-1) }, '‹'),
             h('button', { className: 'gantt-btn', type: 'button', onClick: goToday }, t('actions.today')),
             h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.next'), 'aria-label': t('actions.next'), onClick: () => shift(1) }, '›'),
+            h('button', {
+              className: 'gantt-btn',
+              type: 'button',
+              'data-action': 'chat-toggle',
+              'data-active': chatOpen ? 'true' : undefined,
+              onClick: () => setChatOpen(current => !current),
+            }, t('actions.ai')),
             h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'context' }) }, t('actions.context')),
             h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'api' }) }, t('actions.api')),
             h('button', {
@@ -3088,38 +3738,85 @@ window.__ModuleLoader__.load({
             h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: () => openCreate(null) }, `+ ${t('actions.new')}`),
           ),
         ),
-        h('section', { className: 'gantt-stats' },
-          h('div', { className: 'gantt-window' },
-            h('span', { className: 'gantt-window-scale' }, scale === 'week' ? t('scale.weekShort') : t('scale.monthShort')),
-            h('span', { className: 'gantt-window-label' }, windowTitle(timeline, locale)),
+        h('div', { className: 'gantt-work' },
+          h('div', { className: 'gantt-work-main' },
+            h('section', { className: 'gantt-stats' },
+              h('div', { className: 'gantt-window' },
+                h('span', { className: 'gantt-window-scale' }, scale === 'week' ? t('scale.weekShort') : t('scale.monthShort')),
+                h('span', { className: 'gantt-window-label' }, windowTitle(timeline, locale)),
+              ),
+              h('div', { className: 'gantt-stat' },
+                h('span', { className: 'gantt-dot', style: { '--st': 'var(--dsw-alias-label-secondary)' } }),
+                t('stats.total'), h('b', null, stats.total),
+              ),
+              h('div', { className: 'gantt-stat' },
+                h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.in_progress } }),
+                t('stats.inProgress'), h('b', null, stats.inProgress),
+              ),
+              h('div', { className: 'gantt-stat' },
+                h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.done } }),
+                t('stats.done'), h('b', null, stats.done),
+              ),
+              h('div', { className: 'gantt-stat' },
+                h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.blocked } }),
+                t('stats.overdue'), h('b', null, stats.overdue),
+              ),
+              h('div', { className: 'gantt-stat-progress' },
+                h('span', null, `${t('stats.progress')} ${stats.progress}%`),
+                h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } })),
+              ),
+            ),
+            error && data ? h('div', { className: 'gantt-banner' },
+              h('span', null, error),
+              h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
+            ) : null,
+            h(BriefStrip, {
+              dailyBrief,
+              pending: data?.brief?.pending,
+              t,
+              locale,
+              onReveal: revealTask,
+              onRecompute: recomputeBrief,
+              recomputing,
+            }),
+            tasks.length > 0
+              ? h('section', { className: 'gantt-filter' },
+                h('span', { className: 'gantt-filter-label' }, t('filter.label')),
+                h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
+                  [['all', 'filter.all'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
+                    key: value,
+                    className: 'gantt-seg-btn',
+                    type: 'button',
+                    'data-filter': value,
+                    'data-active': filter === value ? 'true' : undefined,
+                    onClick: () => changeFilter(value),
+                  }, t(key))),
+                ),
+                filterCount > 0
+                  ? h('span', { className: 'gantt-filter-count' }, `${filterCount} ${t('filter.paths')}`)
+                  : null,
+              )
+              : null,
+            content,
           ),
-          h('div', { className: 'gantt-stat' },
-            h('span', { className: 'gantt-dot', style: { '--st': 'var(--dsw-alias-label-secondary)' } }),
-            t('stats.total'), h('b', null, stats.total),
-          ),
-          h('div', { className: 'gantt-stat' },
-            h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.in_progress } }),
-            t('stats.inProgress'), h('b', null, stats.inProgress),
-          ),
-          h('div', { className: 'gantt-stat' },
-            h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.done } }),
-            t('stats.done'), h('b', null, stats.done),
-          ),
-          h('div', { className: 'gantt-stat' },
-            h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.blocked } }),
-            t('stats.overdue'), h('b', null, stats.overdue),
-          ),
-          h('div', { className: 'gantt-stat-progress' },
-            h('span', null, `${t('stats.progress')} ${stats.progress}%`),
-            h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } })),
-          ),
+          chatOpen
+            ? h(ChatPanel, {
+              t,
+              focusTask: chatFocusTask,
+              focusRef: chatFocusTask ? rowNumber(chatFocusTask) : '',
+              focusDepth: chatFocusDepth,
+              messages,
+              busy: chatBusy,
+              error: chatError,
+              appliedKey: appliedProposalKey,
+              onClose: () => setChatOpen(false),
+              onClearFocus: () => setChatFocusId(null),
+              onClear: clearChat,
+              onSend: sendChat,
+              onApply: applyChatProposal,
+            })
+            : null,
         ),
-        error && data ? h('div', { className: 'gantt-banner' },
-          h('span', null, error),
-          h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
-        ) : null,
-        h(BriefStrip, { brief: data?.brief, t, onReveal: revealTask }),
-        content,
         dialogNode,
         toast ? h('div', {
           className: 'gantt-toast',
@@ -3136,6 +3833,7 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState(null)
       const [writeError, setWriteError] = useState(null)
       const [importing, setImporting] = useState(false)
+      const [briefBusy, setBriefBusy] = useState(false)
 
       const day = data?.day ?? null
       const blocks = data?.blocks ?? []
@@ -3145,6 +3843,8 @@ window.__ModuleLoader__.load({
       const percent = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
       const serverToday = data?.today || todayIso()
       const unplanned = day === null && blocks.length === 0
+      const brief = data?.brief ?? null
+      const briefRows = briefWindows(brief)
 
       const shiftDay = useCallback(direction => setDate(current => addDays(current, direction)), [])
       const goToday = useCallback(() => setDate(serverToday), [serverToday])
@@ -3178,6 +3878,23 @@ window.__ModuleLoader__.load({
           setImporting(false)
         }
       }, [refresh, t])
+
+      const recomputeBrief = useCallback(async () => {
+        setNotice(null)
+        setWriteError(null)
+        setBriefBusy(true)
+        try {
+          await requestJson('api/gantt/brief/compute', {
+            method: 'POST',
+            body: JSON.stringify({ date }),
+          })
+          refresh()
+        } catch (failure) {
+          setWriteError(failure instanceof Error ? failure.message : String(failure))
+        } finally {
+          setBriefBusy(false)
+        }
+      }, [date, refresh])
 
       const shell = children => h('div', { className: 'gantt-page today-page' },
         h('style', { key: 'gantt-css' }, CSS),
@@ -3267,6 +3984,50 @@ window.__ModuleLoader__.load({
         )
         : null
 
+      const briefGenerated = brief ? formatDateTime(brief.generatedAt, locale) : ''
+      const briefMeta = [
+        briefGenerated ? `${t('today.brief.generated')} ${briefGenerated}` : '',
+        brief && brief.source ? t(`today.brief.source.${brief.source}`) : '',
+      ].filter(Boolean).join(' · ')
+      const briefSection = h('section', { className: 'today-brief', 'data-block': 'today-brief' },
+        h('div', { className: 'today-brief-head' },
+          h('h2', { className: 'today-section-title' }, t('today.brief.title')),
+          h('div', { className: 'today-brief-actions' },
+            briefMeta ? h('span', { className: 'today-brief-meta' }, briefMeta) : null,
+            h('button', {
+              className: 'gantt-btn',
+              'data-action': 'recompute-brief',
+              type: 'button',
+              disabled: briefBusy,
+              onClick: recomputeBrief,
+            }, briefBusy ? '…' : t('today.brief.recompute')),
+          ),
+        ),
+        !brief
+          ? h('p', { className: 'today-muted' }, t('today.brief.empty'))
+          : briefRows.length === 0
+            ? h('p', { className: 'today-muted' }, t('brief.emptyWindows'))
+            : h('div', { className: 'today-brief-list' },
+              briefRows.map(({ window, item }, index) => {
+                const role = item ? item.role : window.kind
+                return h('div', {
+                  key: index,
+                  className: 'today-brief-row',
+                  'data-filled': item ? 'true' : 'false',
+                  'data-role': role,
+                },
+                h('span', { className: 'today-brief-time' }, briefTimeRange(window)),
+                h('span', { className: 'today-brief-role', 'data-role': role }, t(`brief.role.${role}`)),
+                h('span', { className: 'today-brief-track', title: item ? item.trackName : '' }, item ? item.trackName : '—'),
+                item
+                  ? h('span', { className: 'today-brief-task', title: item.title },
+                    `${item.ref ? refIdOf(item.ref) : item.taskId} ${item.title}`)
+                  : h('span', { className: 'today-brief-unfilled' }, t('today.brief.unfilled')),
+                )
+              }),
+            ),
+      )
+
       const integritySection = integrity.length > 0
         ? h('section', { className: 'today-integrity' },
           h('div', { className: 'today-integrity-head' },
@@ -3336,6 +4097,7 @@ window.__ModuleLoader__.load({
             : null,
           writeError ? h('div', { className: 'gantt-banner' }, h('span', null, writeError)) : null,
           goal,
+          briefSection,
           integritySection,
           content,
         ),
