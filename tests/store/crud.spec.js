@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore, todayIso, addDays } from '../../store.js'
+import { GanttStore, todayIso, addDays } from '../../src/host/store.js'
 import { expectGanttError, expectIsoTimestamp } from '../helpers/gantt.js'
 
 let store

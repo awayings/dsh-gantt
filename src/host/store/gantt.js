@@ -1,0 +1,516 @@
+// The SQLite-backed task store. The class is the single seam over the store's
+// per-concern modules: the routes and the tests only ever talk to these methods.
+
+import { randomUUID } from 'node:crypto'
+import path from 'node:path'
+import { GanttError } from '../errors.js'
+import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
+import { buildDailyReport, computeDailyBrief, dailyBrief, persistDailyBrief, previousDailyBriefs, readDailyBrief } from './brief.js'
+import { contextDocument } from './context.js'
+import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
+import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
+import { startScheduler } from './scheduler.js'
+import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, assertDate, assertRange, defaultProgress, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
+
+/** @typedef {import('../daily.js').DailyReport} DailyReport */
+/** @typedef {import('../tree.js').Brief} Brief */
+/** @typedef {import('../tree.js').LinkType} LinkType */
+/** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
+/** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
+/** @typedef {import('../tree.js').TaskKind} TaskKind */
+/** @typedef {import('../tree.js').TaskLink} TaskLink */
+/** @typedef {import('../tree.js').TaskNode} TaskNode */
+/** @typedef {import('../tree.js').TaskStatus} TaskStatus */
+/** @typedef {import('../tree.js').TreeTask} TaskRow */
+/** @typedef {import('./context.js').ContextOptions} ContextOptions */
+/** @typedef {import('./plan.js').BlockDraft} BlockDraft */
+/** @typedef {import('./plan.js').BlockUpsertCounts} BlockUpsertCounts */
+/** @typedef {import('./plan.js').DayPlanBundle} DayPlanBundle */
+/** @typedef {import('./plan.js').PlanBlock} PlanBlock */
+/** @typedef {import('./plan.js').PlanSlot} PlanSlot */
+/** @typedef {import('./plan.js').PlanStatus} PlanStatus */
+/** @typedef {import('./plan.js').ReplacePlanCounts} ReplacePlanCounts */
+/** @typedef {import('./plan.js').ReplacePlanInput} ReplacePlanInput */
+/** @typedef {import('./plan.js').ScheduleInput} ScheduleInput */
+/** @typedef {import('./plan.js').TaskBlockPlan} TaskBlockPlan */
+/** @typedef {import('./tasks.js').DecomposeChildInput} DecomposeChildInput */
+/** @typedef {import('./tasks.js').SplitChild} SplitChild */
+/** @typedef {import('./tasks.js').TaskInput} TaskInput */
+/** @typedef {import('./tasks.js').TaskInsert} TaskInsert */
+/** @typedef {import('./tasks.js').TaskPatch} TaskPatch */
+/** @typedef {{ status: TaskStatus, progress: number, start_date: string, end_date: string }} ChildSummaryRow */
+/** @typedef {{ total: number, done: number, inProgress: number, blocked: number, overdue: number, progress: number }} TaskStats */
+/** @typedef {{ today: string, statuses: TaskStatus[], tasks: TaskNode[], stats: TaskStats,
+ * brief: Brief, dailyBrief: DailyReport }} GanttSnapshot */
+/** @typedef {{ dbPath: string, statuses: TaskStatus[], schemaVersion: number, taskCount: number,
+ * engine: string, kinds: TaskKind[], linkTypes: LinkType[] }} GanttMeta */
+
+/**
+ * SQLite-backed task store. Hierarchical numbers and rollups are derived at
+ * read time, so writes never maintain them.
+ */
+export class GanttStore {
+  /** @param {string} [file] */
+  constructor(file = resolveDatabasePath()) {
+    this.file = file
+    this.db = openDatabase(file)
+    this.migrate()
+  }
+  /** Upgrade an older database in one transaction: add columns, index, version, backfill. */
+  migrate() {
+    migrateDatabase(this.db, fn => this.transaction(fn), (tracks, nodes) => this.syncTrackerTree(tracks, nodes))
+  }
+  /** Close the database handle; safe to call more than once. */
+  close() {
+    try {
+      this.db.close()
+    } catch {
+      // already closed
+    }
+  }
+  /** @template T @param {() => T} fn @returns {T} */
+  transaction(fn) {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = fn()
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {
+        // keep the original error
+      }
+      throw error
+    }
+  }
+
+  /** @returns {TaskRow[]} */
+  listRows() {
+    const rows = /** @type {any[]} */ (this.db.prepare(TASK_SELECT).all())
+    return rows.map(row => ({ ...row, links: parseLinksJson(row.links) }))
+  }
+
+  /** @returns {number} */
+  count() {
+    const row = this.db.prepare('SELECT COUNT(*) AS count FROM tasks').get()
+    return /** @type {number} */ (row?.count ?? 0)
+  }
+
+  /** @returns {TaskNode[]} */
+  tree() {
+    return buildTree(this.listRows())
+  }
+
+  /** @returns {GanttSnapshot} */
+  snapshot() {
+    const tasks = this.tree()
+    const brief = computeBrief(tasks)
+    return { today: todayIso(), statuses: [...STATUSES], tasks, stats: summarize(tasks), brief, dailyBrief: this.dailyBrief().report }
+  }
+
+  /** @returns {GanttMeta} */
+  meta() {
+    return { dbPath: this.file === ':memory:' ? ':memory:' : path.resolve(this.file), statuses: [...STATUSES], schemaVersion: SCHEMA_VERSION, taskCount: this.count(), engine: 'node:sqlite', kinds: [...TASK_KINDS], linkTypes: [...LINK_TYPES] }
+  }
+
+  /** @param {string} planDate @returns {DailyReport | null} */
+  readDailyBrief(planDate) {
+    return readDailyBrief(this, planDate)
+  }
+
+  /** @param {string} planDate @returns {DailyReport[]} */
+  previousDailyBriefs(planDate) {
+    return previousDailyBriefs(this, planDate)
+  }
+
+  /** @param {string} planDate @param {'auto' | 'manual'} source @returns {DailyReport} */
+  buildDailyReport(planDate, source) {
+    return buildDailyReport(this, planDate, source)
+  }
+
+  /** @param {DailyReport} report */
+  persistDailyBrief(report) {
+    persistDailyBrief(this, report)
+  }
+
+  /** Read today's brief from the cache, computing and persisting it when missing.
+   * @param {string} [date] @returns {{ report: DailyReport, cached: boolean }} */
+  dailyBrief(date = todayIso()) {
+    return dailyBrief(this, date)
+  }
+  /** Force a fresh report and persist it (the manual UI recompute).
+   * @param {string} [date] @param {{ source?: 'auto' | 'manual' }} [options] @returns {DailyReport} */
+  computeDailyBrief(date = todayIso(), options = {}) {
+    return computeDailyBrief(this, date, options)
+  }
+  /** Recompute today's report every local 08:00; returns an idempotent disposer.
+   * @returns {() => void} */
+  startScheduler() {
+    return startScheduler(this)
+  }
+  /** @param {string} id @returns {TaskRow | null} */
+  getRow(id) {
+    return this.listRows().find(row => row.id === id) ?? null
+  }
+
+  /** @param {string} id @returns {TaskNode | null} */
+  getNode(id) {
+    return flattenTree(this.tree()).find(node => node.id === id) ?? null
+  }
+
+  /** @param {unknown} id @returns {TaskRow} */
+  requireRow(id) {
+    if (typeof id !== 'string' || id.length === 0) throw new GanttError('id is required')
+    const row = this.getRow(id)
+    if (row === null) throw new GanttError(`task ${id} was not found`, 404)
+    return row
+  }
+
+  /** @param {string | null} parentId @returns {number} */
+  nextSortOrder(parentId) {
+    const row = parentId === null
+      ? this.db.prepare('SELECT MAX(sort_order) AS value FROM tasks WHERE parent_id IS NULL').get()
+      : this.db.prepare('SELECT MAX(sort_order) AS value FROM tasks WHERE parent_id = ?').get(parentId)
+    const value = /** @type {number | null} */ (row?.value ?? null)
+    return (value ?? -1) + 1
+  }
+
+  /** @param {string} candidateId @param {string} ancestorId @returns {boolean} */
+  isDescendant(candidateId, ancestorId) {
+    /** @type {string | null} */
+    let current = candidateId
+    /** @type {Set<string>} */
+    const seen = new Set()
+    while (current) {
+      if (current === ancestorId) return true
+      if (seen.has(current)) return true
+      seen.add(current)
+      const row = /** @type {{ parent_id: string | null } | undefined} */ (this.db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(current))
+      current = row?.parent_id ?? null
+    }
+    return false
+  }
+
+  /** @param {string | null} parentId */
+  recomputeAncestors(parentId) {
+    const now = new Date().toISOString()
+    /** @type {string | null} */
+    let current = parentId
+    /** @type {Set<string>} */
+    const seen = new Set()
+    while (current) {
+      if (seen.has(current)) break
+      seen.add(current)
+      const row = /** @type {{ parent_id: string | null, state: string } | undefined} */ (this.db.prepare('SELECT parent_id, state FROM tasks WHERE id = ?').get(current))
+      if (!row) break
+      const children = /** @type {ChildSummaryRow[]} */ (this.db.prepare('SELECT status, progress, start_date, end_date FROM tasks WHERE parent_id = ?').all(current))
+      if (children.length > 0) {
+        const startDate = children.reduce((min, child) => (child.start_date < min ? child.start_date : min), children[0].start_date)
+        const endDate = children.reduce((max, child) => (child.end_date > max ? child.end_date : max), children[0].end_date)
+        const progress = Math.round(children.reduce((sum, child) => sum + child.progress, 0) / children.length)
+        this.db.prepare('UPDATE tasks SET start_date = ?, end_date = ?, progress = ?, status = ?, updated_at = ? WHERE id = ?')
+          .run(startDate, endDate, progress, deriveSummaryStatus(children, progress, row.state), now, current)
+      }
+      current = row.parent_id ?? null
+    }
+  }
+
+  /** @param {TaskInsert} fields @returns {string} */
+  insertTask(fields) {
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    this.db.prepare(INSERT_TASK).run(
+      id, fields.parentId, fields.title, fields.description, fields.status, fields.progress,
+      fields.startDate, fields.endDate, fields.sortOrder, fields.kind, fields.ref, fields.state,
+      fields.lane, fields.dep, fields.doneWhen, fields.landing, fields.estimate, fields.category,
+      fields.inspiration, JSON.stringify(fields.links), fields.source, now, now,
+    )
+    return id
+  }
+
+  /** @param {unknown} value @returns {TaskLink[]} */
+  normalizeLinks(value) {
+    const parsed = parseLinks(value)
+    if (parsed.error !== null) throw new GanttError(parsed.error)
+    return parsed.links
+  }
+
+  /** @param {TaskKind} kind @param {string} ref */
+  assertRefFree(kind, ref) {
+    const found = this.db.prepare('SELECT id FROM tasks WHERE kind = ? AND ref = ?').get(kind, ref)
+    if (found !== undefined) throw new GanttError(`task with kind ${kind} and ref ${ref} already exists`, 409)
+  }
+  /** @param {TaskInput} [input] @returns {TaskNode | null} */
+  create(input = {}) {
+    const parentId = normalizeParent(input.parentId)
+    if (parentId !== null) this.requireRow(parentId)
+    const title = normalizeTitle(input.title)
+    const description = normalizeDescription(input.description)
+    const status = normalizeStatus(input.status ?? 'todo')
+    const progress = input.progress === undefined ? defaultProgress(status) : normalizeProgress(input.progress)
+    const startDate = assertDate(input.startDate ?? todayIso(), 'startDate')
+    const endDate = assertDate(input.endDate ?? addDays(startDate, 3), 'endDate')
+    assertRange(startDate, endDate)
+    const kind = normalizeKind(input.kind)
+    const ref = normalizeRef(input.ref)
+    if (ref !== '') this.assertRefFree(kind, ref)
+    const links = this.normalizeLinks(input.links)
+    const id = this.transaction(() => {
+      const created = this.insertTask({ parentId, title, description, status, progress, startDate, endDate, sortOrder: this.nextSortOrder(parentId), kind, ref, state: '', ...normalizeExtras(input), links, source: 'manual' })
+      this.recomputeAncestors(parentId)
+      return created
+    })
+    return this.getNode(id)
+  }
+
+  /** @param {string} id @param {TaskPatch} [patch] @returns {TaskNode | null} */
+  update(id, patch = {}) {
+    const row = this.requireRow(id)
+    const next = { ...row }
+    if (patch.title !== undefined) next.title = normalizeTitle(patch.title)
+    if (patch.description !== undefined) next.description = normalizeDescription(patch.description)
+    if (patch.startDate !== undefined) next.startDate = assertDate(patch.startDate, 'startDate')
+    if (patch.endDate !== undefined) next.endDate = assertDate(patch.endDate, 'endDate')
+    assertRange(next.startDate, next.endDate)
+    for (const field of TEXT_FIELDS) if (patch[field] !== undefined) next[field] = textField(patch[field], field)
+    if (patch.links !== undefined) next.links = this.normalizeLinks(patch.links)
+    let parentChanged = false
+    if (Object.prototype.hasOwnProperty.call(patch, 'parentId')) {
+      const parentId = normalizeParent(patch.parentId)
+      if (parentId !== null) {
+        this.requireRow(parentId)
+        if (parentId === id) throw new GanttError('a task cannot be its own parent')
+        if (this.isDescendant(parentId, id)) throw new GanttError('a task cannot move under one of its descendants')
+      }
+      parentChanged = parentId !== row.parentId
+      next.parentId = parentId
+    }
+    let status = patch.status !== undefined ? normalizeStatus(patch.status) : row.status
+    let progress = patch.progress !== undefined ? normalizeProgress(patch.progress) : row.progress
+    if (patch.status !== undefined && patch.progress === undefined) progress = defaultProgress(status, row.progress)
+    if (patch.progress !== undefined && patch.status === undefined) status = statusFromProgress(progress, row.status)
+    next.status = status
+    next.progress = progress
+    if (parentChanged) next.sortOrder = this.nextSortOrder(next.parentId)
+    const now = new Date().toISOString()
+    this.transaction(() => {
+      this.db.prepare(UPDATE_TASK).run(
+        next.parentId, next.title, next.description, next.status, next.progress, next.startDate, next.endDate,
+        next.sortOrder, next.kind, next.ref, next.state, next.lane, next.dep, next.doneWhen, next.landing,
+        next.estimate, next.category, next.inspiration, JSON.stringify(next.links), next.source, now, id,
+      )
+      this.recomputeAncestors(row.parentId)
+      if (next.parentId !== row.parentId) this.recomputeAncestors(next.parentId)
+    })
+    return this.getNode(id)
+  }
+
+  /** @param {string} id @param {TaskStatus} status @param {number} [progress] @returns {TaskNode | null} */
+  setStatus(id, status, progress) {
+    /** @type {TaskPatch} */
+    const patch = { status }
+    if (progress !== undefined) patch.progress = progress
+    return this.update(id, patch)
+  }
+
+  /** @param {string} id @param {SplitChild[]} children @returns {{ parent: TaskNode | null, children: TaskNode[] }} */
+  split(id, children) {
+    const parent = this.requireRow(id)
+    if (!Array.isArray(children) || children.length === 0) throw new GanttError('children must be a non-empty array')
+    if (children.length > 100) throw new GanttError('a split may create at most 100 children')
+    const normalized = children.map((child, index) => {
+      if (child === null || typeof child !== 'object') throw new GanttError(`children[${index}] must be an object`)
+      const status = normalizeStatus(child.status ?? 'todo')
+      const startDate = assertDate(child.startDate ?? parent.startDate, `children[${index}].startDate`)
+      const endDate = assertDate(child.endDate ?? parent.endDate, `children[${index}].endDate`)
+      assertRange(startDate, endDate)
+      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ref: '', ...normalizeExtras(child), links: this.normalizeLinks(child.links) }
+    })
+    /** @type {string[]} */
+    const created = []
+    this.transaction(() => {
+      const base = this.nextSortOrder(id)
+      normalized.forEach((child, index) => created.push(this.insertTask({
+        parentId: id, ...child, sortOrder: base + index, kind: 'task', ref: '', state: '', source: 'manual',
+      })))
+      this.recomputeAncestors(id)
+    })
+    return { parent: this.getNode(id), children: /** @type {TaskNode[]} */ (created.map(childId => this.getNode(childId)).filter(Boolean)) }
+  }
+
+  /** @param {string} id @returns {{ id: string, parentId: string | null }} */
+  delete(id) {
+    const row = this.requireRow(id)
+    this.transaction(() => {
+      this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
+      this.recomputeAncestors(row.parentId)
+    })
+    return { id, parentId: row.parentId }
+  }
+
+  /** @returns {{ seeded: boolean, taskCount: number }} */
+  seed() {
+    if (this.count() > 0) return { seeded: false, taskCount: this.count() }
+    const today = todayIso()
+    /** @type {string[]} */
+    const ids = []
+    this.transaction(() => {
+      for (const [parent, title, description, status, progress, startOffset, endOffset, sortOrder] of SEED_TASKS) {
+        ids.push(this.insertTask({ parentId: parent === null ? null : ids[parent], title, description, status, progress, startDate: addDays(today, startOffset), endDate: addDays(today, endOffset), sortOrder, kind: 'task', ref: '', state: '', lane: '', dep: '', doneWhen: '', landing: '', estimate: '', category: '', inspiration: '', links: [], source: 'manual' }))
+      }
+    })
+    return { seeded: true, taskCount: ids.length }
+  }
+
+  /** Replace the imported tracker tree and day metadata in one transaction.
+   * @param {ReplacePlanInput} [input] @returns {ReplacePlanCounts} */
+  replacePlan(input = {}) {
+    return replacePlan(this, input)
+  }
+  /** Materialise the tracker snapshot into the unified task tree, in the caller's transaction.
+   * @param {SnapshotTrack[]} tracks @param {SnapshotNode[]} nodes @returns {BlockUpsertCounts} */
+  syncTrackerTree(tracks, nodes) {
+    const now = new Date().toISOString()
+    const existing = this.listRows()
+    const { inserts, updates, deletes } = materializeTracker({ tracks, nodes, existing, today: todayIso() })
+    /** @type {Map<string, string>} */
+    const idByRef = new Map()
+    for (const row of existing) if (row.ref !== '') idByRef.set(row.ref, row.id)
+    const insert = this.db.prepare(INSERT_TASK)
+    const update = this.db.prepare(UPDATE_MATERIALIZED)
+    const remove = this.db.prepare('DELETE FROM tasks WHERE id = ?')
+    for (const draft of inserts) {
+      const id = randomUUID()
+      insert.run(id, draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
+        draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
+        draft.kind, draft.ref, draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing,
+        draft.estimate, draft.category, draft.inspiration, JSON.stringify(draft.links), draft.source, now, now)
+      idByRef.set(draft.ref, id)
+    }
+    for (const draft of updates) {
+      update.run(draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
+        draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
+        draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing, draft.estimate, draft.category,
+        draft.inspiration, JSON.stringify(draft.links), now, draft.id)
+    }
+    for (const id of deletes) remove.run(id)
+    return { inserted: inserts.length, updated: updates.length, removed: deletes.length }
+  }
+
+  /** Upsert one day's imported blocks; content is rewritten, status/notes survive.
+   * @param {string} planDate @param {BlockDraft[]} drafts @returns {BlockUpsertCounts} */
+  upsertPlanBlocks(planDate, drafts) {
+    return upsertPlanBlocks(this, planDate, drafts)
+  }
+
+  /** Read one day's bundle, including the unified tree's tracks and nodes.
+   * @param {string} date @returns {DayPlanBundle} */
+  dayPlan(date) {
+    const planDate = assertDate(date, 'date')
+    return readDayPlan(this, planDate, dailyBrief(this, planDate).report)
+  }
+
+  /** Set a block's user status and optional notes (notes capped at 500 characters).
+   * @param {string} id @param {PlanStatus} status @param {string | null} [notes] @returns {PlanBlock} */
+  setBlockStatus(id, status, notes) {
+    return setBlockStatus(this, id, status, notes)
+  }
+
+  /** @param {string} id @returns {PlanBlock} */
+  getPlanBlock(id) {
+    return getPlanBlock(this, id)
+  }
+
+  /** Upsert the plan cell of one task on one date; user status and notes survive.
+   * @param {string} taskId @param {TaskBlockPlan} plan @returns {string} */
+  writeTaskBlock(taskId, plan) {
+    return writeTaskBlock(this, taskId, plan)
+  }
+  /** Decompose one task into child subtasks, optionally scheduling each into a plan cell.
+   * `planDate` only sets the default child start/end dates; it never creates a plan
+   * cell. A scheduled cell needs an explicit `plan` object on that child.
+   * @param {string} id
+   * @param {DecomposeChildInput[]} children
+   * @param {unknown} [planDate]
+   * @returns {{ parent: TaskNode | null, children: TaskNode[], blocks: PlanBlock[] }} */
+  decompose(id, children, planDate) {
+    const parent = this.requireRow(id)
+    const parentNode = /** @type {TaskNode} */ (this.getNode(id))
+    if (parentNode.number.split('.').length >= DECOMPOSE_MAX_DEPTH) throw new GanttError('decompose would exceed 4 levels')
+    if (!Array.isArray(children) || children.length === 0) throw new GanttError('children must be a non-empty array')
+    if (children.length > 100) throw new GanttError('a decompose may create at most 100 children')
+    const fallbackDate = planDate === undefined || planDate === null || planDate === '' ? null : assertDate(planDate, 'planDate')
+    const normalized = children.map((child, index) => {
+      if (child === null || typeof child !== 'object') throw new GanttError(`children[${index}] must be an object`)
+      const status = normalizeStatus(child.status ?? 'todo')
+      const startDate = assertDate(child.startDate ?? fallbackDate ?? parent.startDate, `children[${index}].startDate`)
+      const endDate = assertDate(child.endDate ?? (fallbackDate === null ? parent.endDate : addDays(startDate, 3)), `children[${index}].endDate`)
+      assertRange(startDate, endDate)
+      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ...normalizeExtras(child, `children[${index}].`), links: this.normalizeLinks(child.links), plan: child.plan === undefined ? null : normalizePlanDraft(child.plan, index) }
+    })
+    const result = this.transaction(() => {
+      const base = this.nextSortOrder(id)
+      /** @type {string[]} */
+      const blockIds = []
+      const childIds = normalized.map((child, index) => {
+        const childId = this.insertTask({ parentId: id, title: child.title, description: child.description, status: child.status, progress: child.progress, startDate: child.startDate, endDate: child.endDate, sortOrder: base + index, kind: 'task', ref: '', state: '', lane: child.lane, dep: child.dep, doneWhen: child.doneWhen, landing: child.landing, estimate: child.estimate, category: child.category, inspiration: child.inspiration, links: child.links, source: 'manual' })
+        if (child.plan !== null) {
+          blockIds.push(this.writeTaskBlock(childId, {
+            date: child.plan.date,
+            startTime: child.plan.startTime,
+            endTime: child.plan.endTime,
+            slot: child.plan.slot,
+            category: child.plan.category ?? child.category,
+            landing: child.plan.landing ?? child.landing,
+            estimate: child.plan.estimate ?? child.estimate,
+            inspiration: child.plan.inspiration ?? child.inspiration,
+            title: child.title,
+            detail: child.description || child.doneWhen,
+          }))
+        }
+        return childId
+      })
+      this.recomputeAncestors(id)
+      return { childIds, blockIds }
+    })
+    return {
+      parent: this.getNode(id),
+      children: /** @type {TaskNode[]} */ (result.childIds.map(childId => this.getNode(childId)).filter(Boolean)),
+      blocks: result.blockIds.map(blockId => this.getPlanBlock(blockId)),
+    }
+  }
+
+  /** Schedule one existing task into a day's plan grid, idempotently.
+   * @param {string} id
+   * @param {ScheduleInput} [input]
+   * @returns {{ task: TaskNode | null, block: PlanBlock }} */
+  scheduleTask(id, input = {}) {
+    const row = this.requireRow(id)
+    const date = assertDate(input.date, 'date')
+    const startTime = clockValue(input.startTime, 'startTime')
+    const endTime = clockValue(input.endTime, 'endTime')
+    const slot = input.slot === undefined ? slotForStart(startTime) : /** @type {PlanSlot} */ (oneOf(input.slot, 'slot', PLAN_SLOTS))
+    const blockId = this.transaction(() => this.writeTaskBlock(id, {
+      date,
+      startTime,
+      endTime,
+      slot,
+      title: row.title,
+      category: input.category === undefined ? row.category : textValue(input.category),
+      landing: input.landing === undefined ? row.landing : textValue(input.landing),
+      estimate: input.estimate === undefined ? row.estimate : textValue(input.estimate),
+      inspiration: input.inspiration === undefined ? row.inspiration : textValue(input.inspiration),
+      detail: input.detail === undefined ? row.doneWhen : textValue(input.detail),
+    }))
+    return { task: this.getNode(id), block: this.getPlanBlock(blockId) }
+  }
+
+  /** Export the unified tree plus one day plan as a stable markdown context document.
+   * @param {ContextOptions} [input]
+   * @returns {{ ok: boolean, date: string, markdown: string, chars: number, truncated: boolean,
+   * counts: { tracks: number, nodes: number, tasks: number, blocks: number } }} */
+  contextDocument(input = {}) {
+    return contextDocument(this, input)
+  }
+}

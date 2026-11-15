@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, dayToIso, isoToDay, todayIso } from '../../store.js'
+import { addDays, dayToIso, isoToDay, todayIso } from '../../src/host/store.js'
 
 const DAY = 86_400_000
 

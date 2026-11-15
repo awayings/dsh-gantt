@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GanttStore, SCHEMA_VERSION } from '../../store.js'
+import { GanttStore, SCHEMA_VERSION } from '../../src/host/store.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 import { writeV2Database } from '../helpers/v2.js'
 

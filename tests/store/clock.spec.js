@@ -1,7 +1,7 @@
 // The task-day clock: the host runs in UTC while the tracker's dates and the
 // 08:00 recompute are the user's wall clock (Asia/Shanghai by default).
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_TIME_ZONE, nextEightAm, taskTimeZone, todayIso, zonedParts } from '../../clock.js'
+import { DEFAULT_TIME_ZONE, nextEightAm, taskTimeZone, todayIso, zonedParts } from '../../src/host/clock.js'
 
 const saved = process.env.DSH_GANTT_TZ
 

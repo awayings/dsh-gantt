@@ -1,4 +1,4 @@
-import { apply } from '../../index.js'
+import { apply } from '../../src/host/index.js'
 
 /**
  * Build a fake plugin context that captures registered routes and disposers.

@@ -9,20 +9,14 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./store": "./store.js",
+    ".": "./src/host/index.js",
+    "./client": "./lib/client.js",
+    "./store": "./src/host/store.js",
     "./icon": "./icon.svg"
   },
   "files": [
-    "index.js",
-    "client.js",
-    "tracker.js",
-    "tree.js",
-    "clock.js",
-    "store.js",
-    "daily.js",
-    "chat.js",
+    "src",
+    "lib/client.js",
     "cordis.patch.yml",
     "icon.svg",
     "README.md"
@@ -33,13 +27,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project host --project client",
     "coverage": "vitest run --project host --project client --coverage",
-    "e2e": "vitest run --project e2e",
+    "e2e": "node scripts/build-client.mjs && vitest run --project e2e",
     "static": "pnpm run lint && pnpm run typecheck",
     "check": "node scripts/run-bash.mjs scripts/check.sh",
     "deploy": "node scripts/deploy.mjs",
     "release": "node scripts/release.mjs",
-    "verify": "node --check index.js && node --check store.js && node --check tracker.js && node --check tree.js && node --check clock.js && node --check daily.js && node --check chat.js && node --check client.js",
-    "prepare": "husky"
+    "verify": "node scripts/verify.mjs",
+    "prepare": "husky && node scripts/build-client.mjs",
+    "build": "node scripts/build-client.mjs"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
@@ -53,6 +48,7 @@
     "oxlint": "1.85.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "rolldown": "1.2.19",
     "typescript": "~7.0.2",
     "vitest": "^5.1.0"
   },

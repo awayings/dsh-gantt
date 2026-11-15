@@ -2,7 +2,7 @@
 // scripted chunk sequence, fail before/while streaming, or hang forever so the
 // timeout and abort paths can be tested without a provider.
 
-/** @typedef {import('../../chat.js').ChatStreamOptions} ChatStreamOptions */
+/** @typedef {import('../../src/host/chat.js').ChatStreamOptions} ChatStreamOptions */
 
 /** Build one text-delta chunk. @param {string} text */
 export function textDelta(text) {

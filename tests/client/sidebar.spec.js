@@ -19,6 +19,7 @@ import {
   unmountAll,
 } from './harness.js'
 import { emptyTreePayload, metaPayload, treePayload } from './fixtures.js'
+import { GanttPage } from '../../src/client/pages/gantt.js'
 
 afterEach(unmountAll)
 
@@ -77,13 +78,9 @@ describe('plugin registration', () => {
     expect(text(view.container, '.gantt-window-label')).toContain('Nov')
   })
 
-  it('renders the page with key fallbacks after the runtime was released', async () => {
+  it('renders the page with key fallbacks when mounted without a host context', async () => {
     installFetch({ 'api/gantt/tree': () => jsonResponse(emptyTreePayload()) })
-    const app = setupApp()
-    const page = app.page()
-    app.dispose()
-
-    const view = mount(createElement(page.component))
+    const view = mount(createElement(GanttPage))
     await flush()
 
     expect(text(view.container, '.gantt-title')).toBe('page.title')

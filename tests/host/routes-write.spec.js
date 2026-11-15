@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { GanttStore } from '../../store.js'
+import { GanttStore } from '../../src/host/store.js'
 import { ROUTES, bootPlugin, disposeAll, invoke } from '../helpers/host.js'
 
 let boot

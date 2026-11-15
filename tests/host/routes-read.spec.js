@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SCHEMA_VERSION, STATUSES, todayIso } from '../../store.js'
+import { SCHEMA_VERSION, STATUSES, todayIso } from '../../src/host/store.js'
 import { ROUTES, bootPlugin, disposeAll, invoke } from '../helpers/host.js'
 
 let boot

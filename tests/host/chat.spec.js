@@ -5,8 +5,8 @@ import {
   buildSystemPrompt,
   parseProposal,
   runChat,
-} from '../../chat.js'
-import { todayIso } from '../../tree.js'
+} from '../../src/host/chat.js'
+import { todayIso } from '../../src/host/tree.js'
 import {
   brokenLlm,
   failingLlm,

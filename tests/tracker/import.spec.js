@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { importTaskTracker, readTracker, resolveTrackerDir } from '../../tracker.js'
+import { importTaskTracker, readTracker, resolveTrackerDir } from '../../src/host/tracker.js'
 import { DAILY_MD, SCHEDULE_MD, TREE_MD, writeTrackerFixture } from './fixtures.js'
 import { expectGanttError, makeTempDir, memoryStore, removeTempDir, snapshotEnv } from '../helpers/gantt.js'
 

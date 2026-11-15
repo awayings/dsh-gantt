@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-// Deploy helper. The package is private and shipped as source, so "deploy"
-// means one pnpm `link:` dependency in a DSH profile plus the bundle selection
-// that `dsh plugin add` records. Nothing is copied and nothing is built: the
-// profile keeps resolving this checkout, so edits to `index.js` / `store.js`
-// are live after a `dsh web` restart and edits to `client.js` after a reload.
+// Deploy helper. The package is private, so "deploy" means one pnpm `link:`
+// dependency in a DSH profile plus the bundle selection that `dsh plugin add`
+// records. Nothing is copied: host modules run straight from `src/host/`, while
+// the browser half is bundled from `src/client/` into `lib/client.js` first
+// because the DSH client loader fetches that artifact. The profile keeps
+// resolving this checkout, so host edits are live after a `dsh web` restart and
+// a rebuild + page reload picks up client edits.
 //
 //   pnpm run deploy                        # link this checkout and verify it
 //   pnpm run deploy --check                # verify only, change no dependency
@@ -157,10 +159,12 @@ function verifyInstalled() {
 function report() {
   info(`profile '${profile}' links ${packageName} ${packageVersion} to ${root} and composes it`)
   info(`database: ${path.join(home, 'gantt', 'tasks.db')} (override before start with DSH_GANTT_DB)`)
-  info('reload the Web page for client.js changes; restart "dsh web" for index.js/store.js changes')
+  info('pnpm run build + reload the Web page for src/client changes; restart "dsh web" for src/host changes')
 }
 
 function deploy() {
+  info('building the browser half from src/client')
+  run(process.execPath, [path.join(root, 'scripts', 'build-client.mjs')], env)
   const document = profileManifest()
   const linked = linkedDirectory()
   if (recordedSpec(document) === `link:${root}` && linked !== undefined && sameDirectory(linked, root)) {
@@ -175,6 +179,7 @@ function deploy() {
 }
 
 function check() {
+  if (!existsSync(path.join(root, 'lib', 'client.js'))) fail(`the browser bundle lib/client.js is missing; run \`pnpm run build\` first`)
   if (profileManifest() === undefined) fail(`profile '${profile}' is not initialized at ${profileDir}; run \`pnpm run deploy\` to create and link it`)
   verifyInstalled()
   report()

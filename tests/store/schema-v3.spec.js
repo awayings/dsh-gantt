@@ -4,7 +4,7 @@
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GanttStore, SCHEMA_VERSION } from '../../store.js'
+import { GanttStore, SCHEMA_VERSION } from '../../src/host/store.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 import { V2_BLOCK_ID, V2_NODES, V2_TRACKS, writeV2Database } from '../helpers/v2.js'
 const V1_TASKS = `CREATE TABLE tasks (
@@ -49,7 +49,7 @@ function makeV2Database() {
   return writeV2Database(path.join(dir, 'tasks.db'))
 }
 
-/** @param {GanttStore} target @returns {Map<string, import('../../store.js').TaskNode>} */
+/** @param {GanttStore} target @returns {Map<string, import('../../src/host/store.js').TaskNode>} */
 function nodesByRef(target) {
   const flat = []
   const walk = (node) => {
@@ -181,10 +181,10 @@ describe('v2 database fixture', () => {
     const after = /** @type {{ ref: string }[]} */ (store.db.prepare('SELECT ref FROM tasks ORDER BY ref').all()).map(row => row.ref)
     expect(after).toEqual(before)
     expect(store.count()).toBe(6)
-    const tracks = /** @type {import('../../store.js').SnapshotTrack[]} */ (
+    const tracks = /** @type {import('../../src/host/store.js').SnapshotTrack[]} */ (
       store.db.prepare('SELECT id, name, lane, state, blocker, sort_order AS sortOrder FROM tracks ORDER BY sort_order, id').all()
     )
-    const nodes = /** @type {import('../../store.js').SnapshotNode[]} */ (
+    const nodes = /** @type {import('../../src/host/store.js').SnapshotNode[]} */ (
       store.db.prepare('SELECT id, track_id AS trackId, title, state, start_date AS startDate, end_date AS endDate, dep, done_when AS doneWhen FROM nodes ORDER BY id').all()
     )
     const counts = store.replacePlan({ tracks, nodes })

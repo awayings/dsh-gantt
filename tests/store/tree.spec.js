@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTree, deriveSummaryStatus } from '../../store.js'
+import { buildTree, deriveSummaryStatus } from '../../src/host/store.js'
 import { byNumber, childTitles, makeRow, makeRows } from '../helpers/gantt.js'
 
 describe('buildTree numbering and shape', () => {

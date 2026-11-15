@@ -22,7 +22,7 @@ import {
   unmountAll,
   unparsableResponse,
 } from './harness.js'
-import { emptyTreePayload, filterTreePayload, makeFilterTree, treePayload } from './fixtures.js'
+import { emptyTreePayload, filterTreePayload, makeFilterTree, treePayload, unifiedTreePayload } from './fixtures.js'
 
 const TREE = 'api/gantt/tree'
 const STATUS = 'api/gantt/task/status'
@@ -597,5 +597,67 @@ describe('task filter', () => {
     click(filterButton(view, 'todo'))
     expect(text(view.container, '.gantt-filter-count')).toBe('3 条路径')
     expect(text(view.container, '.gantt-corner-sub')).toBe('6 个任务')
+  })
+})
+
+describe('brief strip fold and lane colours', () => {
+  async function renderBrief(options = {}, payload = unifiedTreePayload()) {
+    const fetchState = installFetch({ [TREE]: () => jsonResponse(payload) })
+    const app = setupApp(options)
+    const view = mount(createElement(app.page().component))
+    await flush()
+    return { ...fetchState, view }
+  }
+
+  it('folds and unfolds the brief card from the header chevron', async () => {
+    const { view } = await renderBrief()
+    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('false')
+    expect(qa(view.container, '.gantt-brief-lane')).toHaveLength(2)
+    expect(q(view.container, '.gantt-brief-today')).not.toBeNull()
+    expect(q(view.container, '.gantt-brief-summary')).toBeNull()
+
+    const toggle = q(view.container, '.gantt-brief-toggle')
+    expect(toggle.getAttribute('data-action')).toBe('brief-toggle')
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle.getAttribute('aria-label')).toBe('Collapse frontier and next')
+    expect(toggle.textContent).toBe('▾')
+
+    click(toggle)
+    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('true')
+    expect(q(view.container, '.gantt-brief-lane')).toBeNull()
+    expect(q(view.container, '.gantt-brief-today')).toBeNull()
+    expect(text(view.container, '.gantt-brief-summary')).toBe('Frontier 1 · Next 1 · Today 2/4')
+    expect(q(view.container, '.gantt-brief-toggle').textContent).toBe('▸')
+    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-expanded')).toBe('false')
+    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('Expand frontier and next')
+
+    click(q(view.container, '.gantt-brief-toggle'))
+    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('false')
+    expect(qa(view.container, '.gantt-brief-lane')).toHaveLength(2)
+  })
+
+  it('tags column headers and pick cards with their lane colour', async () => {
+    const { view } = await renderBrief()
+    expect(qa(view.container, '.gantt-brief-col').map(cell => cell.getAttribute('data-kind')))
+      .toEqual(['track', 'frontier', 'next'])
+    const picks = qa(view.container, '.gantt-brief-pick')
+    expect(picks.map(pick => pick.getAttribute('data-kind'))).toEqual(['frontier', 'next'])
+    expect(qa(view.container, '.gantt-brief-tag').map(tag => tag.textContent)).toEqual(['Frontier', 'Next'])
+
+    const css = qa(view.container, 'style').map(node => node.textContent).join('\n')
+    expect(css).toContain('.gantt-brief-col[data-kind="frontier"] { color: var(--gantt-accent); }')
+    expect(css).toContain('.gantt-brief-col[data-kind="next"] { color: var(--dsw-alias-state-success-primary); }')
+    expect(css).toContain('.gantt-brief-pick[data-kind="frontier"] { border-left-color: var(--gantt-accent); }')
+    expect(css).toContain('.gantt-brief-pick[data-kind="next"] { border-left-color: var(--dsw-alias-state-success-primary); }')
+    expect(css).toContain('.gantt-brief[data-collapsed="true"]')
+    expect(css).toContain('margin: 12px 22px 0;')
+  })
+
+  it('localizes the fold toggle and the collapsed summary', async () => {
+    const { view } = await renderBrief({ locale: 'zh' })
+    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('收起前沿与该动')
+    click(q(view.container, '.gantt-brief-toggle'))
+    expect(text(view.container, '.gantt-brief-summary')).toBe('前沿 1 · 该动 1 · 今天 2/4')
+    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('展开前沿与该动')
   })
 })

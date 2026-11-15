@@ -1,7 +1,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveDatabasePath } from '../../store.js'
+import { resolveDatabasePath } from '../../src/host/store.js'
 import { clearDatabaseEnv, snapshotEnv } from '../helpers/gantt.js'
 
 let restore = () => {}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTree, summarize } from '../../store.js'
+import { buildTree, summarize } from '../../src/host/store.js'
 import { makeRows } from '../helpers/gantt.js'
 
 describe('summarize', () => {

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore } from '../../store.js'
+import { GanttStore } from '../../src/host/store.js'
 import { expectGanttError } from '../helpers/gantt.js'
 
 let store
 
-/** @param {Partial<import('../../store.js').BlockDraft>} [overrides] */
+/** @param {Partial<import('../../src/host/store.js').BlockDraft>} [overrides] */
 function draft(overrides = {}) {
   return {
     title: '盘前决策流程',

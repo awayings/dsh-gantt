@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore, addDays, todayIso } from '../../store.js'
+import { GanttStore, addDays, todayIso } from '../../src/host/store.js'
 
 let store
 
 /**
  * @param {string} title
- * @param {Partial<import('../../store.js').BlockDraft>} [overrides]
+ * @param {Partial<import('../../src/host/store.js').BlockDraft>} [overrides]
  */
 function draft(title, overrides = {}) {
   return { title, startTime: '09:00', endTime: '10:00', slot: 'morning', landing: 'x.md', estimate: '1h', ...overrides }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore, PLAN_STATUSES, SCHEMA_VERSION } from '../../store.js'
+import { GanttStore, PLAN_STATUSES, SCHEMA_VERSION } from '../../src/host/store.js'
 import { expectGanttError, makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
 let store

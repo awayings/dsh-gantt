@@ -9,18 +9,18 @@ import {
   progressForStatus,
   slotForStart,
   statusForState,
-} from '../../tree.js'
+} from '../../src/host/tree.js'
 
 const TODAY = '2026-11-15'
 
-/** @param {Partial<import('../../tree.js').ExistingTask>} [overrides] */
+/** @param {Partial<import('../../src/host/tree.js').ExistingTask>} [overrides] */
 function existing(overrides = {}) {
   return {
     id: 'existing',
-    kind: /** @type {import('../../tree.js').TaskKind} */ ('node'),
+    kind: /** @type {import('../../src/host/tree.js').TaskKind} */ ('node'),
     ref: 'node:1.1',
     state: '未开始',
-    status: /** @type {import('../../tree.js').TaskStatus} */ ('todo'),
+    status: /** @type {import('../../src/host/tree.js').TaskStatus} */ ('todo'),
     progress: 0,
     links: [],
     parentId: null,
@@ -29,12 +29,12 @@ function existing(overrides = {}) {
   }
 }
 
-/** @param {Partial<import('../../tree.js').SnapshotTrack>} [overrides] */
+/** @param {Partial<import('../../src/host/tree.js').SnapshotTrack>} [overrides] */
 function track(overrides = {}) {
   return { id: '1', name: '投资系统', lane: '赚钱', state: '进行', blocker: '卡点', ...overrides }
 }
 
-/** @param {Partial<import('../../tree.js').SnapshotNode>} [overrides] */
+/** @param {Partial<import('../../src/host/tree.js').SnapshotNode>} [overrides] */
 function node(overrides = {}) {
   return { id: '1.1', trackId: '1', title: '节点', state: '未开始', startDate: '2026-11-09', endDate: '2026-11-15', ...overrides }
 }

@@ -7,7 +7,7 @@
 // tests cannot: relative request URLs, JSON serialization, response headers,
 // status codes, and data that survives closing and reopening the database.
 import http from 'node:http'
-import { apply } from '../../index.js'
+import { apply } from '../../src/host/index.js'
 import { createContext } from '../helpers/host.js'
 
 /**
@@ -39,7 +39,7 @@ function reject(res, status, message) {
  * Translate one node request into a `Request`, dispatch it to the registered
  * handler, and copy the `Response` back out. This mirrors what the host
  * connection layer does for the plugin.
- * @param {Map<string, import('../../index.js').GanttRoute>} routes
+ * @param {Map<string, import('../../src/host/index.js').GanttRoute>} routes
  * @param {{ origin: string }} state
  */
 function createHandler(routes, state) {

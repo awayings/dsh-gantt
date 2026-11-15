@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore } from '../../store.js'
+import { GanttStore } from '../../src/host/store.js'
 
 let store
 
@@ -33,7 +33,7 @@ function seed() {
   })
 }
 
-/** @param {string} ref @returns {import('../../store.js').TaskNode} */
+/** @param {string} ref @returns {import('../../src/host/store.js').TaskNode} */
 function nodeByRef(ref) {
   const flat = []
   const walk = (node) => {

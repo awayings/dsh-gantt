@@ -1,23 +1,27 @@
 // jsdom component harness for the Gantt client plugin.
 //
-// The plugin is captured by tests/client/setup.js before this module loads, so
-// every helper below starts from a real factory() call: fresh hooks, fresh
-// closure state, and a stub ctx that mirrors the DSH client contract
-// (effect/locale/slots). Fetch is always stubbed, so no test touches the network.
+// Unit specs import the ESM plugin from src/client directly. The end-to-end
+// suite captures the built artifact through the module-loader stub and keeps it
+// on globalThis.__ganttPluginModule; when present it wins, so the same helpers
+// drive both the sources and the shipped bundle. Fetch is always stubbed here,
+// so no unit test touches the network.
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { vi } from 'vitest'
+import { plugin as sourcePlugin } from '../../src/client/index.js'
 
 const NS = 'dsh-gantt'
 
-/** Build a fresh plugin instance (factory call) with the installed React. */
+/** The plugin under test: the captured artifact when present, else the sources. */
 export function createPlugin() {
   const descriptor = globalThis.__ganttPluginModule
-  if (!descriptor) throw new Error('client.js module descriptor was not captured')
-  return descriptor.factory((id) => {
-    if (id === 'react') return React
-    throw new Error(`unexpected require: ${id}`)
-  })
+  if (descriptor) {
+    return descriptor.factory((id) => {
+      if (id === 'react') return React
+      throw new Error(`unexpected require: ${id}`)
+    })
+  }
+  return sourcePlugin
 }
 
 /** Apply the plugin to a stub host context and expose the captured registrations. */

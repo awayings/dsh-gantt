@@ -18,7 +18,8 @@
     "**/node_modules/**",
     "**/coverage/**",
     "**/.tmp/**",
-    "**/dist/**"
+    "**/dist/**",
+    "**/lib/**"
   ],
   "overrides": [
     {
@@ -61,21 +62,6 @@
           "error",
           {
             "max": 1000,
-            "skipBlankLines": false,
-            "skipComments": false
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "client.js"
-      ],
-      "rules": {
-        "max-lines": [
-          "error",
-          {
-            "max": 4800,
             "skipBlankLines": false,
             "skipComments": false
           }

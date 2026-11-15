@@ -2,7 +2,7 @@
 // optional llm / agentDefaultModel services, assembles the tree context and the
 // daily brief, and maps ChatError statuses onto the JSON error envelope.
 import { afterEach, describe, expect, it } from 'vitest'
-import { apply } from '../../index.js'
+import { apply } from '../../src/host/index.js'
 import { ROUTES, bootPlugin, createContext, disposeAll, invoke } from '../helpers/host.js'
 import { failingLlm, fakeLlm, finish, textDelta } from '../helpers/llm.js'
 

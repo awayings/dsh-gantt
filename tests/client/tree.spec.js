@@ -190,7 +190,9 @@ describe('brief strip', () => {
     expect(qa(grid, '.gantt-brief-col').map(cell => cell.textContent)).toEqual(['Track', 'Frontier', 'Next'])
     expect(rows).toHaveLength(2)
     expect(text(rows[0], '.gantt-brief-lane-name')).toBe('投资系统')
-    expect(qa(rows[0], '.gantt-brief-pick').map(pick => pick.textContent)).toEqual(['1.8.4读数收口', '1.1数据底座'])
+    expect(qa(rows[0], '.gantt-brief-pick').map(pick => pick.textContent))
+      .toEqual(['Frontier1.8.4读数收口', 'Next1.1数据底座'])
+    expect(qa(rows[0], '.gantt-brief-tag').map(tag => tag.textContent)).toEqual(['Frontier', 'Next'])
     expect(qa(rows[0], '.gantt-brief-pick')[0].getAttribute('title')).toBe('1.8.4 读数收口')
     expect(qa(rows[1], '.gantt-brief-none')).toHaveLength(2)
     expect(qa(rows[1], '.gantt-brief-pick')).toHaveLength(0)
@@ -309,7 +311,7 @@ describe('brief strip', () => {
     const lane = qa(view.container, '.gantt-brief-lane')[0]
 
     expect(q(view.container, '.gantt-brief-computed')).toBeNull()
-    expect(text(lane, '.gantt-brief-pick')).toBe('读数收口')
+    expect(text(lane, '.gantt-brief-pick')).toBe('Frontier读数收口')
     expect(q(lane, '.gantt-brief-pick').getAttribute('title')).toBe(' 读数收口')
     expect(q(view.container, '.gantt-brief-window-task').getAttribute('title')).toBe('n1 数据底座')
 

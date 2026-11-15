@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { parseSchedule, slotForTime } from '../../tracker.js'
+import { parseSchedule, slotForTime } from '../../src/host/tracker.js'
 import { SCHEDULE_MD } from './fixtures.js'
 
 /** @param {string} body */

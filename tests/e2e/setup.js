@@ -1,11 +1,12 @@
 // jsdom bootstrap for the end-to-end suite.
 //
-// Same contract as tests/client/setup.js: client.js is the browser artifact and
-// calls `window.__ModuleLoader__.load({ id, factory })` at module scope, so the
-// stub below captures the descriptor and lets specs instantiate the real plugin
-// factory with the real React. Unlike the unit suite, the end-to-end suite then
-// points `fetch` at a real HTTP server (see tests/e2e/server.js) instead of a
-// stub, so the shipped client and the shipped host talk to each other for real.
+// This suite drives the shipped browser artifact: tests/e2e/setup.js evaluates
+// the built lib/client.js as a classic script, exactly like the DSH module
+// loader does, and keeps the registered descriptor so harness.createPlugin()
+// instantiates the bundle's factory with the real React. Fetch is then pointed
+// at a real HTTP server (see tests/e2e/server.js) instead of a stub.
+import fs from 'node:fs'
+import path from 'node:path'
 import { afterEach, vi } from 'vitest'
 
 // React 18 only flushes act() work when it sees this flag.
@@ -17,7 +18,9 @@ window.__ModuleLoader__ = {
   },
 }
 
-await vi.importActual('../../client.js')
+const artifact = path.resolve(import.meta.dirname, '../../lib/client.js')
+const source = fs.readFileSync(artifact, 'utf8')
+new Function(source)()
 
 afterEach(() => {
   vi.useRealTimers()

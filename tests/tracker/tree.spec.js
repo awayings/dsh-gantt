@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTree } from '../../tracker.js'
+import { parseTree } from '../../src/host/tracker.js'
 import { TREE_MD } from './fixtures.js'
 
 const TRACK_HEADER = '| id | 支线 | 组 | 优先级 | 状态 | 卡点 |\n|---|---|---|---|---|---|'

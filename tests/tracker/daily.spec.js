@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDaily } from '../../tracker.js'
+import { parseDaily } from '../../src/host/tracker.js'
 import { DAILY_MD } from './fixtures.js'
 
 describe('parseDaily', () => {

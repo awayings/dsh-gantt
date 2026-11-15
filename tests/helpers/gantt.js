@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { expect } from 'vitest'
-import { GanttError, GanttStore } from '../../store.js'
+import { GanttError, GanttStore } from '../../src/host/store.js'
 
-/** @typedef {import('../../store.js').TaskRow} TaskRow */
+/** @typedef {import('../../src/host/store.js').TaskRow} TaskRow */
 
 /** Create a disposable in-memory store. */
 export function memoryStore() {

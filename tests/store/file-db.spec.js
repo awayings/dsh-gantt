@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { GanttStore } from '../../store.js'
+import { GanttStore } from '../../src/host/store.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
 let tempDir

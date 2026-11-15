@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { todayIso } from '../../store.js'
+import { todayIso } from '../../src/host/store.js'
 import { ROUTES, bootPlugin, disposeAll, invoke } from '../helpers/host.js'
 
 let boot

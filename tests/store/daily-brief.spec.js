@@ -8,8 +8,8 @@ import {
   parseEstimate,
   trackRole,
   windowKindOf,
-} from '../../daily.js'
-import { GanttStore, todayIso } from '../../store.js'
+} from '../../src/host/daily.js'
+import { GanttStore, todayIso } from '../../src/host/store.js'
 import { expectGanttError, insertDailyReport } from '../helpers/gantt.js'
 
 /** @param {string} id @param {string} startTime @param {string} endTime @param {string} [slot] */
@@ -320,7 +320,7 @@ describe('computeDailyBrief selection', () => {
 })
 
 describe('appendBriefSection', () => {
-  /** @param {Partial<import('../../daily.js').DailyReport>} [overrides] */
+  /** @param {Partial<import('../../src/host/daily.js').DailyReport>} [overrides] */
   function miniReport(overrides = {}) {
     return {
       date: '2026-11-15',

@@ -37,57 +37,30 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['store.js', 'index.js', 'tracker.js', 'tree.js', 'clock.js', 'daily.js', 'chat.js', 'client.js'],
+      include: ['src/host/**/*.js', 'src/client/**/*.js', 'src/shared/**/*.js'],
       reporter: ['text', 'html'],
       reportsDirectory: './coverage',
       thresholds: {
-        'store.js': {
+        'src/host/**/*.js': {
           statements: 100,
           branches: 100,
           functions: 100,
           lines: 100,
+          perFile: true,
         },
-        'index.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'tracker.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'tree.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'clock.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'daily.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'chat.js': {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
-        },
-        'client.js': {
+        'src/client/**/*.js': {
           statements: 99,
           branches: 98,
           functions: 99,
           lines: 99,
+          perFile: true,
+        },
+        'src/shared/**/*.js': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          perFile: true,
         },
       },
     },
