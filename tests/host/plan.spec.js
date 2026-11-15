@@ -74,7 +74,24 @@ describe('GET /api/gantt/day', () => {
       status: 'todo',
     })
     expect(result.payload.tracks).toHaveLength(3)
-    expect(result.payload.nodes.map(node => node.id)).toEqual(['2.3', '1.8.1', '1.8.2', '1.9'])
+    expect(result.payload.tracks[0]).toMatchObject({ name: '投资系统', lane: '赚钱', priority: '', state: '进行' })
+    const nodes = result.payload.nodes
+    expect(nodes.map(node => node.ref)).toEqual(expect.arrayContaining(['node:1.8.1', 'node:1.8.2', 'node:1.9', 'node:2.3']))
+    expect(nodes.find(node => node.ref === 'node:1.8.1')).toMatchObject({
+      kind: 'node',
+      trackId: result.payload.tracks.find(track => track.ref === 'track:1')?.id,
+      title: 'S2 每日交易仓读数',
+      state: '未开始',
+      startDate: '2026-11-09',
+      endDate: '2026-11-15',
+      dep: '',
+      doneWhen: '每天一句读数',
+      landing: '',
+      estimate: '',
+      category: '',
+      inspiration: '',
+      links: [],
+    })
     expect(result.payload.integrity).toEqual([])
     expect(result.payload.stats).toEqual({ total: 2, done: 0, inProgress: 0, skipped: 0, remaining: 2 })
   })

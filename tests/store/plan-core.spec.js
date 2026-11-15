@@ -13,8 +13,8 @@ afterEach(() => {
   store = undefined
 })
 
-describe('schema v2', () => {
-  it('creates the plan tables, index, and version next to tasks', () => {
+describe('schema v3', () => {
+  it('creates the plan tables, task indexes, and version next to tasks', () => {
     const tables = /** @type {{ name: string }[]} */ (
       store.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()
     ).map(row => row.name)
@@ -22,9 +22,9 @@ describe('schema v2', () => {
     const indexes = /** @type {{ name: string }[]} */ (
       store.db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all()
     ).map(row => row.name)
-    expect(indexes).toContain('idx_plan_blocks_date')
+    expect(indexes).toEqual(expect.arrayContaining(['idx_plan_blocks_date', 'idx_tasks_ref']))
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
-    expect(SCHEMA_VERSION).toBe(2)
+    expect(SCHEMA_VERSION).toBe(3)
     expect(PLAN_STATUSES).toEqual(['todo', 'in_progress', 'done', 'skipped'])
   })
 })
@@ -36,7 +36,7 @@ describe('replacePlan', () => {
       nodes: [{ id: '1.1', trackId: '1', title: '节点' }],
       days: [{ date: '2026-11-15' }],
     })
-    expect(store.replacePlan()).toEqual({ tracks: 0, nodes: 0, days: 0 })
+    expect(store.replacePlan()).toEqual({ tracks: 0, nodes: 0, days: 0, tasks: { inserted: 0, updated: 0, removed: 2 } })
     const bundle = store.dayPlan('2026-11-15')
     expect(bundle.tracks).toEqual([])
     expect(bundle.blocks).toEqual([])
@@ -59,12 +59,13 @@ describe('replacePlan', () => {
         { date: '2026-11-16', marketOpen: true, source: 'manual' },
       ],
     })
-    expect(counts).toEqual({ tracks: 2, nodes: 2, days: 2 })
+    expect(counts).toEqual({ tracks: 2, nodes: 2, days: 2, tasks: { inserted: 4, updated: 0, removed: 0 } })
     const bundle = store.dayPlan('2026-11-15')
-    expect(bundle.tracks).toEqual([
-      { id: '1', name: '投资系统', lane: '赚钱', priority: '高', state: '进行', blocker: '卡住', sortOrder: 0 },
-      { id: '2', name: '打工', lane: '', priority: '', state: '', blocker: '', sortOrder: 1 },
+    expect(bundle.tracks.map(({ id: _id, ref: _ref, ...track }) => track)).toEqual([
+      { name: '投资系统', lane: '赚钱', priority: '', state: '进行', blocker: '卡住', sortOrder: 0 },
+      { name: '打工', lane: '', priority: '', state: '', blocker: '', sortOrder: 1 },
     ])
+    expect(bundle.tracks[0].id).toMatch(/^[0-9a-f-]{36}$/)
     expect(bundle.day).toEqual({
       date: '2026-11-15',
       weekday: '周日',
@@ -83,13 +84,13 @@ describe('replacePlan', () => {
       coreGoal: '',
       source: 'manual',
     })
-    expect(store.dayPlan('2026-11-16').nodes.map(node => node.id)).toEqual([])
+    expect(store.dayPlan('2026-11-16').nodes.filter(node => node.ref === 'node:1.1')).toEqual([])
   })
 
   it('replaces the previous tree instead of appending to it', () => {
     store.replacePlan({ tracks: [{ id: '1', name: '旧支线' }], days: [{ date: '2026-11-15' }] })
     store.replacePlan({ tracks: [{ id: '2', name: '新支线' }] })
-    expect(store.dayPlan('2026-11-15').tracks.map(track => track.id)).toEqual(['2'])
+    expect(store.dayPlan('2026-11-15').tracks.map(track => track.name)).toEqual(['新支线'])
   })
 
   it('degrades non-string optional fields and accepts partial parsed rows', () => {

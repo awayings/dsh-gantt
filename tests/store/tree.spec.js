@@ -137,6 +137,48 @@ describe('buildTree rollups', () => {
   })
 })
 
+describe('buildTree status rollup with a tracker state', () => {
+  it('keeps a running parent running while its children have not started', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', state: '进行', status: 'todo', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'One', state: '未开始', status: 'todo', sortOrder: 0 },
+      { id: 'c2', parentId: 'p', title: 'Two', state: '未开始', status: 'todo', sortOrder: 1 },
+    )))
+    expect(nodes.get('1').status).toBe('in_progress')
+  })
+
+  it('still reports done when every child is done, whatever the parent state', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', state: '进行', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'One', state: '已过', status: 'done', progress: 100, sortOrder: 0 },
+    )))
+    expect(nodes.get('1').status).toBe('done')
+  })
+
+  it('prefers a blocked child over the parent state but not over done children', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', state: '未开始', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'Blocked', state: '卡住', status: 'blocked', sortOrder: 0 },
+      { id: 'c2', parentId: 'p', title: 'Done', state: '已过', status: 'done', progress: 100, sortOrder: 1 },
+    )))
+    expect(nodes.get('1').status).toBe('blocked')
+  })
+
+  it('reports in_progress for a done child and todo when the parent has not started', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', state: '未开始', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'Done', state: '已过', status: 'done', progress: 100, sortOrder: 0 },
+      { id: 'c2', parentId: 'p', title: 'Busy', state: '进行', status: 'in_progress', sortOrder: 1 },
+    )))
+    expect(nodes.get('1').status).toBe('in_progress')
+    const untouched = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', state: '未开始', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'Todo', state: '未开始', status: 'todo', progress: 10, sortOrder: 0 },
+    )))
+    expect(untouched.get('1').status).toBe('todo')
+  })
+})
+
 describe('deriveSummaryStatus', () => {
   it('summarizes an only-childless list by progress', () => {
     expect(deriveSummaryStatus([], 0)).toBe('todo')
@@ -149,5 +191,16 @@ describe('deriveSummaryStatus', () => {
     expect(deriveSummaryStatus([{ status: 'done' }, { status: 'in_progress' }], 0)).toBe('in_progress')
     expect(deriveSummaryStatus([{ status: 'done' }, { status: 'todo' }], 25)).toBe('in_progress')
     expect(deriveSummaryStatus([{ status: 'todo' }, { status: 'todo' }], 0)).toBe('todo')
+  })
+
+  it('follows the tracker renderer order for parents that carry a state', () => {
+    expect(deriveSummaryStatus([{ status: 'todo' }, { status: 'todo' }], 0, '进行')).toBe('in_progress')
+    expect(deriveSummaryStatus([{ status: 'done' }, { status: 'done' }], 100, '进行')).toBe('done')
+    expect(deriveSummaryStatus([{ status: 'blocked' }, { status: 'todo' }], 0, '进行')).toBe('in_progress')
+    expect(deriveSummaryStatus([{ status: 'blocked' }, { status: 'todo' }], 0, '未开始')).toBe('blocked')
+    expect(deriveSummaryStatus([{ status: 'done' }, { status: 'todo' }], 50, '未开始')).toBe('in_progress')
+    expect(deriveSummaryStatus([{ status: 'in_progress' }, { status: 'todo' }], 50, '未开始')).toBe('in_progress')
+    expect(deriveSummaryStatus([{ status: 'todo' }, { status: 'todo' }], 30, '未开始')).toBe('todo')
+    expect(deriveSummaryStatus([{ status: 'todo' }], 0, '卡住')).toBe('todo')
   })
 })

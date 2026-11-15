@@ -37,7 +37,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['store.js', 'index.js', 'tracker.js', 'client.js'],
+      include: ['store.js', 'index.js', 'tracker.js', 'tree.js', 'client.js'],
       reporter: ['text', 'html'],
       reportsDirectory: './coverage',
       thresholds: {
@@ -54,6 +54,12 @@ export default defineConfig({
           lines: 100,
         },
         'tracker.js': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        'tree.js': {
           statements: 100,
           branches: 100,
           functions: 100,

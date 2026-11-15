@@ -86,6 +86,8 @@ describe('meta and snapshot', () => {
       schemaVersion: SCHEMA_VERSION,
       taskCount: 0,
       engine: 'node:sqlite',
+      kinds: ['track', 'node', 'task'],
+      linkTypes: ['memory', 'file', 'url', 'task', 'note'],
     })
   })
 
@@ -114,6 +116,7 @@ describe('meta and snapshot', () => {
         overdue: 0,
         progress: 0,
       },
+      brief: { pending: 0, frontier: [], next: [], lanes: [] },
     })
   })
 
@@ -126,6 +129,8 @@ describe('meta and snapshot', () => {
     expect(snapshot.tasks[0].children[0].id).toBe(child.id)
     expect(snapshot.stats.total).toBe(2)
     expect(snapshot.stats.done).toBe(2)
+    expect(snapshot.brief.pending).toBe(0)
+    expect(snapshot.brief.lanes).toEqual([])
   })
 })
 
@@ -146,6 +151,18 @@ describe('row access', () => {
       sortOrder: 0,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      kind: 'task',
+      ref: '',
+      state: '',
+      lane: '',
+      dep: '',
+      doneWhen: '',
+      landing: '',
+      estimate: '',
+      category: '',
+      inspiration: '',
+      links: [],
+      source: 'manual',
     })
     expect(store.getRow('child').parentId).toBe('root')
     expect(store.getRow('missing')).toBeNull()

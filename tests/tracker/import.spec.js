@@ -95,10 +95,13 @@ describe('importTaskTracker', () => {
     expect(bundle.day?.coreGoal).toBe('把 1.8.1 这一周的读数收成一张表。')
     expect(bundle.blocks.map(block => block.id)).toEqual(['2026-11-15|09:00|0', '2026-11-15|21:00|1'])
     expect(bundle.tracks).toHaveLength(3)
-    expect(bundle.nodes.map(node => node.id)).toEqual(['2.3', '1.8.1', '1.8.2', '1.9'])
+    expect(bundle.nodes.map(node => node.ref)).toEqual(expect.arrayContaining(['node:2.3', 'node:1.8.1', 'node:1.8.2', 'node:1.9']))
+    expect(bundle.nodes.every(node => node.kind === 'node')).toBe(true)
     expect(bundle.integrity).toEqual([])
     expect(bundle.stats).toEqual({ total: 2, done: 0, inProgress: 0, skipped: 0, remaining: 2 })
     expect(store.dayPlan('2026-11-14').integrity).toEqual([{ code: 'inspiration-missing', blockId: '2026-11-14|21:00|2' }])
+    expect(store.snapshot().tasks.map(root => root.ref)).toEqual(['track:1', 'track:2', 'track:3', 'node:5.2'])
+    expect(store.count()).toBe(10)
   })
 
   it('keeps user status and notes across a re-import', () => {

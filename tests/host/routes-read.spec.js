@@ -16,9 +16,9 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the eleven documented endpoints with their methods', () => {
+  it('registers the fourteen documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(11)
+    expect(routes.size).toBe(14)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
@@ -27,8 +27,9 @@ describe('route registration', () => {
     expect(routes.get(ROUTES.tree).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.meta).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.day).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.context).methods).toEqual(['GET'])
     for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed,
-      ROUTES.planStatus, ROUTES.planImport]) {
+      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule]) {
       expect(routes.get(writePath).methods).toEqual(['POST'])
     }
   })
@@ -61,6 +62,7 @@ describe('GET /api/gantt/tree', () => {
         overdue: 0,
         progress: 0,
       },
+      brief: { pending: 0, frontier: [], next: [], lanes: [] },
     })
   })
 
@@ -83,6 +85,9 @@ describe('GET /api/gantt/tree', () => {
     expect(payload.tasks[0].children[0].number).toBe('1.1')
     expect(payload.stats.total).toBe(2)
     expect(payload.today).toBe(todayIso())
+    expect(payload.tasks[0].kind).toBe('task')
+    expect(payload.tasks[0].links).toEqual([])
+    expect(payload.brief.pending).toBe(0)
   })
 })
 
@@ -99,10 +104,12 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.schemaVersion).toBe(SCHEMA_VERSION)
     expect(payload.taskCount).toBe(0)
     expect(payload.engine).toBe('node:sqlite')
-    expect(payload.endpoints).toHaveLength(11)
+    expect(payload.kinds).toEqual(['track', 'node', 'task'])
+    expect(payload.linkTypes).toEqual(['memory', 'file', 'url', 'task', 'note'])
+    expect(payload.endpoints).toHaveLength(14)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST',
+      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

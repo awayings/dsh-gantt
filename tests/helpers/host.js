@@ -78,4 +78,7 @@ export const ROUTES = {
   day: '/api/gantt/day',
   planStatus: '/api/gantt/plan/status',
   planImport: '/api/gantt/plan/import',
+  decompose: '/api/gantt/task/decompose',
+  schedule: '/api/gantt/task/schedule',
+  context: '/api/gantt/context',
 }

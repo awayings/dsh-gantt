@@ -23,6 +23,7 @@ import {
   dayPayload,
   emptyDayPayload,
   makePlanBlocks,
+  makeTaskBlock,
   planDay,
   unplannedDayPayload,
 } from './fixtures.js'
@@ -71,6 +72,7 @@ const TODAY_KEYS = [
   'today.weekdayLabel',
   'today.remaining',
   'today.doneCount',
+  'today.fromTree',
 ]
 
 function dayCalls(calls) {
@@ -208,10 +210,13 @@ describe('day rendering', () => {
     expect(text(container, '.today-nodes .today-section-title')).toBe("This week's nodes")
     expect(qa(container, '.today-node')).toHaveLength(3)
     const nodes = qa(container, '.today-node')
+    expect(nodes[0].getAttribute('data-kind')).toBe('node')
     expect(text(nodes[0], '.today-node-id')).toBe('1.8.1')
+    expect(q(nodes[0], '.today-node-id').getAttribute('title')).toBe('node:1.8.1')
     expect(text(nodes[0], '.today-node-range')).toBe('2026-11-10 – 2026-11-18')
-    expect(qa(nodes[0], '.today-chip')).toHaveLength(2)
+    expect(qa(nodes[0], '.today-chip')).toHaveLength(5)
     expect(qa(nodes[1], '.today-chip')).toHaveLength(0)
+    expect(q(nodes[1], '.today-node-id').getAttribute('title')).toBe('node:2.3')
     expect(q(nodes[1], '.today-node-range')).toBeNull()
     expect(text(nodes[2], '.today-node-range')).toBe('2026-11-14')
   })
@@ -269,6 +274,47 @@ describe('day rendering', () => {
     expect(qa(view.container, '.today-block')).toHaveLength(0)
     expect(qa(view.container, '.today-slot')).toHaveLength(0)
     expect(q(view.container, '.gantt-progress > span').style.width).toBe('0%')
+  })
+})
+
+describe('unified tree nodes', () => {
+  it('renders node metadata and the task-source badge on scheduled blocks', async () => {
+    const { view } = await renderToday({
+      [DAY]: () => jsonResponse(dayPayload({ blocks: [...makePlanBlocks(), makeTaskBlock()] })),
+    })
+
+    const block = q(view.container, '.today-block[data-block-id="task|t-1|2026-11-15"]')
+    expect(block.getAttribute('data-source')).toBe('task')
+    expect(text(block, '.today-source-badge')).toBe('From task tree')
+    expect(q(view.container, '.today-block[data-block-id="b1"] .today-source-badge')).toBeNull()
+
+    const node = q(view.container, '.today-node[data-kind="node"]')
+    expect(q(node, '.today-node-id').getAttribute('title')).toBe('node:1.8.1')
+    expect(qa(node, '.today-chip').map(chip => chip.textContent)).toContain('⤷ client.js')
+    expect(qa(node, '.today-chip').map(chip => chip.textContent)).toContain('系统记忆')
+  })
+
+  it('falls back to the task id for nodes without a ref and to the link ref without a label', async () => {
+    const nodes = [{
+      id: 'task-uuid-9',
+      kind: 'task',
+      trackId: 't1',
+      lane: '',
+      title: '拆解任务',
+      state: '',
+      startDate: '2026-11-15',
+      endDate: '2026-11-15',
+      dep: '',
+      doneWhen: '',
+      links: [{ type: 'file', ref: 'notes.md' }],
+    }]
+    const { view } = await renderToday({ [DAY]: () => jsonResponse(dayPayload({ nodes })) })
+    const node = q(view.container, '.today-node')
+
+    expect(node.getAttribute('data-kind')).toBe('task')
+    expect(text(node, '.today-node-id')).toBe('task-uuid-9')
+    expect(q(node, '.today-node-id').getAttribute('title')).toBe('task-uuid-9')
+    expect(qa(node, '.today-chip').map(chip => chip.textContent)).toContain('notes.md')
   })
 })
 
@@ -513,7 +559,9 @@ describe('empty and error states', () => {
 
 describe('zh locale', () => {
   it('renders the Chinese dictionary for every Today surface', async () => {
-    const { view } = await renderToday({}, { locale: 'zh' })
+    const { view } = await renderToday({
+      [DAY]: () => jsonResponse(dayPayload({ blocks: [...makePlanBlocks(), makeTaskBlock()] })),
+    }, { locale: 'zh' })
 
     expect(text(view.container, '.gantt-title')).toBe('今日安排')
     expect(text(view.container, '.today-market')).toBe('休市')
@@ -523,6 +571,7 @@ describe('zh locale', () => {
       .toEqual(['盘前', '工作时段', '晚间多元格', '未定时'])
     expect(text(view.container, '.today-block[data-block-id="b1"] .gantt-status')).toBe('待开始')
     expect(text(view.container, '.today-nodes .today-section-title')).toBe('本周节点')
+    expect(text(view.container, '.today-source-badge')).toBe('来自树节点')
 
     click(buttonByText(view.container, '导入计划'))
     await flush()

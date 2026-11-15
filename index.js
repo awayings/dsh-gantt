@@ -49,12 +49,12 @@ const ENDPOINTS = [
   {
     method: 'POST',
     path: '/api/gantt/tasks',
-    description: 'Create a task. Body: { title, parentId?, startDate?, endDate?, status?, progress?, description? }.',
+    description: 'Create a task. Body: { title, parentId?, kind?, ref?, startDate?, endDate?, status?, progress?, description?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }.',
   },
   {
     method: 'POST',
     path: '/api/gantt/task/update',
-    description: 'Update task fields. Body: { id, title?, description?, parentId?, startDate?, endDate?, status?, progress? }.',
+    description: 'Update task fields. Body: { id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }.',
   },
   {
     method: 'POST',
@@ -64,7 +64,7 @@ const ENDPOINTS = [
   {
     method: 'POST',
     path: '/api/gantt/task/split',
-    description: 'Split a task into child subtasks. Body: { id, children: [{ title, startDate?, endDate?, status?, progress? }] }.',
+    description: 'Split a task into child subtasks. Body: { id, children: [{ title, startDate?, endDate?, ..., doneWhen?, landing?, links? }] }.',
   },
   {
     method: 'POST',
@@ -90,6 +90,21 @@ const ENDPOINTS = [
     method: 'POST',
     path: '/api/gantt/plan/import',
     description: 'Import the tracker markdown. Body: { dir?, year? }.',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/task/decompose',
+    description: 'Decompose a task into child subtasks, optionally scheduling each. Body: { id, planDate?, children: [{ title, ..., plan? }] }.',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/task/schedule',
+    description: 'Schedule a task into one day plan cell, idempotently. Body: { id, date, startTime?, endTime?, slot?, category?, landing?, estimate?, inspiration?, detail? }.',
+  },
+  {
+    method: 'GET',
+    path: '/api/gantt/context',
+    description: 'Export the unified tree and one day plan as markdown. Query: date?, root?, limit?.',
   },
 ]
 
@@ -244,5 +259,37 @@ export function apply(ctx) {
     }
     const imported = importTaskTracker(store, { dir, year: /** @type {number | undefined} */ (year) })
     return json({ ok: true, dir, imported })
+  })
+
+  route('POST', '/api/gantt/task/decompose', async (request) => {
+    const body = await readBody(request)
+    if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
+    const result = store.decompose(
+      body.id,
+      /** @type {import('./store.js').DecomposeChildInput[]} */ (body.children),
+      body.planDate,
+    )
+    return json({ ok: true, ...result })
+  })
+
+  route('POST', '/api/gantt/task/schedule', async (request) => {
+    const body = await readBody(request)
+    if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
+    const { id, ...input } = body
+    const result = store.scheduleTask(id, /** @type {import('./store.js').ScheduleInput} */ (input))
+    return json({ ok: true, ...result })
+  })
+
+  route('GET', '/api/gantt/context', async (request) => {
+    const params = new URL(request.url, 'http://localhost').searchParams
+    const date = params.get('date')
+    const root = params.get('root')
+    const limit = params.get('limit')
+    const result = store.contextDocument({
+      date: date === null || date.trim() === '' ? undefined : date.trim(),
+      root: root === null || root.trim() === '' ? undefined : root.trim(),
+      limit: limit === null || limit.trim() === '' ? undefined : Number(limit),
+    })
+    return json(result)
   })
 }

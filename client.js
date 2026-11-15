@@ -148,6 +148,52 @@ window.__ModuleLoader__.load({
       'today.weekdayLabel': 'Weekday',
       'today.remaining': 'Remaining',
       'today.doneCount': 'Done',
+      'today.fromTree': 'From task tree',
+      'level.label': 'Tree depth',
+      'level.all': 'All levels',
+      'level.two': 'Two levels',
+      'level.one': 'One level',
+      'brief.title': 'Frontier / next',
+      'brief.pending': 'pending leaves',
+      'brief.frontier': 'Frontier',
+      'brief.next': 'Next',
+      'tree.decompose': 'Decompose into subtasks',
+      'tree.schedule': 'Schedule into a day plan',
+      'field.state': 'Raw state',
+      'field.lane': 'Lane',
+      'field.doneWhen': 'Done when',
+      'field.doneWhenPlaceholder': 'What evidence proves this is done?',
+      'field.landing': 'Landing',
+      'field.estimate': 'Estimate',
+      'field.category': 'Category',
+      'field.inspiration': 'Inspiration',
+      'field.links': 'Links',
+      'field.planDate': 'Plan date',
+      'field.planTime': 'Plan time',
+      'field.startTime': 'Start time',
+      'field.endTime': 'End time',
+      'dialog.decomposeTitle': 'Decompose node',
+      'dialog.decompose': 'Decompose',
+      'dialog.decomposeParent': 'Parent',
+      'dialog.decomposeHint': 'A/B rule: decomposition itself takes a slot — class A children go straight into a work block; class B children first get a definition slot.',
+      'dialog.scheduleTitle': 'Schedule into day plan',
+      'dialog.schedule': 'Schedule',
+      'dialog.scheduleHint': 'The block lands on the chosen day; fields start from the node values and stay editable.',
+      'dialog.contextTitle': 'Model context',
+      'actions.context': 'Export context',
+      'context.intro': 'Read-only Markdown export of the unified task tree and today plan, ready to paste into a model context.',
+      'context.loading': 'Rendering context…',
+      'context.chars': '{n} characters',
+      'context.truncated': 'truncated to the size limit',
+      'context.copy': 'Copy',
+      'context.copied': 'Copied to the clipboard.',
+      'context.copyFallback': 'Clipboard unavailable: the text is selected. Press Ctrl/Cmd+C to copy.',
+      'validation.decomposeChild': 'Each child needs a title and a done-when standard.',
+      'validation.planDate': 'Pick a day to schedule this into.',
+      'validation.times': 'The end time cannot be before the start time.',
+      'notice.decomposed': 'Decomposed {n} subtasks, {m} scheduled into {date}',
+      'notice.decomposedNoPlan': 'Decomposed {n} subtasks (none scheduled yet)',
+      'notice.scheduled': 'Scheduled into {date}',
     }
 
     const DICT_ZH = {
@@ -268,6 +314,52 @@ window.__ModuleLoader__.load({
       'today.weekdayLabel': '星期',
       'today.remaining': '剩余',
       'today.doneCount': '已完成',
+      'today.fromTree': '来自树节点',
+      'level.label': '显示层级',
+      'level.all': '全部',
+      'level.two': '两层',
+      'level.one': '一层',
+      'brief.title': '前沿 / 该动',
+      'brief.pending': '个待办叶子',
+      'brief.frontier': '前沿',
+      'brief.next': '该动',
+      'tree.decompose': '拆解为子任务',
+      'tree.schedule': '排入某天计划',
+      'field.state': '原始状态',
+      'field.lane': '泳道',
+      'field.doneWhen': '完成标准',
+      'field.doneWhenPlaceholder': '用什么证据证明已经完成？',
+      'field.landing': '落点',
+      'field.estimate': '预估',
+      'field.category': '类别',
+      'field.inspiration': '灵感',
+      'field.links': '链接',
+      'field.planDate': '排到哪天',
+      'field.planTime': '排入时间',
+      'field.startTime': '开始时间',
+      'field.endTime': '结束时间',
+      'dialog.decomposeTitle': '拆解节点',
+      'dialog.decompose': '拆解',
+      'dialog.decomposeParent': '父节点',
+      'dialog.decomposeHint': 'A/B 类规则：拆解本身也占一个时间格——A 类子任务直接进执行格，B 类子任务先排一个「定义/拆解」格。',
+      'dialog.scheduleTitle': '排入某天计划',
+      'dialog.schedule': '排入计划',
+      'dialog.scheduleHint': '时间格会落在所选日期；字段默认继承节点值，仍可修改。',
+      'dialog.contextTitle': '模型上下文',
+      'actions.context': '导出上下文',
+      'context.intro': '统一任务树与今日计划的只读 Markdown，可直接粘贴进模型上下文。',
+      'context.loading': '正在生成上下文…',
+      'context.chars': '{n} 字符',
+      'context.truncated': '已按上限裁剪',
+      'context.copy': '复制',
+      'context.copied': '已复制到剪贴板。',
+      'context.copyFallback': '剪贴板不可用：文本已选中，请按 Ctrl/Cmd+C 复制。',
+      'validation.decomposeChild': '每个子任务都需要标题和完成标准（done when）。',
+      'validation.planDate': '请选择要排入的日期。',
+      'validation.times': '结束时间不能早于开始时间。',
+      'notice.decomposed': '已拆解 {n} 项，{m} 项已排入 {date}',
+      'notice.decomposedNoPlan': '已拆解 {n} 项（暂未排期）',
+      'notice.scheduled': '已排入 {date}',
     }
 
     const DICTS = { en: DICT_EN, zh: DICT_ZH }
@@ -296,6 +388,18 @@ window.__ModuleLoader__.load({
       '/api/gantt/task/split': {
         en: 'Split a task into child subtasks. Body: { id, children: [{ title, startDate?, endDate?, status?, progress? }] }.',
         zh: '把任务拆成子任务。Body：{ id, children: [{ title, startDate?, endDate?, status?, progress? }] }。',
+      },
+      '/api/gantt/task/decompose': {
+        en: 'Decompose a tree node into subtasks, optionally scheduling each one. Body: { id, planDate?, children: [{ title, doneWhen, ..., plan? }] }.',
+        zh: '把树节点拆成子任务，可选同时排期。Body：{ id, planDate?, children: [{ title, doneWhen, ..., plan? }] }。',
+      },
+      '/api/gantt/task/schedule': {
+        en: 'Schedule one task into a day plan. Body: { id, date, startTime?, endTime?, slot?, landing?, estimate?, category?, inspiration?, detail? }.',
+        zh: '把一个任务排进某天计划。Body：{ id, date, startTime?, endTime?, slot?, landing?, estimate?, category?, inspiration?, detail? }。',
+      },
+      '/api/gantt/context': {
+        en: 'Export the unified task tree and today plan as read-only Markdown for model context.',
+        zh: '把统一任务树与今日计划导出为只读 Markdown，供模型上下文使用。',
       },
       '/api/gantt/task/delete': {
         en: 'Delete a task and all of its descendants. Body: { id }.',
@@ -359,9 +463,9 @@ window.__ModuleLoader__.load({
       return String(locale || 'en').toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
     }
 
-    function formatDate(iso, locale, withYear) {
+    function formatDate(iso, locale) {
       return new Intl.DateTimeFormat(localeTag(locale), {
-        year: withYear ? 'numeric' : undefined,
+        year: 'numeric',
         month: 'short',
         day: 'numeric',
         timeZone: 'UTC',
@@ -508,7 +612,7 @@ window.__ModuleLoader__.load({
 
     function windowTitle(timeline, locale) {
       if (timeline.scale === 'week') {
-        return `${formatDate(timeline.start, locale, true)} – ${formatDate(addDays(timeline.endExclusive, -1), locale, true)}`
+        return `${formatDate(timeline.start, locale)} – ${formatDate(addDays(timeline.endExclusive, -1), locale)}`
       }
       return `${formatMonthYear(timeline.start, locale)} – ${formatMonthYear(addDays(timeline.endExclusive, -1), locale)}`
     }
@@ -660,7 +764,7 @@ window.__ModuleLoader__.load({
       const output = []
       const walk = (list, depth) => {
         for (const node of list) {
-          output.push({ id: node.id, label: `${node.number} ${node.title}`, depth })
+          output.push({ id: node.id, label: `${rowNumber(node)} ${node.title}`, depth })
           walk(node.children, depth + 1)
         }
       }
@@ -676,6 +780,42 @@ window.__ModuleLoader__.load({
       }
       walk(task)
       return ids
+    }
+
+    /** Hermes dotted id of a `track:1` / `node:1.8.1` ref. */
+    function refIdOf(ref) {
+      return String(ref || '').replace(/^(?:node|track):/, '')
+    }
+
+    function rowNumber(task) {
+      return task.ref ? refIdOf(task.ref) : task.number
+    }
+
+    /** Ids of the nodes that must be collapsed to keep only `level` tree depths. */
+    function collapseForLevel(nodes, level) {
+      const ids = new Set()
+      const walk = (list, depth) => {
+        for (const node of list) {
+          if (node.children.length > 0 && depth >= level - 1) ids.add(node.id)
+          walk(node.children, depth + 1)
+        }
+      }
+      walk(nodes, 0)
+      return ids
+    }
+
+    /** Root-to-node path, or null when the id is not in the current tree. */
+    function taskPath(nodes, id) {
+      const walk = (list, trail) => {
+        for (const node of list) {
+          const nextTrail = [...trail, node]
+          if (node.id === id) return nextTrail
+          const found = walk(node.children, nextTrail)
+          if (found !== null) return found
+        }
+        return null
+      }
+      return walk(nodes, [])
     }
 
     function barRange(task, timeline) {
@@ -758,6 +898,64 @@ window.__ModuleLoader__.load({
       }, h('span', { className: 'gantt-status-dot' }), h('span', { className: 'gantt-status-label' }, label))
     }
 
+    function MetaChips({ task, t }) {
+      const chips = []
+      const push = (key, label, title) => {
+        chips.push(h('span', { key, className: 'gantt-row-chip', title }, label))
+      }
+      if (task.kind === 'track') {
+        if (task.lane) push('lane', task.lane, `${t('field.lane')}: ${task.lane}`)
+        if (task.state) push('state', task.state, `${t('field.state')}: ${task.state}`)
+      } else {
+        if (task.state) push('state', task.state, `${t('field.state')}: ${task.state}`)
+        if (task.doneWhen) push('doneWhen', task.doneWhen, `${t('field.doneWhen')}: ${task.doneWhen}`)
+        if (task.landing) push('landing', `⤷ ${task.landing}`, `${t('field.landing')}: ${task.landing}`)
+        if (task.estimate) push('estimate', task.estimate, `${t('field.estimate')}: ${task.estimate}`)
+        if (task.category) push('category', task.category, `${t('field.category')}: ${task.category}`)
+        if (task.inspiration) push('inspiration', task.inspiration, `${t('field.inspiration')}: ${task.inspiration}`)
+        for (const link of Array.isArray(task.links) ? task.links : []) {
+          push(`link:${link.ref}`, link.label || link.ref, `${t('field.links')}: ${link.type}:${link.ref}`)
+        }
+      }
+      if (chips.length === 0) return null
+      return h('div', { className: 'gantt-task-meta' }, chips)
+    }
+
+    function BriefStrip({ brief, t, onReveal }) {
+      const lanes = brief && Array.isArray(brief.lanes)
+        ? brief.lanes.filter(lane => lane && (lane.frontier || lane.next))
+        : []
+      if (lanes.length === 0) return null
+      const pick = (entry, label, kind) => h('button', {
+        key: kind,
+        type: 'button',
+        className: 'gantt-brief-pick',
+        'data-kind': kind,
+        title: `${entry.number || refIdOf(entry.ref)} ${entry.title}`,
+        onClick: () => onReveal(entry.id),
+      },
+      h('span', { className: 'gantt-brief-tag' }, label),
+      h('span', { className: 'gantt-brief-id' }, entry.number || refIdOf(entry.ref)),
+      h('span', { className: 'gantt-brief-name' }, entry.title),
+      )
+      return h('section', { className: 'gantt-brief' },
+        h('div', { className: 'gantt-brief-head' },
+          h('span', { className: 'gantt-brief-title' }, t('brief.title')),
+          typeof brief.pending === 'number'
+            ? h('span', { className: 'gantt-brief-pending' }, `${brief.pending} ${t('brief.pending')}`)
+            : null,
+        ),
+        h('div', { className: 'gantt-brief-lanes' },
+          lanes.map(lane => h('div', { key: lane.id || lane.ref || lane.name, className: 'gantt-brief-lane' },
+            h('span', { className: 'gantt-brief-lane-name' }, lane.name),
+            lane.lane ? h('span', { className: 'gantt-row-chip' }, lane.lane) : null,
+            lane.frontier ? pick(lane.frontier, t('brief.frontier'), 'frontier') : null,
+            lane.next ? pick(lane.next, t('brief.next'), 'next') : null,
+          )),
+        ),
+      )
+    }
+
     function TaskBar({ task, timeline, onSelect }) {
       const range = barRange(task, timeline)
       if (range === null) return null
@@ -773,7 +971,7 @@ window.__ModuleLoader__.load({
           width: `${range.width}px`,
           '--st': STATUS_COLOR[task.status] || STATUS_COLOR.todo,
         },
-        title: `${task.number} ${task.title}\n${task.startDate} → ${task.endDate} · ${task.progress}%`,
+        title: `${rowNumber(task)} ${task.title}\n${task.startDate} → ${task.endDate} · ${task.progress}%`,
         onClick: (event) => {
           event.stopPropagation()
           onSelect(task)
@@ -786,12 +984,29 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function GanttRow({ task, depth, timeline, selected, collapsed, t, onSelect, onToggle, onAddChild, onCycleStatus }) {
+    function GanttRow({
+      task,
+      depth,
+      timeline,
+      selected,
+      collapsed,
+      t,
+      onSelect,
+      onToggle,
+      onAddChild,
+      onCycleStatus,
+      onDecompose,
+      onSchedule,
+    }) {
       const hasChildren = task.hasChildren
+      const number = rowNumber(task)
+      const isTrack = task.kind === 'track'
       return h('div', {
         className: 'gantt-row',
         'data-selected': selected ? 'true' : undefined,
         'data-depth': depth,
+        'data-kind': task.kind,
+        'data-task-id': task.id,
         onClick: () => onSelect(task),
         onKeyDown: (event) => {
           if (event.target !== event.currentTarget) return
@@ -802,40 +1017,67 @@ window.__ModuleLoader__.load({
         },
         role: 'button',
         tabIndex: 0,
-        'aria-label': `${task.number} ${task.title}`,
+        'aria-label': `${number} ${task.title}`,
       },
       h('div', { className: 'gantt-task-cell', style: { paddingLeft: `${10 + depth * 16}px` } },
-        hasChildren
-          ? h('button', {
-            className: 'gantt-chevron',
-            type: 'button',
-            'aria-label': collapsed ? t('tree.expand') : t('tree.collapse'),
-            'aria-expanded': collapsed ? 'false' : 'true',
-            onClick: (event) => {
-              event.stopPropagation()
-              onToggle(task.id)
-            },
-          }, collapsed ? '▸' : '▾')
-          : h('span', { className: 'gantt-chevron gantt-chevron-empty', 'aria-hidden': 'true' }),
-        h('span', { className: 'gantt-number' }, task.number),
-        h('span', { className: 'gantt-task-title', title: task.title }, task.title),
-        h(StatusPill, {
-          status: task.status,
-          label: t(`status.${task.status}`),
-          interactive: !hasChildren,
-          title: hasChildren ? t('status.summaryHint') : t('status.cycleHint'),
-          onClick: () => onCycleStatus(task),
-        }),
-        h('button', {
-          className: 'gantt-add-child',
-          type: 'button',
-          title: t('tree.addChild'),
-          'aria-label': t('tree.addChild'),
-          onClick: (event) => {
-            event.stopPropagation()
-            onAddChild(task)
-          },
-        }, '+'),
+        h('div', { className: 'gantt-task-line' },
+          hasChildren
+            ? h('button', {
+              className: 'gantt-chevron',
+              type: 'button',
+              'aria-label': collapsed ? t('tree.expand') : t('tree.collapse'),
+              'aria-expanded': collapsed ? 'false' : 'true',
+              onClick: (event) => {
+                event.stopPropagation()
+                onToggle(task.id)
+              },
+            }, collapsed ? '▸' : '▾')
+            : h('span', { className: 'gantt-chevron gantt-chevron-empty', 'aria-hidden': 'true' }),
+          h('span', { className: 'gantt-number', title: task.ref || number }, number),
+          h('span', { className: 'gantt-task-title', title: task.title }, task.title),
+          h(StatusPill, {
+            status: task.status,
+            label: t(`status.${task.status}`),
+            interactive: !hasChildren,
+            title: hasChildren ? t('status.summaryHint') : t('status.cycleHint'),
+            onClick: () => onCycleStatus(task),
+          }),
+          h('div', { className: 'gantt-row-actions' },
+            isTrack ? null : h('button', {
+              className: 'gantt-row-action',
+              type: 'button',
+              'data-action': 'decompose',
+              title: t('tree.decompose'),
+              'aria-label': t('tree.decompose'),
+              onClick: (event) => {
+                event.stopPropagation()
+                onDecompose(task)
+              },
+            }, '⋔'),
+            isTrack ? null : h('button', {
+              className: 'gantt-row-action',
+              type: 'button',
+              'data-action': 'schedule',
+              title: t('tree.schedule'),
+              'aria-label': t('tree.schedule'),
+              onClick: (event) => {
+                event.stopPropagation()
+                onSchedule(task)
+              },
+            }, '▦'),
+            h('button', {
+              className: 'gantt-add-child',
+              type: 'button',
+              title: t('tree.addChild'),
+              'aria-label': t('tree.addChild'),
+              onClick: (event) => {
+                event.stopPropagation()
+                onAddChild(task)
+              },
+            }, '+'),
+          ),
+        ),
+        h(MetaChips, { task, t }),
       ),
       h('div', { className: 'gantt-track', style: { width: `${timeline.totalWidth}px` } },
         h(TaskBar, { task, timeline, onSelect }),
@@ -940,7 +1182,7 @@ window.__ModuleLoader__.load({
         }, '×'),
       ),
       h('div', { className: 'gantt-dialog-body' }, children),
-      footer ? h('div', { className: 'gantt-dialog-foot' }, footer) : null,
+      h('div', { className: 'gantt-dialog-foot' }, footer),
       ),
       )
     }
@@ -1051,7 +1293,7 @@ window.__ModuleLoader__.load({
       const parentChoices = parentOptions
 
       return h(Dialog, {
-        title: mode === 'create' ? t('dialog.createTitle') : `${t('dialog.editTitle')} · ${task.number}`,
+        title: mode === 'create' ? t('dialog.createTitle') : `${t('dialog.editTitle')} · ${rowNumber(task)}`,
         closeLabel: t('actions.close'),
         onClose,
         footer: h(React.Fragment, null,
@@ -1200,7 +1442,7 @@ window.__ModuleLoader__.load({
 
       const addRow = () => {
         const last = rows[rows.length - 1]
-        const startDate = last ? addDays(last.endDate, 1) : task.startDate
+        const startDate = addDays(last.endDate, 1)
         const endDate = task.endDate > startDate ? task.endDate : addDays(startDate, 1)
         setRows(current => [...current, {
           key: `row-${splitRowSequence += 1}`,
@@ -1211,7 +1453,7 @@ window.__ModuleLoader__.load({
       }
 
       const removeRow = (key) => {
-        setRows(current => (current.length > 1 ? current.filter(row => row.key !== key) : current))
+        setRows(current => current.filter(row => row.key !== key))
       }
 
       const submit = async () => {
@@ -1246,7 +1488,7 @@ window.__ModuleLoader__.load({
       }
 
       return h(Dialog, {
-        title: `${t('dialog.splitTitle')} · ${task.number} ${task.title}`,
+        title: `${t('dialog.splitTitle')} · ${rowNumber(task)} ${task.title}`,
         closeLabel: t('actions.close'),
         onClose,
         wide: true,
@@ -1310,6 +1552,272 @@ window.__ModuleLoader__.load({
       )
     }
 
+    let decomposeRowSequence = 0
+
+    function newDecomposeRow() {
+      const planDate = addDays(todayIso(), 1)
+      return {
+        key: `dec-${decomposeRowSequence += 1}`,
+        title: '',
+        doneWhen: '',
+        landing: '',
+        estimate: '',
+        category: '',
+        inspiration: '',
+        startDate: planDate,
+        endDate: planDate,
+        planDate,
+        planTime: '21:00',
+      }
+    }
+
+    function DecomposeDialog({ task, t, onClose, onSaved }) {
+      const [rows, setRows] = useState(() => [newDecomposeRow()])
+      const [saving, setSaving] = useState(false)
+      const [error, setError] = useState(null)
+
+      const updateRow = (key, patch) => {
+        setRows(current => current.map(row => (row.key === key ? { ...row, ...patch } : row)))
+      }
+
+      const addRow = () => setRows(current => [...current, newDecomposeRow()])
+
+      const removeRow = (key) => {
+        setRows(current => current.filter(row => row.key !== key))
+      }
+
+      const submit = async () => {
+        for (const row of rows) {
+          if (row.title.trim().length === 0 || row.doneWhen.trim().length === 0) {
+            setError(t('validation.decomposeChild'))
+            return
+          }
+          if (row.startDate && row.endDate && row.endDate < row.startDate) {
+            setError(t('validation.dates'))
+            return
+          }
+        }
+        setSaving(true)
+        setError(null)
+        try {
+          const children = rows.map((row) => {
+            const child = {
+              title: row.title.trim(),
+              doneWhen: row.doneWhen.trim(),
+              landing: row.landing.trim(),
+              estimate: row.estimate.trim(),
+              category: row.category.trim(),
+              inspiration: row.inspiration.trim(),
+              startDate: row.startDate || undefined,
+              endDate: row.endDate || undefined,
+            }
+            if (row.planDate) {
+              child.plan = { date: row.planDate }
+              if (row.planTime) child.plan.startTime = row.planTime
+            }
+            return child
+          })
+          const result = await requestJson('api/gantt/task/decompose', {
+            method: 'POST',
+            body: JSON.stringify({ id: task.id, children }),
+          })
+          const planned = children.filter(child => child.plan).length
+          const planDay = children.find(child => child.plan)?.plan.date ?? ''
+          const message = planned === 0
+            ? t('notice.decomposedNoPlan').replace('{n}', String(children.length))
+            : t('notice.decomposed')
+              .replace('{n}', String(children.length))
+              .replace('{m}', String(planned))
+              .replace('{date}', planDay)
+          onSaved(message, result.parent?.id ?? task.id)
+        } catch (failure) {
+          setError(failure instanceof Error ? failure.message : String(failure))
+        } finally {
+          setSaving(false)
+        }
+      }
+
+      const fieldInput = (row, key, options = {}) => h('input', {
+        className: 'gantt-input',
+        'data-field': key,
+        type: options.type,
+        'aria-label': options.label,
+        placeholder: options.placeholder,
+        maxLength: options.maxLength,
+        value: row[key],
+        onChange: event => updateRow(row.key, { [key]: event.target.value }),
+      })
+
+      return h(Dialog, {
+        title: `${t('dialog.decomposeTitle')} · ${rowNumber(task)} ${task.title}`,
+        closeLabel: t('actions.close'),
+        onClose,
+        wide: true,
+        footer: h(React.Fragment, null,
+          h('div', { className: 'gantt-dialog-foot-left' },
+            h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: addRow }, `+ ${t('dialog.addRow')}`),
+          ),
+          h('div', { className: 'gantt-dialog-foot-right' },
+            h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: onClose }, t('dialog.cancel')),
+            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', disabled: saving, onClick: submit }, saving ? '…' : t('dialog.decompose')),
+          ),
+        ),
+      },
+      error ? h('div', { className: 'gantt-form-error' }, error) : null,
+      h('p', { className: 'gantt-dialog-note' }, t('dialog.decomposeHint')),
+      h('div', { className: 'gantt-parent-summary' },
+        h('span', { className: 'gantt-label' }, t('dialog.decomposeParent')),
+        h('span', { className: 'gantt-number' }, rowNumber(task)),
+        h('span', { className: 'gantt-task-title' }, task.title),
+        task.state ? h('span', { className: 'gantt-row-chip' }, task.state) : null,
+        task.doneWhen ? h('span', { className: 'gantt-row-chip', title: task.doneWhen }, task.doneWhen) : null,
+      ),
+      rows.map((row, index) => h('div', { className: 'gantt-decompose-row', key: row.key },
+        h('div', { className: 'gantt-decompose-head' },
+          h('span', { className: 'gantt-decompose-index' }, `#${index + 1}`),
+          fieldInput(row, 'title', { label: t('dialog.splitChildTitle'), placeholder: t('dialog.splitChildTitle'), maxLength: 200 }),
+          fieldInput(row, 'doneWhen', { label: t('field.doneWhen'), placeholder: t('field.doneWhenPlaceholder') }),
+          h('button', {
+            className: 'gantt-btn gantt-icon-btn',
+            type: 'button',
+            title: t('dialog.removeRow'),
+            'aria-label': t('dialog.removeRow'),
+            disabled: rows.length <= 1,
+            onClick: () => removeRow(row.key),
+          }, '×'),
+        ),
+        h('div', { className: 'gantt-decompose-fields' },
+          fieldInput(row, 'landing', { label: t('field.landing'), placeholder: t('field.landing') }),
+          fieldInput(row, 'estimate', { label: t('field.estimate'), placeholder: t('field.estimate') }),
+          fieldInput(row, 'category', { label: t('field.category'), placeholder: t('field.category') }),
+          fieldInput(row, 'inspiration', { label: t('field.inspiration'), placeholder: t('field.inspiration') }),
+          fieldInput(row, 'startDate', { type: 'date', label: t('field.start') }),
+          fieldInput(row, 'endDate', { type: 'date', label: t('field.end') }),
+          fieldInput(row, 'planDate', { type: 'date', label: t('field.planDate') }),
+          fieldInput(row, 'planTime', { type: 'time', label: t('field.planTime') }),
+        ),
+      )),
+      )
+    }
+
+    function ScheduleDialog({ task, t, onClose, onSaved }) {
+      const [date, setDate] = useState(() => addDays(todayIso(), 1))
+      const [startTime, setStartTime] = useState('21:00')
+      const [endTime, setEndTime] = useState('22:00')
+      const [category, setCategory] = useState(task.category || '')
+      const [landing, setLanding] = useState(task.landing || '')
+      const [estimate, setEstimate] = useState(task.estimate || '')
+      const [inspiration, setInspiration] = useState(task.inspiration || '')
+      const [saving, setSaving] = useState(false)
+      const [error, setError] = useState(null)
+
+      const submit = async () => {
+        if (!date) {
+          setError(t('validation.planDate'))
+          return
+        }
+        if (startTime && endTime && endTime < startTime) {
+          setError(t('validation.times'))
+          return
+        }
+        setSaving(true)
+        setError(null)
+        try {
+          const body = { id: task.id, date }
+          if (startTime) body.startTime = startTime
+          if (endTime) body.endTime = endTime
+          if (category.trim()) body.category = category.trim()
+          if (landing.trim()) body.landing = landing.trim()
+          if (estimate.trim()) body.estimate = estimate.trim()
+          if (inspiration.trim()) body.inspiration = inspiration.trim()
+          const result = await requestJson('api/gantt/task/schedule', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          })
+          onSaved(t('notice.scheduled').replace('{date}', date), result.task?.id ?? task.id)
+        } catch (failure) {
+          setError(failure instanceof Error ? failure.message : String(failure))
+        } finally {
+          setSaving(false)
+        }
+      }
+
+      return h(Dialog, {
+        title: `${t('dialog.scheduleTitle')} · ${rowNumber(task)} ${task.title}`,
+        closeLabel: t('actions.close'),
+        onClose,
+        footer: h('div', { className: 'gantt-dialog-foot-right' },
+          h('button', { className: 'gantt-btn', type: 'button', disabled: saving, onClick: onClose }, t('dialog.cancel')),
+          h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', disabled: saving, onClick: submit }, saving ? '…' : t('dialog.schedule')),
+        ),
+      },
+      error ? h('div', { className: 'gantt-form-error' }, error) : null,
+      h('p', { className: 'gantt-dialog-note' }, t('dialog.scheduleHint')),
+      h('div', { className: 'gantt-form-grid' },
+        h(Field, { label: t('field.planDate'), full: true },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'date',
+            type: 'date',
+            value: date,
+            autoFocus: true,
+            onChange: event => setDate(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.startTime') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'startTime',
+            type: 'time',
+            value: startTime,
+            onChange: event => setStartTime(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.endTime') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'endTime',
+            type: 'time',
+            value: endTime,
+            onChange: event => setEndTime(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.category') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'category',
+            value: category,
+            onChange: event => setCategory(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.landing') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'landing',
+            value: landing,
+            onChange: event => setLanding(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.estimate') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'estimate',
+            value: estimate,
+            onChange: event => setEstimate(event.target.value),
+          }),
+        ),
+        h(Field, { label: t('field.inspiration') },
+          h('input', {
+            className: 'gantt-input',
+            'data-field': 'inspiration',
+            value: inspiration,
+            onChange: event => setInspiration(event.target.value),
+          }),
+        ),
+      ),
+      )
+    }
+
     function ApiDialog({ t, locale, onClose }) {
       const [meta, setMeta] = useState(null)
       const [error, setError] = useState(null)
@@ -1364,6 +1872,88 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function ContextDialog({ t, onClose }) {
+      const [state, setState] = useState({ status: 'loading', data: null, error: null })
+      const [copyState, setCopyState] = useState('idle')
+      const textareaRef = useRef(null)
+
+      useEffect(() => {
+        let active = true
+        requestJson('api/gantt/context')
+          .then((body) => {
+            if (active) setState({ status: 'ready', data: body, error: null })
+          })
+          .catch((failure) => {
+            if (active) {
+              setState({
+                status: 'error',
+                data: null,
+                error: failure instanceof Error ? failure.message : String(failure),
+              })
+            }
+          })
+        return () => {
+          active = false
+        }
+      }, [])
+
+      const copy = async () => {
+        const markdown = state.data?.markdown ?? ''
+        try {
+          if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+            throw new Error('clipboard unavailable')
+          }
+          await navigator.clipboard.writeText(markdown)
+          setCopyState('copied')
+        } catch {
+          textareaRef.current?.select()
+          setCopyState('fallback')
+        }
+      }
+
+      const data = state.data
+      const chars = data ? (typeof data.chars === 'number' ? data.chars : String(data.markdown ?? '').length) : 0
+
+      return h(Dialog, {
+        title: t('dialog.contextTitle'),
+        closeLabel: t('actions.close'),
+        onClose,
+        wide: true,
+        footer: h('div', { className: 'gantt-dialog-foot-right' },
+          h('button', { className: 'gantt-btn', type: 'button', onClick: onClose }, t('actions.close')),
+          h('button', {
+            className: 'gantt-btn gantt-btn-primary',
+            'data-action': 'copy',
+            type: 'button',
+            disabled: !data,
+            onClick: copy,
+          }, t('context.copy')),
+        ),
+      },
+      state.status === 'loading' ? h('p', { className: 'gantt-hint' }, t('context.loading')) : null,
+      state.error ? h('div', { className: 'gantt-form-error' }, state.error) : null,
+      data
+        ? h(React.Fragment, null,
+          h('p', { className: 'gantt-dialog-note' }, t('context.intro')),
+          h('textarea', {
+            className: 'gantt-textarea gantt-context-text',
+            ref: textareaRef,
+            readOnly: true,
+            value: data.markdown ?? '',
+            rows: 14,
+            'aria-label': t('dialog.contextTitle'),
+          }),
+          h('div', { className: 'gantt-context-meta' },
+            h('span', null, t('context.chars').replace('{n}', String(chars))),
+            data.truncated ? h('span', { className: 'gantt-context-truncated' }, t('context.truncated')) : null,
+          ),
+        )
+        : null,
+      copyState === 'copied' ? h('p', { className: 'gantt-hint' }, t('context.copied')) : null,
+      copyState === 'fallback' ? h('p', { className: 'gantt-hint' }, t('context.copyFallback')) : null,
+      )
+    }
+
     function TodayBlock({ block, t, onCycle }) {
       const time = [block.startTime, block.endTime].filter(Boolean).join('–') || '—'
       return h('article', {
@@ -1371,10 +1961,14 @@ window.__ModuleLoader__.load({
         'data-block-id': block.id,
         'data-slot': block.slot,
         'data-status': block.status,
+        'data-source': block.source,
       },
       h('div', { className: 'today-block-time' }, time),
       h('div', { className: 'today-block-main' },
         h('div', { className: 'today-block-head' },
+          block.source === 'task'
+            ? h('span', { className: 'today-source-badge' }, t('today.fromTree'))
+            : null,
           block.category ? h('span', { className: 'today-chip' }, block.category) : null,
           h('h4', { className: 'today-block-title', title: block.title }, block.title),
           h(StatusPill, {
@@ -1397,14 +1991,28 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function TodayNode({ node }) {
+    function TodayNode({ node, t }) {
       const range = [node.startDate, node.endDate].filter(Boolean).join(' – ')
-      return h('li', { className: 'today-node', 'data-state': node.state || 'unknown' },
-        h('span', { className: 'today-node-id' }, node.id),
-        h('span', { className: 'today-node-title', title: node.title }, node.title),
-        node.state ? h('span', { className: 'today-chip' }, node.state) : null,
-        range ? h('span', { className: 'today-node-range' }, range) : null,
-        node.dep ? h('span', { className: 'today-chip today-chip-muted' }, node.dep) : null,
+      const links = Array.isArray(node.links) ? node.links : []
+      return h('li', {
+        className: 'today-node',
+        'data-state': node.state || 'unknown',
+        'data-kind': node.kind,
+      },
+      h('span', { className: 'today-node-id', title: node.ref || node.id }, node.ref ? refIdOf(node.ref) : node.id),
+      h('span', { className: 'today-node-title', title: node.title }, node.title),
+      node.state ? h('span', { className: 'today-chip' }, node.state) : null,
+      node.lane ? h('span', { className: 'today-chip' }, node.lane) : null,
+      range ? h('span', { className: 'today-node-range' }, range) : null,
+      node.dep ? h('span', { className: 'today-chip today-chip-muted' }, node.dep) : null,
+      node.landing
+        ? h('span', { className: 'today-chip today-chip-muted', title: `${t('field.landing')}: ${node.landing}` }, `⤷ ${node.landing}`)
+        : null,
+      links.map(link => h('span', {
+        key: `${link.type}:${link.ref}`,
+        className: 'today-chip today-chip-muted',
+        title: `${link.type}:${link.ref}`,
+      }, link.label || link.ref)),
       )
     }
 
@@ -1420,6 +2028,7 @@ window.__ModuleLoader__.load({
         --gantt-muted: var(--dsw-alias-label-secondary);
         --gantt-accent: var(--dsw-alias-brand-primary);
         position: relative;
+        container-type: inline-size;
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -1619,7 +2228,8 @@ window.__ModuleLoader__.load({
       }
       .gantt-row {
         display: flex;
-        height: 38px;
+        min-height: 38px;
+        height: auto;
         position: relative;
         z-index: 1;
         cursor: pointer;
@@ -1634,14 +2244,53 @@ window.__ModuleLoader__.load({
         width: var(--gantt-left);
         flex: 0 0 var(--gantt-left);
         display: flex;
-        align-items: center;
-        gap: 6px;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
         padding-right: 8px;
         background: var(--gantt-surface);
         border-right: 1px solid var(--gantt-line-strong);
         border-bottom: 1px solid var(--gantt-line);
         overflow: hidden;
       }
+      .gantt-task-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .gantt-task-meta {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        padding-left: 24px;
+        overflow: hidden;
+      }
+      .gantt-row-chip {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 190px;
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--gantt-line);
+        color: var(--gantt-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .gantt-row-actions { display: flex; align-items: center; gap: 1px; flex: 0 0 auto; }
+      .gantt-row-action {
+        flex: 0 0 20px;
+        width: 20px; height: 20px;
+        display: grid; place-items: center;
+        border: 0; border-radius: 6px;
+        background: transparent;
+        color: var(--gantt-muted);
+        opacity: 0.5;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 0;
+      }
+      .gantt-row-action:hover { opacity: 1; color: var(--gantt-accent); background: color-mix(in srgb, var(--gantt-accent) 12%, transparent); }
       .gantt-row[data-selected="true"] .gantt-task-cell {
         background: color-mix(in srgb, var(--gantt-accent) 10%, var(--gantt-surface));
         box-shadow: inset 3px 0 0 var(--gantt-accent);
@@ -1649,7 +2298,8 @@ window.__ModuleLoader__.load({
       .gantt-track {
         position: relative;
         flex: 0 0 auto;
-        height: 38px;
+        min-height: 38px;
+        height: auto;
         border-bottom: 1px solid var(--gantt-line);
       }
       .gantt-chevron {
@@ -1955,22 +2605,93 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-state-error-primary);
         border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, transparent);
       }
-      @media (max-width: 980px) {
-        .gantt-page { --gantt-left: 280px; }
+      .gantt-brief {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 22px 10px;
+        border-bottom: 1px solid var(--gantt-line);
+        background: color-mix(in srgb, var(--gantt-accent) 4%, var(--gantt-bg));
+      }
+      .gantt-brief-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .gantt-brief-title { font-size: 11.5px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gantt-muted); }
+      .gantt-brief-pending { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-brief-lanes { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
+      .gantt-brief-lane { flex: 1 1 330px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+      .gantt-brief-lane-name { font-size: 11.5px; font-weight: 600; min-width: 86px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gantt-brief-pick {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: min(360px, 100%);
+        height: 24px;
+        padding: 0 9px;
+        border-radius: 7px;
+        border: 1px solid var(--gantt-line-strong);
+        background: var(--gantt-surface);
+        color: var(--gantt-text);
+        font-size: 11px;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .gantt-brief-pick:hover { border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent); }
+      .gantt-brief-tag { flex: 0 0 auto; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--gantt-accent) 14%, transparent); color: var(--gantt-accent); }
+      .gantt-brief-pick[data-kind="next"] .gantt-brief-tag { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
+      .gantt-brief-id { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--gantt-muted); }
+      .gantt-brief-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gantt-parent-summary {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        padding: 9px 11px;
+        border: 1px solid var(--gantt-line);
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--gantt-bg) 60%, transparent);
+      }
+      .gantt-parent-summary .gantt-task-title { flex: 0 1 auto; }
+      .gantt-decompose-row {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 9px 10px;
+        border: 1px solid var(--gantt-line);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--gantt-bg) 50%, transparent);
+      }
+      .gantt-decompose-head {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1.1fr) minmax(0, 1fr) 32px;
+        gap: 7px;
+        align-items: center;
+      }
+      .gantt-decompose-index { font-size: 10.5px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-decompose-head .gantt-btn { width: 32px; height: 32px; }
+      .gantt-decompose-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 7px; }
+      .gantt-context-text { min-height: 260px; max-height: 46vh; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.5; white-space: pre; }
+      .gantt-context-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .gantt-context-truncated { color: var(--gantt-accent); }
+      @container (max-width: 980px) {
+        .gantt-head, .gantt-stats, .gantt-body, .gantt-backdrop { --gantt-left: 280px; }
         .gantt-subtitle { display: none; }
         .gantt-stat-progress { max-width: none; }
         .gantt-api-meta { grid-template-columns: 1fr; }
+        .gantt-brief, .gantt-head, .gantt-stats { padding-left: 14px; padding-right: 14px; }
       }
-      @media (max-width: 720px) {
-        .gantt-page { --gantt-left: 230px; }
-        .gantt-head, .gantt-stats { padding-left: 14px; padding-right: 14px; }
+      @container (max-width: 720px) {
+        .gantt-head, .gantt-stats, .gantt-body, .gantt-backdrop { --gantt-left: 230px; }
         .gantt-number { min-width: 30px; }
         .gantt-status-label { display: none; }
         .gantt-status { padding: 0 6px; }
+        .gantt-task-meta { padding-left: 10px; }
+        .gantt-row-chip { max-width: 132px; }
         .gantt-form-grid { grid-template-columns: 1fr; }
         .gantt-split-head, .gantt-split-row { grid-template-columns: minmax(0, 1fr) 110px 110px 32px; }
         .gantt-api-row { grid-template-columns: 44px minmax(0, 1fr); }
         .gantt-api-desc { grid-column: 1 / -1; }
+        .gantt-decompose-head { grid-template-columns: 18px minmax(0, 1fr) 32px; }
+        .gantt-decompose-head > [data-field="doneWhen"] { grid-column: 2 / 4; }
+        .gantt-brief-lane-name { min-width: 0; }
       }
     `
 
@@ -2010,6 +2731,17 @@ window.__ModuleLoader__.load({
       .today-block-detail { margin: 0; font-size: 11.5px; color: var(--gantt-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       .today-chip { flex: 0 0 auto; font-size: 10.5px; line-height: 1; padding: 3px 7px; border-radius: 999px; border: 1px solid var(--gantt-line-strong); color: var(--gantt-muted); white-space: nowrap; }
       .today-chip-muted { border-style: dashed; }
+      .today-source-badge {
+        flex: 0 0 auto;
+        font-size: 10px;
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: 5px;
+        border: 1px solid color-mix(in srgb, var(--gantt-accent) 40%, transparent);
+        background: color-mix(in srgb, var(--gantt-accent) 10%, transparent);
+        color: var(--gantt-accent);
+        white-space: nowrap;
+      }
       .today-block-meta { display: flex; flex-wrap: wrap; gap: 5px; }
       .today-muted { margin: 0; font-size: 12px; color: var(--gantt-muted); }
       .today-node-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -2033,10 +2765,13 @@ window.__ModuleLoader__.load({
       const [scale, setScale] = useState('week')
       const [anchor, setAnchor] = useState(() => todayIso())
       const [collapsed, setCollapsed] = useState(() => new Set())
+      const [level, setLevel] = useState(99)
       const [selectedId, setSelectedId] = useState(null)
+      const [focusId, setFocusId] = useState(null)
       const [dialog, setDialog] = useState(null)
       const [toast, setToast] = useState(null)
       const initialized = useRef(false)
+      const pageRef = useRef(null)
 
       useEffect(() => {
         if (data && !initialized.current) {
@@ -2070,12 +2805,21 @@ window.__ModuleLoader__.load({
       }, [scale, anchor, today])
 
       useEffect(() => {
+        if (!focusId || !pageRef.current) return
+        const rowElement = pageRef.current.querySelector(`.gantt-row[data-task-id="${focusId}"]`)
+        if (rowElement && typeof rowElement.scrollIntoView === 'function') {
+          rowElement.scrollIntoView({ block: 'nearest' })
+        }
+      }, [focusId, rows])
+
+      useEffect(() => {
         if (status === 'ready' && selectedId && !byId.has(selectedId)) setSelectedId(null)
       }, [status, selectedId, byId])
 
       useEffect(() => {
         if (!dialog) return
-        if ((dialog.type === 'edit' || dialog.type === 'split') && dialog.id && !byId.has(dialog.id)) {
+        if ((dialog.type === 'edit' || dialog.type === 'split' || dialog.type === 'decompose' || dialog.type === 'schedule')
+          && dialog.id && !byId.has(dialog.id)) {
           setDialog(null)
         }
       }, [dialog, byId])
@@ -2093,7 +2837,6 @@ window.__ModuleLoader__.load({
       }, [refresh])
 
       const cycleStatus = useCallback(async (task) => {
-        if (task.hasChildren) return
         const base = task.status === 'blocked' ? 'todo' : task.status
         const next = base === 'todo' ? 'in_progress' : base === 'in_progress' ? 'done' : 'todo'
         try {
@@ -2125,6 +2868,23 @@ window.__ModuleLoader__.load({
         })
       }, [])
 
+      const changeLevel = useCallback((next) => {
+        setLevel(next)
+        setCollapsed(collapseForLevel(tasks, next))
+      }, [tasks])
+
+      const revealTask = useCallback((id) => {
+        const path = taskPath(tasks, id)
+        if (path === null) return
+        setCollapsed((current) => {
+          const next = new Set(current)
+          for (const ancestor of path.slice(0, -1)) next.delete(ancestor.id)
+          return next
+        })
+        setSelectedId(id)
+        setFocusId(id)
+      }, [tasks])
+
       const openCreate = useCallback((parentTask) => {
         setDialog({ type: 'create', parentId: parentTask?.id ?? null })
       }, [])
@@ -2132,6 +2892,16 @@ window.__ModuleLoader__.load({
       const openEdit = useCallback((task) => {
         setSelectedId(task.id)
         setDialog({ type: 'edit', id: task.id })
+      }, [])
+
+      const openDecompose = useCallback((task) => {
+        setSelectedId(task.id)
+        setDialog({ type: 'decompose', id: task.id })
+      }, [])
+
+      const openSchedule = useCallback((task) => {
+        setSelectedId(task.id)
+        setDialog({ type: 'schedule', id: task.id })
       }, [])
 
       const shift = useCallback((direction) => {
@@ -2142,7 +2912,7 @@ window.__ModuleLoader__.load({
 
       const goToday = useCallback(() => setAnchor(today), [today])
 
-      const shell = children => h('div', { className: 'gantt-page' },
+      const shell = children => h('div', { className: 'gantt-page', ref: pageRef },
         h('style', { key: 'gantt-css' }, CSS),
         children,
       )
@@ -2178,7 +2948,6 @@ window.__ModuleLoader__.load({
           t,
           onClose: () => setDialog(null),
           onSaved: handleSaved,
-          onSplit: () => {},
         })
       } else if (dialog?.type === 'edit' && dialogTask) {
         dialogNode = h(TaskDialog, {
@@ -2198,6 +2967,28 @@ window.__ModuleLoader__.load({
           t,
           onClose: () => setDialog(null),
           onSaved: handleSaved,
+        })
+      } else if (dialog?.type === 'decompose' && dialogTask) {
+        dialogNode = h(DecomposeDialog, {
+          key: `decompose-${dialogTask.id}`,
+          task: dialogTask,
+          t,
+          onClose: () => setDialog(null),
+          onSaved: handleSaved,
+        })
+      } else if (dialog?.type === 'schedule' && dialogTask) {
+        dialogNode = h(ScheduleDialog, {
+          key: `schedule-${dialogTask.id}`,
+          task: dialogTask,
+          t,
+          onClose: () => setDialog(null),
+          onSaved: handleSaved,
+        })
+      } else if (dialog?.type === 'context') {
+        dialogNode = h(ContextDialog, {
+          key: 'context',
+          t,
+          onClose: () => setDialog(null),
         })
       } else if (dialog?.type === 'api') {
         dialogNode = h(ApiDialog, {
@@ -2240,6 +3031,8 @@ window.__ModuleLoader__.load({
               onToggle: toggleCollapse,
               onAddChild: openCreate,
               onCycleStatus: cycleStatus,
+              onDecompose: openDecompose,
+              onSchedule: openSchedule,
             })),
           ),
           ),
@@ -2269,9 +3062,20 @@ window.__ModuleLoader__.load({
                 onClick: () => setScale('month'),
               }, t('scale.month')),
             ),
+            h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('level.label') },
+              [['all', 99], ['two', 2], ['one', 1]].map(([key, depth]) => h('button', {
+                key,
+                className: 'gantt-seg-btn',
+                type: 'button',
+                'data-level': depth,
+                'data-active': level === depth ? 'true' : undefined,
+                onClick: () => changeLevel(depth),
+              }, t(`level.${key}`))),
+            ),
             h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.prev'), 'aria-label': t('actions.prev'), onClick: () => shift(-1) }, '‹'),
             h('button', { className: 'gantt-btn', type: 'button', onClick: goToday }, t('actions.today')),
             h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.next'), 'aria-label': t('actions.next'), onClick: () => shift(1) }, '›'),
+            h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'context' }) }, t('actions.context')),
             h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'api' }) }, t('actions.api')),
             h('button', {
               className: 'gantt-btn gantt-icon-btn',
@@ -2314,6 +3118,7 @@ window.__ModuleLoader__.load({
           h('span', null, error),
           h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
         ) : null,
+        h(BriefStrip, { brief: data?.brief, t, onReveal: revealTask }),
         content,
         dialogNode,
         toast ? h('div', {
@@ -2414,7 +3219,7 @@ window.__ModuleLoader__.load({
             'aria-label': t('today.prevDay'),
             onClick: () => shiftDay(-1),
           }, '‹'),
-          h('span', { className: 'today-nav-date' }, formatDate(date, locale, true)),
+          h('span', { className: 'today-nav-date' }, formatDate(date, locale)),
           h('button', {
             className: 'gantt-btn gantt-icon-btn',
             type: 'button',
@@ -2442,7 +3247,7 @@ window.__ModuleLoader__.load({
 
       const meta = h('section', { className: 'gantt-stats today-meta' },
         h('div', { className: 'today-meta-date' },
-          h('strong', null, formatDate(date, locale, true)),
+          h('strong', null, formatDate(date, locale)),
           h('span', { className: 'today-weekday', title: t('today.weekdayLabel') }, formatWeekdayLong(date, locale)),
         ),
         day?.label ? h('span', { className: 'today-meta-label' }, day.label) : null,
@@ -2514,7 +3319,7 @@ window.__ModuleLoader__.load({
             nodes.length === 0
               ? h('p', { className: 'today-muted' }, t('today.nodesEmpty'))
               : h('ul', { className: 'today-node-list' },
-                nodes.map(node => h(TodayNode, { key: node.id, node })),
+                nodes.map(node => h(TodayNode, { key: node.id, node, t })),
               ),
           ),
         )

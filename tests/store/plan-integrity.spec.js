@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GanttStore } from '../../store.js'
+import { GanttStore, addDays, todayIso } from '../../store.js'
 
 let store
 
@@ -105,33 +105,55 @@ describe('dayPlan stats', () => {
 })
 
 describe('dayPlan node window', () => {
-  it('returns active nodes overlapping the next seven days, newest first by id tie-break', () => {
+  it('returns active unified-tree nodes overlapping the day and the next six days', () => {
+    const today = todayIso()
     store.replacePlan({
       tracks: [{ id: '1', name: '投资系统' }],
       nodes: [
-        node('1.1', { state: '已过', startDate: '2026-11-15', endDate: '2026-11-20' }),
-        node('1.2', { state: '撤销', startDate: '2026-11-15', endDate: '2026-11-20' }),
+        node('1.1', { state: '已过', startDate: addDays(today, -1), endDate: addDays(today, 1) }),
+        node('1.2', { state: '撤销', startDate: addDays(today, -1), endDate: addDays(today, 1) }),
         node('1.3', { startDate: null, endDate: null }),
-        node('1.4', { startDate: '2026-11-22', endDate: '2026-11-30' }),
-        node('1.5', { startDate: '2026-10-01', endDate: '2026-11-14' }),
-        node('1.6', { startDate: '2026-11-09', endDate: '2026-11-15' }),
-        node('1.7', { startDate: '2026-11-21', endDate: null }),
-        node('1.8', { startDate: '2026-11-10', endDate: null }),
-        node('1.9', { startDate: '2026-11-16', endDate: '2026-11-22' }),
+        node('1.4', { startDate: addDays(today, 7), endDate: addDays(today, 9) }),
+        node('1.5', { startDate: addDays(today, -30), endDate: addDays(today, -2) }),
+        node('1.6', { startDate: addDays(today, -1), endDate: addDays(today, 1) }),
+        node('1.7', { startDate: addDays(today, 6), endDate: null }),
+        node('1.8', { startDate: addDays(today, -5), endDate: null }),
+        node('1.9', { startDate: addDays(today, 1), endDate: addDays(today, 8) }),
       ],
     })
-    const bundle = store.dayPlan('2026-11-15')
-    expect(bundle.nodes.map(item => item.id)).toEqual(['1.6', '1.8', '1.9', '1.7'])
+    const bundle = store.dayPlan(today)
+    expect(bundle.nodes.map(item => item.ref)).toEqual(['node:1.8', 'node:1.6', 'node:1.3', 'node:1.9', 'node:1.7'])
+    expect(bundle.nodes[0]).toMatchObject({ kind: 'node', trackId: bundle.tracks[0].id, state: '进行', links: [] })
     expect(bundle.tracks).toHaveLength(1)
+    expect(bundle.tracks[0]).toMatchObject({ ref: 'track:1', name: '投资系统', lane: '', priority: '', state: '' })
+  })
+
+  it('derives track ids from manual tracks and tolerates equal ordering keys', () => {
+    const today = todayIso()
+    const track = store.create({ title: 'Manual track', kind: 'track', startDate: today, endDate: today })
+    const secondTrack = store.create({ title: 'Manual track two', kind: 'track', startDate: today, endDate: today })
+    store.create({ title: 'Node A', kind: 'node', parentId: track.id, startDate: today, endDate: today })
+    store.create({ title: 'Node B', kind: 'node', parentId: track.id, startDate: today, endDate: today })
+    store.db.prepare('UPDATE tasks SET sort_order = 0 WHERE id IN (?, ?)').run(track.id, secondTrack.id)
+    const bundle = store.dayPlan(today)
+    expect(bundle.tracks.map(item => item.name).sort()).toEqual(['Manual track', 'Manual track two'])
+    expect(bundle.nodes.map(item => item.title).sort()).toEqual(['Node A', 'Node B'])
+    expect(bundle.nodes.every(item => item.trackId === track.id)).toBe(true)
   })
 
   it('caps the node window at twelve rows', () => {
+    const today = todayIso()
     store.replacePlan({
       nodes: Array.from({ length: 13 }, (unused, index) => node(`1.${String(index).padStart(2, '0')}`, {
-        startDate: '2026-11-16',
-        endDate: '2026-11-16',
+        startDate: today,
+        endDate: today,
       })),
     })
-    expect(store.dayPlan('2026-11-16').nodes).toHaveLength(12)
+    const nodes = store.dayPlan(today).nodes
+    expect(nodes).toHaveLength(12)
+    expect(nodes.map(item => item.ref)).toEqual([
+      'node:1.00', 'node:1.01', 'node:1.02', 'node:1.03', 'node:1.04', 'node:1.05',
+      'node:1.06', 'node:1.07', 'node:1.08', 'node:1.09', 'node:1.10', 'node:1.11',
+    ])
   })
 })

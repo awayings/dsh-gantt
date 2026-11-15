@@ -39,6 +39,18 @@ export function makeRow(overrides = {}) {
     sortOrder: 0,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
+    kind: 'task',
+    ref: '',
+    state: '',
+    lane: '',
+    dep: '',
+    doneWhen: '',
+    landing: '',
+    estimate: '',
+    category: '',
+    inspiration: '',
+    links: [],
+    source: 'manual',
     ...overrides,
   }
 }

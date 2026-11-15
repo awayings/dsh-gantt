@@ -12,6 +12,19 @@ function task(fields) {
     description: '',
     parentId: null,
     sortOrder: 0,
+    kind: 'task',
+    ref: '',
+    state: '',
+    lane: '',
+    dep: '',
+    doneWhen: '',
+    landing: '',
+    estimate: '',
+    category: '',
+    inspiration: '',
+    links: [],
+    source: 'manual',
+    children: [],
     createdAt: '2026-11-01T00:00:00.000Z',
     updatedAt: '2026-11-01T00:00:00.000Z',
     ...fields,
@@ -142,6 +155,172 @@ export function metaPayload(overrides = {}) {
   return { ...payload, ...overrides }
 }
 
+// ---- Unified tree v3 (tracks = roots, Hermes nodes = children) ----
+
+/** Two tracks, three Hermes nodes (one nested), rich metadata and links. */
+export function makeUnifiedTree() {
+  return [
+    task({
+      id: 't1',
+      number: '1',
+      kind: 'track',
+      ref: 'track:1',
+      title: '投资系统',
+      lane: '赚钱',
+      state: '进行',
+      status: 'in_progress',
+      progress: 50,
+      startDate: '2026-11-01',
+      endDate: '2026-11-30',
+      hasChildren: true,
+      children: [
+        task({
+          id: 'n1',
+          number: '1.1',
+          kind: 'node',
+          ref: 'node:1.1',
+          title: '数据底座',
+          lane: '赚钱',
+          state: '进行',
+          status: 'in_progress',
+          progress: 50,
+          startDate: '2026-11-01',
+          endDate: '2026-11-10',
+          parentId: 't1',
+          hasChildren: false,
+          dep: '1.8',
+          doneWhen: '数据底座从 tracker 导入后可查',
+          landing: 'invest/data.md',
+          estimate: '2h',
+          category: 'A 主攻片',
+          inspiration: '#21',
+          links: [
+            { type: 'memory', ref: 'key/个人任务系统', label: '系统记忆' },
+            { type: 'file', ref: 'invest/data.md' },
+          ],
+        }),
+        task({
+          id: 'n2',
+          number: '1.8',
+          kind: 'node',
+          ref: 'node:1.8',
+          title: '交易仓',
+          lane: '赚钱',
+          state: '卡住',
+          status: 'blocked',
+          progress: 30,
+          startDate: '2026-11-05',
+          endDate: '2026-11-20',
+          parentId: 't1',
+          hasChildren: true,
+          children: [
+            task({
+              id: 'n21',
+              number: '1.8.4',
+              kind: 'node',
+              ref: 'node:1.8.4',
+              title: '读数收口',
+              lane: '赚钱',
+              state: '未开始',
+              status: 'todo',
+              progress: 0,
+              startDate: '2026-11-16',
+              endDate: '2026-11-18',
+              parentId: 'n2',
+              hasChildren: false,
+              doneWhen: '读数写进策略账本',
+              landing: 'invest/strategy-ledger.md',
+            }),
+          ],
+        }),
+      ],
+    }),
+    task({
+      id: 't2',
+      number: '2',
+      kind: 'track',
+      ref: 'track:2',
+      title: '生活系统',
+      lane: '生活',
+      state: '卡住',
+      status: 'blocked',
+      progress: 0,
+      startDate: '2026-11-10',
+      endDate: '2026-11-12',
+      hasChildren: false,
+      children: [],
+    }),
+  ]
+}
+
+export function makeUnifiedStats() {
+  return { total: 5, done: 0, inProgress: 2, blocked: 2, overdue: 0, progress: 16 }
+}
+
+/** `brief` payload: per-lane frontier and next picks. */
+export function makeBrief() {
+  const frontier = {
+    id: 'n21',
+    ref: 'node:1.8.4',
+    number: '1.8.4',
+    title: '读数收口',
+    trackId: 't1',
+    trackName: '投资系统',
+  }
+  const next = {
+    id: 'n1',
+    ref: 'node:1.1',
+    number: '1.1',
+    title: '数据底座',
+    trackId: 't1',
+    trackName: '投资系统',
+  }
+  return {
+    pending: 3,
+    frontier: [frontier],
+    next: [next],
+    lanes: [
+      { id: 't1', ref: 'track:1', name: '投资系统', lane: '赚钱', state: '进行', blocker: '', frontier, next },
+      { id: 't2', ref: 'track:2', name: '生活系统', lane: '生活', state: '卡住', blocker: '', frontier: null, next: null },
+    ],
+  }
+}
+
+/** Successful GET /api/gantt/tree payload for the unified tree. */
+export function unifiedTreePayload(overrides = {}) {
+  return {
+    ok: true,
+    today: TODAY,
+    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    tasks: makeUnifiedTree(),
+    stats: makeUnifiedStats(),
+    brief: makeBrief(),
+    ...overrides,
+  }
+}
+
+/** Successful GET /api/gantt/context payload. */
+export function contextPayload(overrides = {}) {
+  const markdown = [
+    '# 个人任务树（2 条支线 · 4 个节点 · 0 个任务）',
+    '',
+    '## 1. 投资系统（赚钱 · 进行）',
+    '- 1.8.4 读数收口 [todo 未开始] 2026-11-16→2026-11-18 · 落点 invest/strategy-ledger.md',
+    '',
+    '## 今日 2026-11-15（周六 · 周末 · 休市）',
+    '- [todo] 21:00-22:00 读数收口 · 落点 invest/strategy-ledger.md',
+  ].join('\n')
+  return {
+    ok: true,
+    date: TODAY,
+    markdown,
+    chars: markdown.length,
+    truncated: false,
+    counts: { tracks: 2, nodes: 4, tasks: 0, blocks: 1 },
+    ...overrides,
+  }
+}
+
 /** Task node returned by create/update/status mutations (`{ ok, task }`). */
 export function mutationTask(overrides = {}) {
   return {
@@ -250,22 +429,30 @@ export function makePlanBlocks() {
   ]
 }
 
-/** Three task-tree nodes: full range, unplanned (null dates), ongoing (null end). */
+/** Three unified-tree nodes: full range + metadata, bare, and ongoing. */
 export function makePlanNodes() {
   return [
     {
-      id: '1.8.1',
-      trackId: '1',
+      id: 'task-uuid-181',
+      ref: 'node:1.8.1',
+      kind: 'node',
+      trackId: 't1',
+      lane: '赚钱',
       title: '今天页上线',
       state: '进行',
       startDate: '2026-11-10',
       endDate: '2026-11-18',
       dep: '1.8',
-      doneWhen: '',
+      doneWhen: 'Today 页在真实库里可点',
+      landing: 'client.js',
+      links: [{ type: 'memory', ref: 'key/个人任务系统', label: '系统记忆' }],
     },
     {
-      id: '2.3',
-      trackId: '2',
+      id: 'task-uuid-23',
+      ref: 'node:2.3',
+      kind: 'node',
+      trackId: 't2',
+      lane: '',
       title: '导入任务跟踪器',
       state: '',
       startDate: null,
@@ -274,8 +461,11 @@ export function makePlanNodes() {
       doneWhen: '',
     },
     {
-      id: '3.1',
-      trackId: '3',
+      id: 'task-uuid-31',
+      ref: 'node:3.1',
+      kind: 'node',
+      trackId: 't3',
+      lane: '',
       title: '持续打磨',
       state: '进行中',
       startDate: '2026-11-14',
@@ -284,6 +474,25 @@ export function makePlanNodes() {
       doneWhen: '',
     },
   ]
+}
+
+/** A plan block produced by `task/schedule` (`source: 'task'`). */
+export function makeTaskBlock(overrides = {}) {
+  return planBlock({
+    id: 'task|t-1|2026-11-15',
+    startTime: '21:00',
+    endTime: '22:00',
+    slot: 'evening',
+    title: '读数收口',
+    detail: '把读数写进策略账本',
+    landing: 'invest/strategy-ledger.md',
+    estimate: '1h',
+    status: 'todo',
+    sortOrder: 5,
+    source: 'task',
+    sourceRef: 'task:t-1',
+    ...overrides,
+  })
 }
 
 export function planDay(overrides = {}) {
