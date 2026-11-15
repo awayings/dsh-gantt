@@ -25,10 +25,12 @@ tracker import is an explicit, idempotent pull from markdown files — no watche
 no write-back — and it materializes the imported tree into the same working tree
 the Gantt page renders.
 
-No build step, no runtime dependencies, no second server: the host half is
-seven plain-ESM modules shipped in this repository, and the client half is a
-single browser artifact loaded by DeepSeek Harness. The AI sidebar is optional — it uses the harness's
-model service when one is present and reports a clear "no model" state when not.
+No runtime dependencies beyond Node built-ins and the harness-provided React,
+and no second server: the host half is plain ESM under `src/host/`, and the
+browser half is built from `src/client/` into a single classic-script artifact
+(`lib/client.js`) that DeepSeek Harness loads. The AI sidebar is optional — it
+uses the harness's model service when one is present and reports a clear
+"no model" state when not.
 
 ## Destination
 
@@ -69,9 +71,9 @@ pnpm run deploy --uninstall     # remove the bundle from the profile
 ```
 
 Every form records a pnpm `link:` dependency, so the profile resolves this
-directory rather than a copy: restart `dsh web` after editing `index.js`,
-`store.js`, `tracker.js`, or `tree.js`, and reload the page after editing
-`client.js` — no reinstall step.
+directory rather than a copy: restart `dsh web` after editing anything under
+`src/host/`, and run `pnpm run build` (it rewrites `lib/client.js`) plus reload
+the page after editing `src/client/` — no reinstall step.
 `pnpm run deploy` takes `--profile <name>` and `--home <dir>` when the target is
 not the default `web` profile under `$DSH_HOME` (`~/.dsh`).
 
@@ -203,10 +205,11 @@ request/response examples, field tables, proposal rules, and error codes:
 ## Verification
 
 ```sh
-pnpm run verify    # node --check on the eight sources (seven host modules + client)
+pnpm run verify    # node --check on every source, test, and script file
+pnpm run build     # rebuild the browser artifact lib/client.js from src/client
 pnpm run static    # lint + typecheck (the commit hook)
 pnpm run test      # vitest (host + jsdom client unit suites)
-pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
+pnpm run e2e       # rebuild the artifact, then drive it over HTTP into SQLite
 pnpm run check     # the full gate, run by the push hook: static + coverage + e2e
 ```
 
@@ -239,52 +242,56 @@ pnpm run check     # the full gate, run by the push hook: static + coverage + e2
 - The database is local to this DSH home. Multiple DSH processes sharing the same
   `$DSH_HOME` should not point at the same SQLite file simultaneously.
 
-## Client source layout
+## Source layout
 
-`client.js` is deliberately one file. DSH derives a client artifact revision
-from `exports["./client"]` metadata only (mtime, ctime, size), and every chunk
-URL embeds that same revision, served as immutable. Splitting the client half
-into runtime modules (`require('./client.foo.js')`) leaves the entry file
-untouched, so the revision does not change, the chunk URL does not change, and
-the browser keeps serving the old bytes from its cache — HMR stops firing and
-even a plain reload can show stale code. The entry file must stay monolithic,
-with a 4800-line ratchet cap documented in [AGENTS.md](AGENTS.md) and
-[docs/compatibility.md](docs/compatibility.md).
+The plugin follows the reference `dsh-context` layout: code lives under `src/`,
+one concern per file, and every source file stays under 1000 lines.
 
-Organize the single file by section instead:
-
-| Section | Contents |
+| Path | Role |
 | --- | --- |
-| `DICT_EN`, `DICT_ZH`, `DICTS` | locale dictionaries registered with the Client locale service |
-| `CSS_BASE`, `CSS_HEAD`, `CSS_STATS`, `CSS_GRID`, `CSS_EMPTY`, `CSS_DIALOG`, `CSS_MISC` | stylesheet sections, joined once into the rendered `<style>` |
-| `isoToDay`/`dayToIso`/`addDays`/`buildWindow`/`flattenTree`/`visibleRows`/`collapseForLevel`/`filterTree`/`briefWindows` helpers | pure date, tree, depth-zoom, perspective-pruning, and brief-window helpers |
-| `CSS_CHAT` | stylesheet section for the AI sidebar, rendered beside `CSS` when the panel opens |
-| `CSS_TODAY` | stylesheet section for the Today page, rendered beside `CSS` when that page mounts |
-| `GanttPage`, `TimelineHeader`, `GridLines`, `GanttRow`, `TaskBar`, `MetaChips`, `BriefStrip` | Gantt page components: the tree, its timeline, the brief strip (frontier/next grid + window cards), and the row metadata chips |
-| `TaskDialog`, `SplitDialog`, `DecomposeDialog`, `ScheduleDialog`, `ApiDialog`, `ContextDialog` | the page's dialogs |
-| `ChatPanel`, `ChatProposal` | the optional right-hand AI decompose sidebar and its proposal card |
-| `TodayPage`, `TodayBlock`, `TodayNode`, `TodayGlyph`, `useTodayData` | Today page components, its sidebar glyph, and its data hook |
+| `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, model service seam |
+| `src/host/routes/` | the seventeen `/api/gantt/*` route specs split by resource; `http.js` holds shared plumbing |
+| `src/host/store/` | SQLite schema and migrations, task/tree writes, daily-brief persistence, context document |
+| `src/host/tracker/` | tracker markdown parsers and importer |
+| `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
+| `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
+| `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
+| `src/host/chat/` | AI chat: prompt/context assembly, stream assembly, proposal parsing |
+| `src/client/` | browser ESM modules: plugin entry, the two pages, brief strip, dialogs, styles |
+| `src/shared/vocabulary.js` | status vocabularies used by both halves |
+| `lib/client.js` | build output: the single browser artifact (gitignored) |
 
-If the file ever needs real splitting, bundle it back into a single `client.js`
-(for example with esbuild) so the entry artifact still changes on every edit.
+`scripts/build-client.mjs` bundles `src/client/index.js` with rolldown into
+`lib/client.js`. The artifact must stay one classic script: DSH derives its
+revision from `exports["./client"]` metadata only (mtime, ctime, size) and serves
+every chunk URL as immutable, so splitting the entry across runtime chunks would
+leave the revision unchanged and the browser on stale bytes. React stays
+external — the DSH loader injects `require` into the factory, so the platform
+React instance arrives through `require('react')` and the artifact has no
+top-level `import`/`export`. The e2e suite rebuilds the artifact and pins both
+rules; `pnpm run build` also runs from the `prepare` hook.
 
 ## Development / quality gates
 
-There is no build step: `pnpm install`, edit, run the gates.
+`pnpm install` builds the browser artifact once; after client edits rebuild with
+`pnpm run build` (the e2e gate rebuilds it too).
 
 | Command | What it enforces |
 | --- | --- |
-| `pnpm run verify` | Syntax of the eight sources (seven host modules + `client.js`) |
+| `pnpm run verify` | Syntax of every source, test, and script file |
+| `pnpm run build` | Bundles `src/client/` into `lib/client.js` (rolldown) |
 | `pnpm run lint` | oxlint |
 | `pnpm run typecheck` | TypeScript `checkJs` across host, client, and tests |
 | `pnpm run static` | lint + typecheck; what the commit hook runs (~3s) |
 | `pnpm run test` | Vitest host + jsdom client unit suites |
 | `pnpm run coverage` | Unit suites plus per-file coverage thresholds |
-| `pnpm run e2e` | Shipped client artifact against real HTTP and a real SQLite file |
+| `pnpm run e2e` | Rebuilds the client artifact, then drives it against real HTTP and a real SQLite file |
 | `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
-Coverage is 100% per-file for `store.js`, `index.js`, `tracker.js`, `tree.js`,
-`clock.js`, `daily.js`, and `chat.js`, with a documented floor for `client.js`.
+Coverage is 100% per-file for `src/host/**` and `src/shared/**`, with a
+documented floor (99/98/99/99) for `src/client/**`. The five host facades are
+pure re-export modules, so the report prints them as `0/0` (no statements) while
+the thresholds still pass.
 Commits only run the static check; `.husky/pre-push` runs the full gate before
 a push reaches `main`, and refuses a tree that is not green.
 There is no pull request step. CI re-runs the same full gate only when a release

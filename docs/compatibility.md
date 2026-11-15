@@ -5,14 +5,16 @@ evidence for each. Paths marked `dsh:` are read from the installed harness under
 `/data/app/node_modules/@deepseek-ai/`; unmarked paths are in this repository.
 Source wins over this page.
 
-Last verified: **2026-11-15** (`dsh-gantt` `1.4.0`; installed dsh
+Last verified: **2026-11-15** (`dsh-gantt` `1.5.0`; installed dsh
 `0.2.2-rc.1`, Node `v24.22.2`). The `1.2.0` Today page and tracker import were
 verified by the automated gate and the disposable-profile host acceptance pass;
 the `1.3.0` unified task tree added the schema-v3 migration and was verified by
 the automated gate plus the real-database migration check; the `1.4.0` daily
 brief, perspectives, and AI sidebar add the schema-v4 migration and the optional
-LLM seam and were verified by the same gate and acceptance procedure. The manual
-GUI checklist is in `docs/development.md` and had not been run at that date.
+LLM seam; the `1.5.0` source-layout refactor (`src/host/`, `src/client/`,
+rolldown bundle into `lib/client.js`) keeps every route and response identical
+and was verified by the same gate. The manual GUI checklist is in
+`docs/development.md` and had not been run at that date.
 
 ## 1 · Supported set
 
@@ -39,9 +41,11 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
 1. **Client chunk contract `window.__ModuleLoader__.load({ id, factory })`.**
    The loader is defined by the harness (`dsh:
    dsh-client-modules/lib/index.js:521`) and every client package uses the same
-   shape (for example `dsh: dsh-client-locale/lib/client.js:1`). `client.js:1`
-   follows it. The package must keep `exports["./client"]` pointing at the
-   bundle: the harness resolves it through `clientExportOf` (`dsh:
+   shape (for example `dsh: dsh-client-locale/lib/client.js:1`).
+   `lib/client.js:1` (the built artifact) follows it; the loader factory is
+   declared once in `scripts/build-client.mjs` around the `src/client/` bundle.
+   The package must keep `exports["./client"]` pointing at that artifact: the
+   harness resolves it through `clientExportOf` (`dsh:
    dsh-client-modules/lib/index.js:200`) and rejects a package that declares
    `dsh.client` without it.
 2. **Host JSON routes through the Connection service.**
@@ -51,7 +55,8 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `index.js` registers seventeen exact paths this way.
+   returns a `Response`. `src/host/routes/` registers seventeen exact paths this
+   way via `src/host/routes/http.js`.
 3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
    `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
    (`dsh: dsh-client-ui-sidebar/lib/client.js:223,719-720`); the layout renders
@@ -69,7 +74,8 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    dsh-client-locale/lib/types/client/index.d.ts:136-219`). The client half
    injects exactly these two services, and `package.json` `dsh.client.inject`
    names the three packages that must arrive first.
-5. **`node:sqlite`.** `store.js` opens `DatabaseSync` from `node:sqlite`; the
+5. **`node:sqlite`.** `src/host/store/db.js` opens `DatabaseSync` from
+   `node:sqlite`; the
    module is a Node built-in, so no dependency is declared. WAL and
    `foreign_keys = ON` are set on open; the file is created under
    `$DSH_HOME/gantt/tasks.db` (or `DSH_GANTT_DB`). The schema is versioned with
@@ -92,7 +98,8 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    registry `agentDefaultModel` (`dsh:
    dsh-agent-default-model/lib/types/index.d.ts:42`). Either being absent — or
    the host not exposing `ctx.get` at all — is a `503 model unavailable`, never
-   a crash. `chat.js` only joins `text-delta` chunks from the stream (`dsh:
+   a crash. `src/host/chat/service.js` only joins `text-delta` chunks from the
+   stream (`dsh:
    dsh-llm/lib/types/types.d.ts:458`, join semantics at `dsh:
    dsh-llm/lib/types/assistant-stream.d.ts:150`); it sends no `tools` (the
    harness `GenerateOptions.tools` is optional, `dsh:
@@ -102,31 +109,33 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    by the model.
 9. **Task-day clock.** This deployment's host process runs in UTC
    (`/etc/timezone` `Etc/UTC`), while the tracker's plan dates and the 08:00
-   recompute are the user's wall clock. `clock.js` resolves "today" and the
+   recompute are the user's wall clock. `src/host/clock.js` resolves "today" and the
    next 08:00 with `Intl.DateTimeFormat` in an explicit IANA zone:
    `DSH_GANTT_TZ` when it names a usable zone, else `Asia/Shanghai`. An invalid
    or blank override falls back to the default instead of failing reads, and
-   the default zone has no DST. The helpers are re-exported through `tree.js`,
-   `daily.js`, and `store.js`, so every `today` field, default task date,
+   the default zone has no DST. The helpers are re-exported through
+   `src/host/tree.js`, `src/host/daily.js`, and `src/host/store.js`, so every
+   `today` field, default task date,
    `持续` end, and the scheduler agree with the browser rather than with the
    host clock.
 
 ## 3 · Rules
 
-1. **`client.js` stays a single file.** DSH derives the client artifact
-   revision from `exports["./client"]` metadata only — mtime, ctime, size
-   (`dsh: dsh-client-modules/lib/index.js:222`) — and serves chunks with
-   `public, max-age=31536000, immutable` (`dsh:
-   dsh-client-modules/lib/index.js:188`). Splitting logic into
-   `require('./client.foo.js')` chunks leaves the entry file's metadata
-   unchanged, so the revision and chunk URLs do not change and the browser keeps
-   the old bytes; even a plain reload can show stale code. Keep the file
-   monolithic by section (`DICT_*`, `CSS_*`, helpers, components) and, if real
-   splitting is ever needed, bundle back into one `client.js`. The ratchet cap
-   is 4800 lines (`AGENTS.md`; 2300 → 2700 when the Today page landed, 2700 →
-   3600 when the unified tree, decompose, schedule, and context dialogs landed,
-   3600 → 4800 for the daily-brief strip, perspectives, and the AI sidebar —
-   the reasons and the revisit trigger are recorded in `docs/development.md`).
+1. **The client artifact stays one file; its sources are modules.** DSH derives
+   the client artifact revision from `exports["./client"]` metadata only —
+   mtime, ctime, size (`dsh: dsh-client-modules/lib/index.js:222`) — and serves
+   chunks with `public, max-age=31536000, immutable` (`dsh:
+   dsh-client-modules/lib/index.js:188`). Splitting the *entry* into
+   runtime-loaded chunks would leave the revision unchanged and the browser on
+   old bytes. The plugin therefore keeps one entry artifact, `lib/client.js`,
+   and gets small files on the source side instead: `scripts/build-client.mjs`
+   (rolldown) bundles `src/client/` into that single classic script, React left
+   external for the loader-injected `require`. The artifact is gitignored build
+   output: `prepare`, `pnpm run build`, `pnpm run deploy`, and `pnpm run e2e`
+   all rebuild it, and the e2e artifact spec pins the single-loader /
+   no-module-syntax contract. The former 4800-line ratchet cap is retired in
+   favour of the <1000-line per-file rule (decision in
+   `docs/development.md`).
 2. **One SQLite writer per database file.** One `GanttStore` is opened per DSH
    process in `apply()` and closed through `ctx.effect`. WAL allows concurrent
    readers, not concurrent writers: two DSH processes sharing one `$DSH_HOME`
@@ -294,7 +303,11 @@ read.
 
 ## 6 · Verification
 
-- **Check — syntax:** `pnpm run verify` (`node --check` on the eight sources).
+- **Check — syntax:** `pnpm run verify` (`node --check` on every source, test,
+  and script file).
+- **Check — build:** `pnpm run build` produces `lib/client.js`; the e2e suite
+  rebuilds it and asserts the single-loader / no-top-level-module-syntax
+  artifact contract.
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).

@@ -24,8 +24,9 @@ toolchain, and verification in depth.
 `main` is the only long-lived branch and the working branch — there is no pull
 request step. `main` blocks force-pushes and deletion.
 
-1. Edit the source. No build step: `index.js`, `store.js`, `tracker.js`,
-   `tree.js`, `clock.js`, `daily.js`, `chat.js`, and `client.js` are served as-is.
+1. Edit the source under `src/host/` or `src/client/`. Host modules run as-is
+   from the checkout; after `src/client/` edits run `pnpm run build` (rolldown
+   writes the gitignored `lib/client.js`, the single browser artifact).
 2. `pnpm run static` runs on every commit (lint + typecheck, ~3 s).
 3. `pnpm run check` runs before a push reaches the remote (`pre-push` hook):
    lint, typecheck, unit coverage thresholds, and the end-to-end suite in
@@ -59,10 +60,12 @@ squash-merged under the same gate.
   report is a stored snapshot refreshed by recompute, the AI path is an optional
   read-only model call that never writes the tree, and "today"/08:00 resolve in
   the task-day zone (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host zone.
-- **i18n.** `DICT_EN` and `DICT_ZH` in `client.js` must contain the same keys
-  with no unused entries.
-- **File size.** Every source and test file stays under 1000 lines; `client.js`
-  has the documented 4800-line ratchet cap. Do not add a bundler or a `dist/`.
+- **i18n.** `src/client/i18n/en.js` and `src/client/i18n/zh.js` must contain the
+  same keys with no unused entries.
+- **File size.** Every source and test file stays under 1000 lines; split by
+  concern when a file grows. The browser artifact is produced by the existing
+  `scripts/build-client.mjs` (rolldown) — `lib/` is build output and stays
+  gitignored.
 - **Docs.** Keep `docs/` lowercase, written in English, with valid relative
   links. There is no `Docs/` directory.
 

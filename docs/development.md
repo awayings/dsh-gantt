@@ -23,9 +23,9 @@ pnpm install
 pnpm run verify
 ```
 
-`pnpm install` also runs `husky` and installs both hooks: `pre-commit` runs
-`pnpm run static` (lint + typecheck), and `pre-push` runs the full gate before a
-push to `main`.
+`pnpm install` also runs `husky` (installs both hooks: `pre-commit` runs
+`pnpm run static` — lint + typecheck — and `pre-push` runs the full gate) and the
+`prepare` hook, which bundles the browser half into `lib/client.js` once.
 
 ## Toolchain
 
@@ -36,36 +36,57 @@ push to `main`.
 | [vitest](https://vitest.dev/) `^5.1.0` | Host (Node), client (jsdom), and end-to-end (jsdom + real HTTP) projects | `vitest.config.ts` |
 | `@vitest/coverage-v8` | Per-file coverage thresholds | `vitest.config.ts` |
 | husky `^9.1.7` | Runs the commit and push gates | `.husky/pre-commit`, `.husky/pre-push` |
-| jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
+| jsdom `^30.1.3` | Browser environment for the `src/client/` modules | `tests/client/setup.js` |
+| [rolldown](https://rolldown.rs/) `1.2.19` | Bundles `src/client/` into the single `lib/client.js` artifact | `scripts/build-client.mjs` |
 
-There is **no build step**. All eight source files are shipped as-is: the seven
-host modules `index.js`, `store.js`, `tracker.js`, `tree.js`, `clock.js`,
-`daily.js`, and `chat.js` as ESM, plus `client.js` as the client artifact loaded
-by DSH.
+The layout follows the reference plugin `dsh-context`: code under `src/`, one
+concern per file, every source file under 1000 lines. Host modules are plain ESM
+run in the `dsh web` process; the browser half is ESM bundled into one classic
+script because the DSH client loader fetches a single artifact per package.
 
-| File | Half | Role |
+| Path | Half | Role |
 | --- | --- | --- |
-| `index.js` | host | Registers the seventeen `/api/gantt/*` routes and wires the optional model services |
-| `store.js` | host | SQLite schema/migrations, task/tree writes, brief persistence, the 08:00 scheduler |
-| `tracker.js` | host | Task-tracker markdown parsers and importer |
-| `tree.js` | host | Pure tree helpers: numbering, rollups, frontier/next, links, context markdown |
-| `clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
-| `daily.js` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
-| `chat.js` | host | AI chat: prompt/context assembly, stream assembly, proposal parsing |
-| `client.js` | client | Single classic-script artifact: both pages, brief strip, perspectives, AI sidebar |
+| `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, optional model service seam |
+| `src/host/routes/` | host | The seventeen `/api/gantt/*` route specs split by resource; `http.js` is shared plumbing |
+| `src/host/store/` | host | SQLite schema/migrations, task/tree writes, brief persistence, context document, 08:00 scheduler |
+| `src/host/tracker/` | host | Task-tracker markdown parsers and importer |
+| `src/host/tree/` | host | Pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
+| `src/host/clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
+| `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
+| `src/host/chat/` | host | AI chat: prompt/context assembly, stream assembly, proposal parsing |
+| `src/client/` | client | Plugin entry, the two pages, brief strip, dialogs, and stylesheet modules (ESM) |
+| `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
+| `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
+
+The five `src/host/` facades (`store.js`, `tree.js`, `tracker.js`, `daily.js`,
+`chat.js`) only re-export, so tests and the entry keep a stable import surface
+while the implementation stays split by concern.
+
+### Build
+
+`pnpm run build` runs `scripts/build-client.mjs`: rolldown bundles
+`src/client/index.js` as CommonJS with `react` external, then wraps the result
+in the loader factory the harness calls. The output must stay one classic
+script — DSH derives the artifact revision from `exports["./client"]` metadata
+only (mtime, ctime, size) and serves chunk URLs as immutable, so runtime-split
+chunks would keep the old revision and stale bytes. `react` arrives through the
+factory `require`, so leave it external. The artifact is gitignored; the e2e
+gate rebuilds it before driving it, and `pnpm run deploy` builds it before
+linking the checkout.
 
 ## Quality gate commands
 
 | Command | What it runs | What it enforces |
 | --- | --- | --- |
-| `pnpm run verify` | `node --check` on the eight sources (seven host modules + `client.js`) | Syntax only; the fastest smoke check. |
+| `pnpm run verify` | `node --check` on every source, test, and script file | Syntax only; the fastest smoke check. |
+| `pnpm run build` | `scripts/build-client.mjs` (rolldown) | Rebuilds `lib/client.js` from `src/client/`; required after client edits. |
 | `pnpm run lint` | `oxlint` | Lint rules and unused code. |
 | `pnpm run lint:fix` | `oxlint --fix` | Auto-fixes what it can; review the diff afterwards. |
 | `pnpm run typecheck` | `tsc --noEmit` against all three tsconfigs | Host under `strict`; client and tests under `checkJs` with looser settings. |
 | `pnpm run static` | `lint` then `typecheck` | The commit gate: static analysis only, ~3 seconds. |
 | `pnpm run test` | `vitest run --project host --project client` | Unit behavior in Node and jsdom. |
 | `pnpm run coverage` | `vitest run --project host --project client --coverage` | Unit behavior plus per-file thresholds. |
-| `pnpm run e2e` | `vitest run --project e2e` | The shipped client artifact, real HTTP, the real route handlers, and a real SQLite file. |
+| `pnpm run e2e` | rebuild + `vitest run --project e2e` | The shipped client artifact, real HTTP, the real route handlers, and a real SQLite file. |
 | `pnpm run check` | lint + typecheck + coverage + e2e in parallel | The full gate, run by `.husky/pre-push` before a push to `main`. |
 
 The gates are deliberately split. Committing runs `pnpm run static` from
@@ -94,12 +115,13 @@ again in CI before a release is published.
 
 Coverage policy:
 
-- `store.js`, `index.js`, `tracker.js`, `tree.js`, `clock.js`, `daily.js`, and
-  `chat.js`: **100%** statements, branches, functions, lines.
-- `client.js`: ratcheted floor — 99% statements, 98% branches, 99% functions,
-  99% lines. The unreachable UI branches are listed in the coverage output and
-  must not regress; the measured values are printed by `pnpm run coverage` and
-  only ratchet up.
+- `src/host/**` and `src/shared/**`: **100%** statements, branches, functions,
+  lines, enforced per file. The five re-export facades count as `0/0`
+  statements in the report, so they print as `0%` rows while the threshold run
+  still passes.
+- `src/client/**`: ratcheted floor per file — 99% statements, 98% branches, 99%
+  functions, 99% lines. The measured values are printed by `pnpm run coverage`
+  and only ratchet up.
 - Never weaken a threshold without recording the decision here and in the
   review that changes it.
 
@@ -140,15 +162,26 @@ Recorded decisions:
   artifact (bundler output into `client.js`, so the entry metadata still
   changes) or moving one surface (the Today page or the AI sidebar) out of the
   page, not an ever-growing monolith.
+- **2026-11-15 — the file-size rule wins over the single-file client; the
+  ratchet cap is retired.** Root modules were 348–996 lines and the client
+  artifact 4140, which made every small change read a whole file. The plugin now
+  follows the reference `dsh-context` layout: `src/host/` and `src/client/` hold
+  one concern per file (<1000 lines each), and `scripts/build-client.mjs`
+  (rolldown) emits the single `lib/client.js` artifact. The artifact is still
+  one classic script, so the DSH revision contract in
+  `docs/compatibility.md` §3.1 is unchanged; `lib/` is gitignored build output,
+  `prepare`/`deploy`/`e2e` rebuild it, and `pnpm run verify` syntax-checks every
+  source file instead of a fixed list. This intentionally supersedes the
+  earlier "no build step / 4800-line cap" decisions.
 
 ## Test layout
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `store.js`, `tree.js`, `clock.js`, and `daily.js`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
-| `tests/host/` | `host` (Node) | `index.js` and `chat.js`: all seventeen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, `decompose`/`schedule`/`context`, the day/plan routes, chat request validation, model streaming assembly, proposal parsing, and the 400/502/503 mapping |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, and `src/host/chat/`: all seventeen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, `decompose`/`schedule`/`context`, the day/plan routes, chat request validation, model streaming assembly, proposal parsing, and the 400/502/503 mapping |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `client.js`: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the AI sidebar (focus, send, proposal, apply, no-model banner), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the AI sidebar (focus, send, proposal, apply, no-model banner), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, chat answering `503` without a model, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures, a fake host context for the `host` project, and a fake `llm` stream (`tests/helpers/llm.js`) for chat tests |
 
@@ -159,16 +192,17 @@ New in the daily-brief / AI-sidebar / clock round: `tests/store/clock.spec.js`,
 page, today, and fixtures specs gained the brief strip, perspective, and
 Today-section cases.
 
-`tests/client/setup.js` boots jsdom, stubs `window.__ModuleLoader__` so the
-factory can be called with the real React, and resets the document between
-specs. The client suite has no network access; fetch is mocked per spec.
+`tests/client/setup.js` boots jsdom and resets the document between specs; the
+harness imports the plugin from `src/client/index.js` directly. The client
+suite has no network access; fetch is mocked per spec.
 
-`tests/e2e/setup.js` uses the same loader stub, but the suite is a real
-integration: `tests/e2e/server.js` boots the host half against a temporary
-database file behind a real `node:http` server, and the shipped `client.js`
-requests it over the wire. `tests/e2e/artifact.spec.js` pins the single-file
-classic-script contract that DSH's cache revision depends on. Keep this suite
-small — exhaustive cases belong in the unit projects.
+`tests/e2e/setup.js` captures the built artifact through the
+`window.__ModuleLoader__` stub, and the suite is a real integration:
+`tests/e2e/server.js` boots the host half against a temporary database file
+behind a real `node:http` server, and the shipped `lib/client.js` requests it
+over the wire. `tests/e2e/artifact.spec.js` pins the single-file classic-script
+contract that DSH's cache revision depends on. Keep this suite small —
+exhaustive cases belong in the unit projects.
 
 Run a single area or case while iterating:
 
@@ -203,8 +237,9 @@ and the next 08:00 in an explicit IANA zone:
 
 - `DSH_GANTT_TZ` overrides the zone; unset/blank uses `Asia/Shanghai`.
 - An invalid override falls back to the default instead of failing reads.
-- `todayIso`/`nextEightAm` are re-exported through `tree.js`, `daily.js`, and
-  `store.js`, so response `today` fields, default task dates, `持续` end dates,
+- `todayIso`/`nextEightAm` are re-exported through `src/host/tree.js`,
+  `src/host/daily.js`, and `src/host/store.js`, so response `today` fields,
+  default task dates, `持续` end dates,
   and the brief scheduler all agree with the browser. The default zone has no
   DST.
 
@@ -298,13 +333,13 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 1. `pnpm install`.
 2. `pnpm run deploy` links this checkout into the target DSH profile and
    verifies the composed tree (see [Install a checkout](#install-a-checkout)).
-3. Edit `index.js` / `store.js` / `tracker.js` / `tree.js` / `clock.js` /
-   `daily.js` / `chat.js`: these run in the `dsh web` server process and are
+3. Edit `src/host/`: these modules run in the `dsh web` server process and are
    re-read on restart, so restart `dsh web` after host changes. The daily-brief
    scheduler restarts with the process.
-4. Edit `client.js`: the file metadata changes, so DSH derives a new client
-   artifact revision and a page reload picks up the new bytes. A page refresh
-   is enough; no build is involved.
+4. Edit `src/client/`, then run `pnpm run build`: the artifact file changes, so
+   DSH derives a new client artifact revision and a page reload picks up the new
+   bytes. Forgetting the build serves the previous artifact — run
+   `pnpm run build` whenever `git status` shows `src/client/` edits.
 5. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
    commit and push. The commit hook runs the static check; the push hook runs
    the full gate before anything reaches `main`.
@@ -336,10 +371,11 @@ agent session must run it with full filesystem access.
 
 Because the dependency is a link, the profile never holds a copy:
 
-- `index.js`, `store.js`, `tracker.js`, `tree.js`, `clock.js`, `daily.js`, and
-  `chat.js` are re-read when `dsh web` starts — restart after editing them.
-- `client.js` is served from this directory on every page load and its revision
-  follows the file metadata, so a reload serves the new bytes.
+- `src/host/` modules are re-read when `dsh web` starts — restart after editing
+  them.
+- `lib/client.js` is served from this directory on every page load and its
+  revision follows the file metadata; rebuild (`pnpm run build`) and reload to
+  serve new browser bytes.
 - No edit requires a reinstall. Run `pnpm run deploy` again only when the
   profile lost the link (profile reset, DSH reinstall, or another checkout won
   the dependency); `pnpm run deploy --check` reports which part is missing.
@@ -349,8 +385,9 @@ Because the dependency is a link, the profile never holds a copy:
 ### Automated
 
 ```sh
-pnpm run verify
-pnpm run check     # lint + typecheck + unit coverage + e2e
+pnpm run verify    # syntax-check every source, test, and script
+pnpm run build     # rebuild lib/client.js from src/client/
+pnpm run check     # lint + typecheck + unit coverage + e2e (rebuilds the artifact)
 ```
 
 ### Install and host acceptance (disposable profile)
@@ -430,8 +467,9 @@ Registration proves composition, not rendering.
 
 ### Manual GUI checklist
 
-jsdom tests prove behavior; they do not prove paint or layout. Before shipping,
-open the page in the connected Web GUI and check:
+jsdom tests prove behavior; they do not prove paint or layout. The browser half
+is a build output since 1.5.0: run `pnpm run build` and reload before this pass.
+Open the page in the connected Web GUI and check:
 
 - [ ] The sidebar icon appears with the localized label and opens the page in
       the center column, like the built-in pages.
@@ -448,6 +486,11 @@ open the page in the connected Web GUI and check:
       time, role badge, task (`ref title`), or `未填`. Column alignment is
       independent of title length at desktop width and the cards stack at
       ~390 px; clicking a pick reveals that task.
+- [ ] The brief strip is an inset card with the frontier column/chevron in the
+      brand accent and the 该动 column/chevron in the success colour, clearly
+      separated from the plain task list below; the fold chevron collapses it to
+      a compact `前沿 n · 该动 m · 今天 filled/total` summary (the grid and window
+      cards hide) and expands back without breaking the three-column alignment.
 - [ ] The perspective switch offers 全部 / 待做 / 已完成: 待做 keeps only the
       frontier/next/daily-brief paths to the track roots and hides completed
       siblings, 已完成 keeps done nodes with their ancestors, and each view
@@ -578,18 +621,18 @@ Run `pnpm run deploy --check`: it names the part that is missing or stale — th
 recorded `link:` dependency, the `node_modules` symlink, the bundle selection,
 or the composition itself. `pnpm run deploy` repairs all four. If the profile
 is correct but the page still has no sidebar entry, reload the page once and
-then restart `dsh web`: a running process serves the linked `client.js` on
-reload, but a host-side change (`index.js`, `store.js`, `tracker.js`,
-`tree.js`, `clock.js`, `daily.js`, `chat.js`, or the bundle patch) needs the
-restart.
+then restart `dsh web`: a running process serves the linked `lib/client.js`
+on reload, but a host-side change under `src/host/` (or the bundle patch) needs the
+restart. After editing `src/client/`, run `pnpm run build` before reloading.
 
-### No build, no dist
+### The page shows old client code
 
-If a page shows old client code after an edit, confirm the profile still links
-this checkout (`pnpm run deploy --check`) and reload the page; the served
-artifact revision follows the file metadata, so a linked install serves the
-edited bytes without a reinstall. Adding a bundler or build directory is out of
-scope; the single-file client is deliberate (`docs/compatibility.md`).
+The browser half is a build output: run `pnpm run build` from the checkout, then
+reload. If it is still stale, confirm the profile links this checkout
+(`pnpm run deploy --check`) and that `lib/client.js` exists — the served
+artifact revision follows that file's metadata, so a rebuilt, linked artifact is
+served without a reinstall. `lib/` is gitignored, so a fresh clone needs one
+`pnpm run build` (or `pnpm install`, whose `prepare` hook builds it).
 
 ### `main` is protected against force-pushes and deletion
 

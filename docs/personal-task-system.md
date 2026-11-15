@@ -378,7 +378,7 @@ A stored report is a **morning snapshot**: until the next recompute (or the next
 08:00 run), it describes the tree as it was when generated, so status edits made
 later in the day do not move its picks. The host recomputes today's report every
 08:00 **in the task-day zone** with an in-process `setTimeout` (unref'ed,
-disposed with the plugin). The zone resolves through `clock.js`: `DSH_GANTT_TZ`
+disposed with the plugin). The zone resolves through `src/host/clock.js`: `DSH_GANTT_TZ`
 when it names a usable IANA zone, else `Asia/Shanghai`; the host process itself
 runs in UTC and the default zone has no DST. "Today" in the report is the same
 task-day date, not the host's UTC date. The timer only fires while the host
