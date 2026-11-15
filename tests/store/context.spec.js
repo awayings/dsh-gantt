@@ -62,6 +62,10 @@ describe('contextDocument markdown', () => {
       '## 完整性提示',
       '- inspiration-missing: 2026-11-15|21:00|1',
       '',
+      '## 今日窗口 · 2026-11-15',
+      '- 09:00-17:00 core：投资系统 node:1.8.1 S2 读数',
+      '- 21:00-22:00 definition：生活程序 node:2.1 生活节点',
+      '',
     ].join('\n'))
   })
 
@@ -100,7 +104,7 @@ describe('contextDocument markdown', () => {
     expect(document.counts).toEqual({ tracks: 1, nodes: 1, tasks: 0, blocks: 2 })
     expect(document.markdown).toContain('## 2. 生活程序（生活 · 进行）')
     expect(document.markdown).toContain('生活节点')
-    expect(document.markdown).not.toContain('投资系统')
+    expect(document.markdown).not.toContain('## 1. 投资系统')
     const flat = []
     const walk = (node) => { flat.push(node); node.children.forEach(walk) }
     store.snapshot().tasks.forEach(walk)

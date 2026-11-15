@@ -66,10 +66,10 @@ function storedRow(target, ref) {
 }
 
 describe('fresh database', () => {
-  it('starts at schema v3 with the twelve task columns and the unique ref index', () => {
+  it('starts at schema v4 with the twelve task columns and the unique ref index', () => {
     store = new GanttStore(':memory:')
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
-    expect(SCHEMA_VERSION).toBe(3)
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(3)
     const columns = /** @type {{ name: string }[]} */ (store.db.prepare('PRAGMA table_info(tasks)').all()).map(row => row.name)
     expect(columns).toEqual(expect.arrayContaining([
       'kind', 'ref', 'state', 'lane', 'dep', 'done_when', 'landing', 'estimate', 'category', 'inspiration', 'links', 'source',
@@ -84,19 +84,19 @@ describe('fresh database', () => {
 })
 
 describe('v1-shaped empty database', () => {
-  it('adds the new columns, sets v3, and keeps the existing rows usable', () => {
+  it('adds the new columns, sets the current version, and keeps the existing rows usable', () => {
     const file = makeV1Database(1)
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     const legacy = store.getRow('legacy')
     expect(legacy).toMatchObject({ title: 'Legacy task', kind: 'task', ref: '', source: 'manual', links: [] })
     expect(store.create({ title: 'After migration' }).number).toBe('2')
   })
 
-  it('repairs missing columns even when the version already says v3', () => {
+  it('repairs missing columns even when the version already says the current one', () => {
     const file = makeV1Database(3)
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(store.getRow('legacy').kind).toBe('task')
     expect(store.count()).toBe(1)
   })
@@ -105,7 +105,7 @@ describe('v1-shaped empty database', () => {
 describe('v2 database fixture', () => {
   it('migrates a v2 snapshot into the unified tree: 2 roots and 4 nodes', () => {
     store = new GanttStore(makeV2Database())
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     const snapshot = store.snapshot()
     expect(snapshot.tasks).toHaveLength(2)
     expect(snapshot.tasks.map(node => node.ref)).toEqual(['track:1', 'track:2'])

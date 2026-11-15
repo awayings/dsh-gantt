@@ -16,9 +16,9 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the fourteen documented endpoints with their methods', () => {
+  it('registers the seventeen documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(14)
+    expect(routes.size).toBe(17)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
@@ -28,16 +28,18 @@ describe('route registration', () => {
     expect(routes.get(ROUTES.meta).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.day).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.context).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.brief).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.briefCompute).methods).toEqual(['POST'])
     for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed,
-      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule]) {
+      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule, ROUTES.briefCompute, ROUTES.chat]) {
       expect(routes.get(writePath).methods).toEqual(['POST'])
     }
   })
 
-  it('registers a store disposer through ctx.effect', () => {
+  it('registers the store and scheduler disposers through ctx.effect', () => {
     const { disposers } = start()
-    expect(disposers).toHaveLength(1)
-    expect(typeof disposers[0]).toBe('function')
+    expect(disposers).toHaveLength(2)
+    expect(disposers.every(dispose => typeof dispose === 'function')).toBe(true)
   })
 })
 
@@ -63,6 +65,17 @@ describe('GET /api/gantt/tree', () => {
         progress: 0,
       },
       brief: { pending: 0, frontier: [], next: [], lanes: [] },
+      dailyBrief: {
+        date: todayIso(),
+        generatedAt: expect.any(String),
+        source: 'auto',
+        dayKind: 'unknown',
+        slots: [],
+        items: [],
+        tracks: [],
+        unfilled: [],
+        notes: ['no plan blocks; no template for unknown day kind'],
+      },
     })
   })
 
@@ -106,10 +119,10 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.engine).toBe('node:sqlite')
     expect(payload.kinds).toEqual(['track', 'node', 'task'])
     expect(payload.linkTypes).toEqual(['memory', 'file', 'url', 'task', 'note'])
-    expect(payload.endpoints).toHaveLength(14)
+    expect(payload.endpoints).toHaveLength(17)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET',
+      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST', 'POST',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

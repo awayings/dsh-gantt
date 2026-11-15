@@ -24,7 +24,7 @@ describe('schema v3', () => {
     ).map(row => row.name)
     expect(indexes).toEqual(expect.arrayContaining(['idx_plan_blocks_date', 'idx_tasks_ref']))
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
-    expect(SCHEMA_VERSION).toBe(3)
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(3)
     expect(PLAN_STATUSES).toEqual(['todo', 'in_progress', 'done', 'skipped'])
   })
 })

@@ -117,6 +117,17 @@ describe('meta and snapshot', () => {
         progress: 0,
       },
       brief: { pending: 0, frontier: [], next: [], lanes: [] },
+      dailyBrief: {
+        date: todayIso(),
+        generatedAt: expect.any(String),
+        source: 'auto',
+        dayKind: 'unknown',
+        slots: [],
+        items: [],
+        tracks: [],
+        unfilled: [],
+        notes: ['no plan blocks; no template for unknown day kind'],
+      },
     })
   })
 

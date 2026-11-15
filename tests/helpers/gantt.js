@@ -112,6 +112,13 @@ export function expectGanttError(run, message, status = 400) {
   expect(caught.status).toBe(status)
 }
 
+/** Insert or replace one persisted daily-brief report row verbatim. */
+export function insertDailyReport(store, report) {
+  store.db.prepare(`INSERT INTO daily_briefs (plan_date, generated_at, source, report)
+    VALUES (?, ?, ?, ?) ON CONFLICT(plan_date) DO UPDATE SET generated_at = excluded.generated_at,
+    source = excluded.source, report = excluded.report`).run(report.date, report.generatedAt, report.source, JSON.stringify(report))
+}
+
 /** Assert that a stored timestamp is a canonical ISO-8601 UTC string. */
 export function expectIsoTimestamp(value) {
   expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)

@@ -1,7 +1,12 @@
 import { apply } from '../../index.js'
 
-/** Build a fake plugin context that captures registered routes and disposers. */
-export function createContext() {
+/**
+ * Build a fake plugin context that captures registered routes and disposers.
+ * `services` backs `ctx.get(name)` so optional seams (llm, agentDefaultModel)
+ * can be supplied per test.
+ * @param {Record<string, unknown>} [services]
+ */
+export function createContext(services = {}) {
   const routes = new Map()
   const disposers = []
   const ctx = {
@@ -9,6 +14,9 @@ export function createContext() {
       const dispose = fn()
       disposers.push(dispose)
       return dispose
+    },
+    get(name) {
+      return services[name]
     },
     connection: {
       fetch: {
@@ -27,11 +35,11 @@ export function createContext() {
  * The env override is applied only while `apply` constructs the store so the
  * real database location is never touched.
  */
-export function bootPlugin() {
+export function bootPlugin(options = {}) {
   const saved = process.env.DSH_GANTT_DB
   process.env.DSH_GANTT_DB = ':memory:'
   try {
-    const { ctx, routes, disposers } = createContext()
+    const { ctx, routes, disposers } = createContext(options.services)
     apply(ctx)
     return { routes, disposers }
   } finally {
@@ -81,4 +89,7 @@ export const ROUTES = {
   decompose: '/api/gantt/task/decompose',
   schedule: '/api/gantt/task/schedule',
   context: '/api/gantt/context',
+  brief: '/api/gantt/brief',
+  briefCompute: '/api/gantt/brief/compute',
+  chat: '/api/gantt/chat',
 }

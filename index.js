@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { GanttError, GanttStore, resolveDatabasePath, todayIso } from './store.js'
 import { importTaskTracker, resolveTrackerDir } from './tracker.js'
+import { ChatError, runChat } from './chat.js'
 
 /**
  * @typedef {import('./store.js').SplitChild} SplitChild
@@ -29,6 +30,7 @@ import { importTaskTracker, resolveTrackerDir } from './tracker.js'
  * @typedef {object} GanttContext
  * @property {{ fetch: { register: (route: GanttRoute) => unknown } }} connection
  * @property {(effect: () => () => void, hint?: string) => unknown} effect
+ * @property {(name: string) => unknown} [get]
  */
 
 export const name = 'gantt'
@@ -106,6 +108,21 @@ const ENDPOINTS = [
     path: '/api/gantt/context',
     description: 'Export the unified tree and one day plan as markdown. Query: date?, root?, limit?.',
   },
+  {
+    method: 'GET',
+    path: '/api/gantt/brief',
+    description: 'Read the daily 该动 brief for one date. Query: date=YYYY-MM-DD (defaults to today).',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/brief/compute',
+    description: 'Recompute and persist the daily 该动 brief. Body: { date? }.',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/chat',
+    description: 'Chat with the configured model to decompose a task. Body: { message, taskId?, history? }.',
+  },
 ]
 
 /**
@@ -149,6 +166,7 @@ async function readBody(request) {
 export function apply(ctx) {
   const store = new GanttStore(resolveDatabasePath())
   ctx.effect(() => () => store.close(), 'gantt: close SQLite database')
+  ctx.effect(() => store.startScheduler(), 'gantt: recompute the daily brief at 08:00')
 
   /**
    * @param {'GET' | 'POST'} method
@@ -165,7 +183,7 @@ export function apply(ctx) {
         try {
           return await handler(request)
         } catch (error) {
-          const status = error instanceof GanttError ? error.status : 500
+          const status = error instanceof GanttError || error instanceof ChatError ? error.status : 500
           const message = error instanceof Error ? error.message : String(error)
           return json({ ok: false, error: message }, status)
         }
@@ -291,5 +309,40 @@ export function apply(ctx) {
       limit: limit === null || limit.trim() === '' ? undefined : Number(limit),
     })
     return json(result)
+  })
+
+  route('GET', '/api/gantt/brief', async (request) => {
+    const date = new URL(request.url, 'http://localhost').searchParams.get('date')
+    const target = date === null || date.trim() === '' ? todayIso() : date.trim()
+    const result = store.dailyBrief(target)
+    return json({ ok: true, today: todayIso(), date: target, brief: result.report, cached: result.cached })
+  })
+
+  route('POST', '/api/gantt/brief/compute', async (request) => {
+    const body = await readBody(request)
+    const target = body.date === undefined ? todayIso() : /** @type {string} */ (body.date)
+    const brief = store.computeDailyBrief(target, { source: 'manual' })
+    return json({ ok: true, today: todayIso(), date: brief.date, brief, cached: false })
+  })
+
+  route('POST', '/api/gantt/chat', async (request) => {
+    const body = await readBody(request)
+    /** @param {string} name @returns {unknown} */
+    const service = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined)
+    const defaults = /** @type {any} */ (service('agentDefaultModel'))
+    const llm = /** @type {any} */ (service('llm'))
+    const context = store.contextDocument({ limit: 12000 })
+    const brief = store.dailyBrief(todayIso()).report
+    const result = await runChat({
+      llm,
+      selection: typeof defaults?.currentSelection === 'function' ? defaults.currentSelection() : undefined,
+      message: /** @type {string} */ (body.message),
+      history: /** @type {any} */ (body.history),
+      taskId: /** @type {string | undefined} */ (body.taskId),
+      context: { markdown: context.markdown, tasks: store.tree() },
+      dailyBrief: brief,
+      signal: request.signal,
+    })
+    return json({ ok: true, ...result })
   })
 }

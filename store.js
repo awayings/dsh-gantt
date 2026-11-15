@@ -4,6 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import {
+  appendBriefSection,
+  computeDailyBrief as computeDailyReport,
+  nextEightAm,
+  parseDailyReport,
+} from './daily.js'
+import {
   CONTEXT_DEFAULT_LIMIT,
   CONTEXT_MAX_LIMIT,
   CONTEXT_MIN_LIMIT,
@@ -36,10 +42,11 @@ import {
 /** @typedef {import('./tree.js').Brief} Brief */
 /** @typedef {import('./tree.js').SnapshotTrack} SnapshotTrack */
 /** @typedef {import('./tree.js').SnapshotNode} SnapshotNode */
+/** @typedef {import('./daily.js').DailyReport} DailyReport */
 
 /** @type {TaskStatus[]} */
 export const STATUSES = ['todo', 'in_progress', 'blocked', 'done']
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 /** @type {PlanStatus[]} */
 export const PLAN_STATUSES = ['todo', 'in_progress', 'done', 'skipped']
 const PLAN_SLOTS = ['morning', 'daytime', 'evening', 'other']
@@ -55,20 +62,7 @@ const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description, statu
 const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, source = ?, updated_at = ? WHERE id = ?'
 const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, updated_at = ? WHERE id = ?'
 /** @type {Record<string, string>} */
-const TASK_EXTRA_COLUMNS = {
-  kind: "TEXT NOT NULL DEFAULT 'task'",
-  ref: "TEXT NOT NULL DEFAULT ''",
-  state: "TEXT NOT NULL DEFAULT ''",
-  lane: "TEXT NOT NULL DEFAULT ''",
-  dep: "TEXT NOT NULL DEFAULT ''",
-  done_when: "TEXT NOT NULL DEFAULT ''",
-  landing: "TEXT NOT NULL DEFAULT ''",
-  estimate: "TEXT NOT NULL DEFAULT ''",
-  category: "TEXT NOT NULL DEFAULT ''",
-  inspiration: "TEXT NOT NULL DEFAULT ''",
-  links: "TEXT NOT NULL DEFAULT '[]'",
-  source: "TEXT NOT NULL DEFAULT 'manual'",
-}
+const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'" }
 const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -101,26 +95,18 @@ const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS plan_blocks (id TEXT PRIMARY KEY, plan_date TEXT NOT NULL, start_time TEXT NOT NULL DEFAULT '', end_time TEXT NOT NULL DEFAULT '', slot TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', title TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', landing TEXT NOT NULL DEFAULT '', estimate TEXT NOT NULL DEFAULT '', inspiration TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done', 'skipped')), notes TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'schedule', source_ref TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_plan_blocks_date ON plan_blocks(plan_date, sort_order, start_time);
   CREATE TABLE IF NOT EXISTS day_plans (plan_date TEXT PRIMARY KEY, weekday TEXT NOT NULL DEFAULT '', day_kind TEXT NOT NULL DEFAULT '', market_open INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', core_goal TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS daily_briefs (plan_date TEXT PRIMARY KEY, generated_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'auto', report TEXT NOT NULL);
 `
 
-/**
- * Demo tasks inserted by `seed()`: parent index, title, description, status,
- * progress, start offset (days from today), end offset, sibling order.
- * @type {[number | null, string, string, TaskStatus, number, number, number, number][]}
- */
+/** Demo tasks for `seed()`: parent index, title, description, status, progress, start offset, end offset, sibling order.
+ * @type {[number | null, string, string, TaskStatus, number, number, number, number][]} */
 const SEED_TASKS = [
-  [null, 'DSH 插件发布', '从数据层到界面的端到端交付。', 'in_progress', 45, -10, 24, 0],
-  [0, '需求梳理', '确认甘特图、拆分和跟踪的范围。', 'done', 100, -10, -8, 0],
-  [0, 'Host 数据层', 'SQLite 表结构与 JSON 接口。', 'in_progress', 55, -7, 1, 1],
-  [2, 'SQLite 表结构', '任务树、状态与层级编号。', 'done', 100, -7, -5, 0],
-  [2, 'HTTP 接口', '创建、更新、拆分与状态流转。', 'in_progress', 60, -4, 1, 1],
-  [0, '前端甘特视图', '任务树、时间轴与周/月切换。', 'todo', 0, 2, 14, 2],
-  [5, '周/月维度切换', '按天与按月的两种时间刻度。', 'todo', 0, 2, 7, 0],
-  [5, '任务树与编号', '1.1.1 形式的层级标号。', 'todo', 0, 8, 14, 1],
-  [0, '验收与发布', '回归、截图与安装验证。', 'todo', 0, 16, 24, 3],
-  [null, '个人季度计划', '把长期目标拆成可以每周推进的小任务。', 'in_progress', 30, -20, 45, 1],
-  [9, '阅读 6 本书', '每周至少读完一本。', 'in_progress', 33, -20, 20, 0],
-  [9, '每周三次运动', '保持节奏比单次强度更重要。', 'todo', 10, -14, 45, 1],
+  [null, 'DSH 插件发布', '从数据层到界面的端到端交付。', 'in_progress', 45, -10, 24, 0], [0, '需求梳理', '确认甘特图、拆分和跟踪的范围。', 'done', 100, -10, -8, 0],
+  [0, 'Host 数据层', 'SQLite 表结构与 JSON 接口。', 'in_progress', 55, -7, 1, 1], [2, 'SQLite 表结构', '任务树、状态与层级编号。', 'done', 100, -7, -5, 0],
+  [2, 'HTTP 接口', '创建、更新、拆分与状态流转。', 'in_progress', 60, -4, 1, 1], [0, '前端甘特视图', '任务树、时间轴与周/月切换。', 'todo', 0, 2, 14, 2],
+  [5, '周/月维度切换', '按天与按月的两种时间刻度。', 'todo', 0, 2, 7, 0], [5, '任务树与编号', '1.1.1 形式的层级标号。', 'todo', 0, 8, 14, 1],
+  [0, '验收与发布', '回归、截图与安装验证。', 'todo', 0, 16, 24, 3], [null, '个人季度计划', '把长期目标拆成可以每周推进的小任务。', 'in_progress', 30, -20, 45, 1],
+  [9, '阅读 6 本书', '每周至少读完一本。', 'in_progress', 33, -20, 20, 0], [9, '每周三次运动', '保持节奏比单次强度更重要。', 'todo', 10, -14, 45, 1],
   [9, '季度复盘', '整理完成项和下一季度重点。', 'blocked', 0, 38, 45, 2],
 ]
 
@@ -142,7 +128,7 @@ const SEED_TASKS = [
  * category: string, title: string, detail: string, landing: string, estimate: string, inspiration: string,
  * status: PlanStatus, notes: string, sortOrder: number, source: string, sourceRef: string }} PlanBlock */
 /** @typedef {{ day: DayPlanRow | null, blocks: PlanBlock[], nodes: NodeRow[], tracks: TrackRow[],
- * integrity: { code: string, blockId?: string }[],
+ * integrity: { code: string, blockId?: string }[], brief: DailyReport,
  * stats: { total: number, done: number, inProgress: number, skipped: number, remaining: number } }} DayPlanBundle */
 /** Inputs are validated field by field, so partial parsed shapes are accepted.
  * @typedef {{ tracks?: any[], nodes?: any[], days?: any[] }} ReplacePlanInput */
@@ -181,7 +167,7 @@ const SEED_TASKS = [
 /** @typedef {{ total: number, done: number, inProgress: number, blocked: number, overdue: number,
  * progress: number }} TaskStats */
 /** @typedef {{ today: string, statuses: TaskStatus[], tasks: TaskNode[], stats: TaskStats,
- * brief: Brief }} GanttSnapshot */
+ * brief: Brief, dailyBrief: DailyReport }} GanttSnapshot */
 /** @typedef {{ dbPath: string, statuses: TaskStatus[], schemaVersion: number, taskCount: number,
  * engine: string, kinds: TaskKind[], linkTypes: LinkType[] }} GanttMeta */
 
@@ -194,7 +180,6 @@ export class GanttError extends Error {
     this.status = status
   }
 }
-
 /** @param {unknown} value @param {string} field @returns {string} */
 function assertDate(value, field) {
   if (typeof value !== 'string' || !DATE_RE.test(value)) throw new GanttError(`${field} must be a YYYY-MM-DD date`)
@@ -202,12 +187,10 @@ function assertDate(value, field) {
   if (!Number.isFinite(day) || dayToIso(day) !== value) throw new GanttError(`${field} is not a valid calendar date`)
   return value
 }
-
 /** @param {string} startDate @param {string} endDate @returns {void} */
 function assertRange(startDate, endDate) {
   if (startDate > endDate) throw new GanttError('endDate must not be before startDate')
 }
-
 /** @param {unknown} value @returns {string} */
 function normalizeTitle(value) {
   if (typeof value !== 'string') throw new GanttError('title is required')
@@ -216,7 +199,6 @@ function normalizeTitle(value) {
   if ([...title].length > MAX_TITLE) throw new GanttError(`title must be at most ${MAX_TITLE} characters`)
   return title
 }
-
 /** @param {unknown} value @returns {string} */
 function normalizeDescription(value) {
   if (value === undefined || value === null) return ''
@@ -224,27 +206,23 @@ function normalizeDescription(value) {
   if ([...value].length > MAX_DESCRIPTION) throw new GanttError(`description must be at most ${MAX_DESCRIPTION} characters`)
   return value.trim()
 }
-
 /** @param {unknown} value @returns {TaskStatus} */
 function normalizeStatus(value) {
   const status = STATUSES.find(candidate => candidate === value)
   if (status === undefined) throw new GanttError(`status must be one of ${STATUSES.join(', ')}`)
   return status
 }
-
 /** @param {unknown} value @returns {number} */
 function normalizeProgress(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new GanttError('progress must be a number from 0 to 100')
   return Math.max(0, Math.min(100, Math.round(value)))
 }
-
 /** @param {unknown} value @returns {string | null} */
 function normalizeParent(value) {
   if (value === undefined || value === null || value === '') return null
   if (typeof value !== 'string') throw new GanttError('parentId must be a task id or null')
   return value
 }
-
 /** @param {TaskStatus} status @param {number} [current] @returns {number} */
 function defaultProgress(status, current = 0) {
   if (status === 'done') return 100
@@ -252,14 +230,12 @@ function defaultProgress(status, current = 0) {
   if (status === 'blocked') return current
   return current > 0 && current < 100 ? current : 50
 }
-
 /** @param {number} progress @param {TaskStatus} current @returns {TaskStatus} */
 function statusFromProgress(progress, current) {
   if (progress >= 100) return 'done'
   if (progress <= 0) return 'todo'
   return current === 'blocked' ? 'blocked' : 'in_progress'
 }
-
 /** @param {unknown} value @returns {string} */
 function textValue(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -291,7 +267,6 @@ function normalizeList(value, field, normalize) {
     return normalize(item, index)
   })
 }
-
 const TEXT_FIELDS = /** @type {const} */ (['lane', 'dep', 'doneWhen', 'landing', 'estimate', 'category', 'inspiration'])
 /** @param {unknown} value @param {string} field @returns {string} */
 function textField(value, field) {
@@ -341,7 +316,6 @@ function normalizePlanDraft(plan, index) {
   if (record.inspiration !== undefined) draft.inspiration = textValue(record.inspiration)
   return draft
 }
-
 /**
  * Resolve the durable database location; override with DSH_GANTT_DB.
  * @returns {string}
@@ -351,7 +325,6 @@ export function resolveDatabasePath() {
   const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
   return path.join(home, 'gantt', 'tasks.db')
 }
-
 /**
  * SQLite-backed task store. Hierarchical numbers and rollups are derived at
  * read time, so writes never maintain them.
@@ -374,7 +347,6 @@ export class GanttStore {
     this.db.exec(CREATE_SCHEMA)
     this.migrate()
   }
-
   /** Upgrade an older database in one transaction: add columns, index, version, backfill. */
   migrate() {
     const version = /** @type {{ user_version: number }} */ (this.db.prepare('PRAGMA user_version').get()).user_version
@@ -383,15 +355,14 @@ export class GanttStore {
     this.transaction(() => {
       for (const name of missing) this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${TASK_EXTRA_COLUMNS[name]}`)
       this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_ref ON tasks(kind, ref) WHERE ref <> ''")
-      if (version < SCHEMA_VERSION) {
+      if (version < 3) {
         const tracks = /** @type {SnapshotTrack[]} */ (this.db.prepare('SELECT id, name, lane, state, blocker, sort_order AS sortOrder FROM tracks ORDER BY sort_order, id').all())
         const nodes = /** @type {SnapshotNode[]} */ (this.db.prepare('SELECT id, track_id AS trackId, title, state, start_date AS startDate, end_date AS endDate, dep, done_when AS doneWhen FROM nodes ORDER BY id').all())
-        this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
         this.syncTrackerTree(tracks, nodes)
       }
+      if (version < SCHEMA_VERSION) this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   }
-
   /** Close the database handle; safe to call more than once. */
   close() {
     try {
@@ -400,7 +371,6 @@ export class GanttStore {
       // already closed
     }
   }
-
   /** @template T @param {() => T} fn @returns {T} */
   transaction(fn) {
     this.db.exec('BEGIN IMMEDIATE')
@@ -438,22 +408,82 @@ export class GanttStore {
   /** @returns {GanttSnapshot} */
   snapshot() {
     const tasks = this.tree()
-    return { today: todayIso(), statuses: [...STATUSES], tasks, stats: summarize(tasks), brief: computeBrief(tasks) }
+    const brief = computeBrief(tasks)
+    return { today: todayIso(), statuses: [...STATUSES], tasks, stats: summarize(tasks), brief, dailyBrief: this.dailyBrief().report }
   }
 
   /** @returns {GanttMeta} */
   meta() {
-    return {
-      dbPath: this.file === ':memory:' ? ':memory:' : path.resolve(this.file),
-      statuses: [...STATUSES],
-      schemaVersion: SCHEMA_VERSION,
-      taskCount: this.count(),
-      engine: 'node:sqlite',
-      kinds: [...TASK_KINDS],
-      linkTypes: [...LINK_TYPES],
-    }
+    return { dbPath: this.file === ':memory:' ? ':memory:' : path.resolve(this.file), statuses: [...STATUSES], schemaVersion: SCHEMA_VERSION, taskCount: this.count(), engine: 'node:sqlite', kinds: [...TASK_KINDS], linkTypes: [...LINK_TYPES] }
   }
 
+  /** @param {string} planDate @returns {DailyReport | null} */
+  readDailyBrief(planDate) {
+    const row = /** @type {{ report: string } | undefined} */ (this.db.prepare('SELECT report FROM daily_briefs WHERE plan_date = ?').get(planDate))
+    return row === undefined ? null : parseDailyReport(row.report)
+  }
+
+  /** @param {string} planDate @returns {DailyReport[]} */
+  previousDailyBriefs(planDate) {
+    const rows = /** @type {{ report: string }[]} */ (this.db.prepare('SELECT report FROM daily_briefs WHERE plan_date < ? ORDER BY plan_date DESC LIMIT 30').all(planDate))
+    return rows.map(row => parseDailyReport(row.report)).filter(report => report !== null)
+  }
+
+  /** @param {string} planDate @param {'auto' | 'manual'} source @returns {DailyReport} */
+  buildDailyReport(planDate, source) {
+    const day = /** @type {{ dayKind: string } | undefined} */ (this.db.prepare('SELECT day_kind AS dayKind FROM day_plans WHERE plan_date = ?').get(planDate))
+    const blocks = /** @type {PlanBlock[]} */ (this.db.prepare(`SELECT ${BLOCK_COLUMNS} FROM plan_blocks WHERE plan_date = ? ORDER BY sort_order, start_time, id`).all(planDate))
+    const dayKind = day === undefined || day.dayKind === '' ? 'unknown' : /** @type {DayKind} */ (day.dayKind)
+    const generatedAt = new Date().toISOString()
+    const tree = this.tree()
+    return computeDailyReport({ date: planDate, generatedAt, source, dayKind, blocks, tree, previous: this.previousDailyBriefs(planDate) })
+  }
+
+  /** @param {DailyReport} report */
+  persistDailyBrief(report) {
+    const sql = 'INSERT INTO daily_briefs (plan_date, generated_at, source, report) VALUES (?, ?, ?, ?) ON CONFLICT(plan_date) DO UPDATE SET generated_at = excluded.generated_at, source = excluded.source, report = excluded.report'
+    this.transaction(() => this.db.prepare(sql).run(report.date, report.generatedAt, report.source, JSON.stringify(report)))
+  }
+
+  /** Read today's brief from the cache, computing and persisting it when missing.
+   * @param {string} [date] @returns {{ report: DailyReport, cached: boolean }} */
+  dailyBrief(date = todayIso()) {
+    const planDate = assertDate(date, 'date')
+    const cached = this.readDailyBrief(planDate)
+    if (cached !== null) return { report: cached, cached: true }
+    const report = this.buildDailyReport(planDate, 'auto')
+    if (planDate === todayIso()) this.persistDailyBrief(report)
+    return { report, cached: false }
+  }
+  /** Force a fresh report and persist it (the manual UI recompute).
+   * @param {string} [date] @param {{ source?: 'auto' | 'manual' }} [options] @returns {DailyReport} */
+  computeDailyBrief(date = todayIso(), options = {}) {
+    const planDate = assertDate(date, 'date')
+    const source = options.source === undefined ? 'manual' : options.source
+    if (source !== 'auto' && source !== 'manual') throw new GanttError('source must be one of auto, manual')
+    const report = this.buildDailyReport(planDate, source)
+    this.persistDailyBrief(report)
+    return report
+  }
+  /** Recompute today's report every local 08:00; returns an idempotent disposer.
+   * @returns {() => void} */
+  startScheduler() {
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let timer = null
+    const schedule = () => {
+      timer = setTimeout(() => {
+        try { this.computeDailyBrief(todayIso(), { source: 'auto' }) } finally { schedule() }
+      }, nextEightAm(new Date()).getTime() - Date.now())
+      timer.unref()
+    }
+    schedule()
+    return () => {
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+  }
   /** @param {string} id @returns {TaskRow | null} */
   getRow(id) {
     return this.listRows().find(row => row.id === id) ?? null
@@ -806,7 +836,7 @@ export class GanttStore {
     const skipped = blocks.filter(block => block.status === 'skipped').length
     const inProgress = blocks.filter(block => block.status === 'in_progress').length
     const stats = { total: blocks.length, done, inProgress, skipped, remaining: blocks.length - done - skipped }
-    return { day, blocks, tracks, nodes, integrity, stats }
+    return { day, blocks, tracks, nodes, integrity, stats, brief: this.dailyBrief(planDate).report }
   }
 
   /** Set a block's user status and optional notes (notes capped at 500 characters).
@@ -959,7 +989,7 @@ export class GanttStore {
       integrity: bundle.integrity,
       counts,
     }, limit)
-    return { ok: true, date, ...document, counts }
+    return { ok: true, date, ...appendBriefSection(document, bundle.brief, limit), counts }
   }
 }
 

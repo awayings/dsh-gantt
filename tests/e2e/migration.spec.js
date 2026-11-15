@@ -49,7 +49,7 @@ describe('v2 database over HTTP', () => {
 
   it('reports schema v3, the preserved plan day, and a context export', async () => {
     const meta = await fetch(`${server.origin}/api/gantt/meta`).then(response => response.json())
-    expect(meta.schemaVersion).toBe(3)
+    expect(meta.schemaVersion).toBe(4)
     expect(meta.taskCount).toBe(6)
     const day = await fetch(`${server.origin}/api/gantt/day?date=2026-11-15`).then(response => response.json())
     expect(day.blocks.map(block => block.id)).toEqual([V2_BLOCK_ID])
