@@ -6,13 +6,14 @@ by a local SQLite database and an authenticated JSON API.
 ## Shape
 
 - Host half `index.js` (runs in the `dsh web` process): registers `/api/gantt/*`
-  through the Connection service; `store.js` owns SQLite.
+  through the Connection service; `store.js` owns SQLite; `tracker.js` parses
+  the external task-tracker markdown and imports it (pure parsers + importer).
 - Client half `client.js`: one browser artifact loaded by the DSH module loader;
-  registers one sidebar icon and one `main` page.
-- **No build step**, no bundler, no `dist/`: all three files ship as source.
+  registers two sidebar icons and two keyed `main` pages (`gantt`, `today`).
+- **No build step**, no bundler, no `dist/`: all four files ship as source.
   `client.js` must stay one classic script — DSH derives the artifact revision
   from `exports["./client"]` metadata (mtime/ctime/size) only, so splitting the
-  entry would serve stale bytes from the immutable cache. Cap: 2300 lines.
+  entry would serve stale bytes from the immutable cache. Cap: 2700 lines.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`, `lib/types/`)
   before deciding anything. Never guess a seam, lifecycle, or wire shape.
@@ -49,7 +50,7 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   instead of stale data.
 - Smallest change that fully solves it; reuse existing helpers; no abstraction
   with a single caller, no unused option; delete dead code and old tests.
-- All source and test files < 1000 lines (`client.js`: 2300 cap).
+- All source and test files < 1000 lines (`client.js`: 2700 cap).
 - Tests: `tests/store|host|client` (unit, Node/jsdom) and `tests/e2e` (real
   artifact → real HTTP → real SQLite; small, behavior only). Narrowest run
   first: `pnpm exec vitest run tests/<area>/<file>.spec.js -t "<case>"`.
@@ -73,7 +74,7 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 
 ## Runbook
 
-- `pnpm install`; `pnpm run verify` = `node --check` on the three sources.
+- `pnpm install`; `pnpm run verify` = `node --check` on the four sources.
 - Live UI: start `dsh web`, open the printed `http://127.0.0.1:3080/?token=…`
   URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`;
   override with an absolute `DSH_GANTT_DB`.

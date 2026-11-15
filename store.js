@@ -6,12 +6,17 @@ import { DatabaseSync } from 'node:sqlite'
 
 /** @type {TaskStatus[]} */
 export const STATUSES = ['todo', 'in_progress', 'blocked', 'done']
-export const SCHEMA_VERSION = 1
-
+export const SCHEMA_VERSION = 2
+/** @type {PlanStatus[]} */
+export const PLAN_STATUSES = ['todo', 'in_progress', 'done', 'skipped']
+const PLAN_SLOTS = ['morning', 'daytime', 'evening', 'other']
+const DAY_KINDS = ['workday', 'weekend', 'unknown']
 const DAY_MS = 86_400_000
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_TITLE = 200
+const MAX_NOTES = 500
 const MAX_DESCRIPTION = 4000
+const BLOCK_COLUMNS = 'id, plan_date AS planDate, start_time AS startTime, end_time AS endTime, slot, category, title, detail, landing, estimate, inspiration, status, notes, sort_order AS sortOrder, source, source_ref AS sourceRef'
 
 /** @typedef {'todo' | 'in_progress' | 'blocked' | 'done'} TaskStatus */
 
@@ -115,6 +120,30 @@ const MAX_DESCRIPTION = 4000
  */
 
 /** @typedef {{ status: TaskStatus, progress: number, start_date: string, end_date: string }} ChildSummaryRow */
+/** @typedef {'todo' | 'in_progress' | 'done' | 'skipped'} PlanStatus */
+/** @typedef {'morning' | 'daytime' | 'evening' | 'other'} PlanSlot */
+/** @typedef {'workday' | 'weekend' | 'unknown'} DayKind */
+/** @typedef {{ id: string, name: string, lane: string, priority: string, state: string, blocker: string,
+ * sortOrder: number }} TrackRow */
+/** @typedef {{ id: string, trackId: string, title: string, state: string, startDate: string | null,
+ * endDate: string | null, dep: string, doneWhen: string }} NodeRow */
+/** @typedef {{ date: string, weekday: string, dayKind: DayKind, marketOpen: boolean, label: string,
+ * coreGoal: string, source: string }} DayPlanRow */
+/** @typedef {{ title: string, startTime?: string, endTime?: string, slot?: PlanSlot, category?: string,
+ * detail?: string, landing?: string, estimate?: string, inspiration?: string,
+ * sortOrder?: number, sourceRef?: string }} BlockDraft */
+/** @typedef {{ id: string, planDate: string, startTime: string, endTime: string, slot: PlanSlot,
+ * category: string, title: string, detail: string, landing: string, estimate: string, inspiration: string,
+ * status: PlanStatus, notes: string, sortOrder: number, source: string, sourceRef: string }} PlanBlock */
+/** @typedef {{ day: DayPlanRow | null, blocks: PlanBlock[], nodes: NodeRow[], tracks: TrackRow[],
+ * integrity: { code: string, blockId?: string }[],
+ * stats: { total: number, done: number, inProgress: number, skipped: number, remaining: number } }} DayPlanBundle */
+/** Inputs are validated field by field, so partial parsed shapes are accepted.
+ * @typedef {{ tracks?: any[], nodes?: any[], days?: any[] }} ReplacePlanInput */
+/**
+ * @typedef {{ tracks: number, nodes: number, days: number }} ReplacePlanCounts
+ * @typedef {{ inserted: number, updated: number, removed: number }} BlockUpsertCounts
+ */
 
 /** A validation or lookup failure with an HTTP-friendly status. */
 export class GanttError extends Error {
@@ -276,6 +305,39 @@ function statusFromProgress(progress, current) {
   return current === 'blocked' ? 'blocked' : 'in_progress'
 }
 
+/** @param {unknown} value @returns {string} */
+function textValue(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+/** @param {unknown} value @param {string} field @returns {string} */
+function requireText(value, field) {
+  const text = textValue(value)
+  if (text === '') throw new GanttError(`${field} is required`)
+  return text
+}
+/** @param {unknown} value @param {string} field @param {readonly string[]} allowed @returns {string} */
+function oneOf(value, field, allowed) {
+  const found = allowed.find(candidate => candidate === value)
+  if (found === undefined) throw new GanttError(`${field} must be one of ${allowed.join(', ')}`)
+  return found
+}
+/** @param {unknown} value @param {string} field @returns {string} */
+function clockValue(value, field) {
+  if (value === undefined || value === '') return ''
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) throw new GanttError(`${field} must be an HH:MM time`)
+  return value
+}
+/** @param {unknown} value @param {string} field @param {(item: any, index: number) => object} normalize
+ * @returns {any[]} */
+function normalizeList(value, field, normalize) {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) throw new GanttError(`${field} must be an array`)
+  return value.map((item, index) => {
+    if (item === null || typeof item !== 'object') throw new GanttError(`${field}[${index}] must be an object`)
+    return normalize(item, index)
+  })
+}
+
 /**
  * Derive the read-time status of a task that owns children.
  * @param {{ status: TaskStatus }[]} children
@@ -419,6 +481,10 @@ export class GanttStore {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id, sort_order, created_at);
+      CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY, name TEXT NOT NULL, lane TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '', blocker TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, track_id TEXT NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT '', start_date TEXT, end_date TEXT, dep TEXT NOT NULL DEFAULT '', done_when TEXT NOT NULL DEFAULT '');
+      CREATE TABLE IF NOT EXISTS plan_blocks (id TEXT PRIMARY KEY, plan_date TEXT NOT NULL, start_time TEXT NOT NULL DEFAULT '', end_time TEXT NOT NULL DEFAULT '', slot TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', title TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', landing TEXT NOT NULL DEFAULT '', estimate TEXT NOT NULL DEFAULT '', inspiration TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done', 'skipped')), notes TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'schedule', source_ref TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_plan_blocks_date ON plan_blocks(plan_date, sort_order, start_time);
+      CREATE TABLE IF NOT EXISTS day_plans (plan_date TEXT PRIMARY KEY, weekday TEXT NOT NULL DEFAULT '', day_kind TEXT NOT NULL DEFAULT '', market_open INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', core_goal TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
       PRAGMA user_version = ${SCHEMA_VERSION};
     `)
   }
@@ -836,4 +902,90 @@ export class GanttStore {
 
     return { seeded: true, taskCount: created }
   }
+
+  /** Replace the imported tracker tree and day metadata in one transaction.
+   * @param {ReplacePlanInput} [input] @returns {ReplacePlanCounts} */
+  replacePlan(input = {}) {
+    const tracks = normalizeList(input.tracks, 'tracks', (track, index) => ({ ...track, id: requireText(track.id, `tracks[${index}].id`), name: requireText(track.name, `tracks[${index}].name`), sortOrder: index }))
+    const nodes = normalizeList(input.nodes, 'nodes', (node, index) => ({ ...node, id: requireText(node.id, `nodes[${index}].id`), title: requireText(node.title, `nodes[${index}].title`), startDate: node.startDate ? assertDate(node.startDate, `nodes[${index}].startDate`) : null, endDate: node.endDate ? assertDate(node.endDate, `nodes[${index}].endDate`) : null }))
+    const days = normalizeList(input.days, 'days', (day, index) => ({ date: assertDate(day.date, `days[${index}].date`), weekday: textValue(day.weekday), dayKind: day.dayKind === undefined ? 'unknown' : oneOf(day.dayKind, `days[${index}].dayKind`, DAY_KINDS), marketOpen: day.marketOpen === true, label: textValue(day.label), coreGoal: textValue(day.coreGoal), source: textValue(day.source) || 'schedule' }))
+    const now = new Date().toISOString()
+    this.transaction(() => {
+      this.db.exec('DELETE FROM nodes; DELETE FROM tracks')
+      const addTrack = this.db.prepare('INSERT INTO tracks (id, name, lane, priority, state, blocker, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      const addNode = this.db.prepare('INSERT INTO nodes (id, track_id, title, state, start_date, end_date, dep, done_when) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      const addDay = this.db.prepare('INSERT INTO day_plans (plan_date, weekday, day_kind, market_open, label, core_goal, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(plan_date) DO UPDATE SET weekday = excluded.weekday, day_kind = excluded.day_kind, market_open = excluded.market_open, label = excluded.label, core_goal = excluded.core_goal, source = excluded.source, updated_at = excluded.updated_at')
+      for (const track of tracks) addTrack.run(track.id, track.name, textValue(track.lane), textValue(track.priority),
+        textValue(track.state), textValue(track.blocker), track.sortOrder)
+      for (const node of nodes) addNode.run(node.id, textValue(node.trackId), node.title, textValue(node.state),
+        node.startDate, node.endDate, textValue(node.dep), textValue(node.doneWhen))
+      for (const day of days) addDay.run(day.date, day.weekday, day.dayKind, day.marketOpen ? 1 : 0,
+        day.label, day.coreGoal, day.source, now)
+    })
+    return { tracks: tracks.length, nodes: nodes.length, days: days.length }
+  }
+  /** Upsert one day's imported blocks; content is rewritten, status/notes survive.
+   * @param {string} planDate @param {BlockDraft[]} drafts @returns {BlockUpsertCounts} */
+  upsertPlanBlocks(planDate, drafts) {
+    const date = assertDate(planDate, 'date')
+    const normalized = normalizeList(drafts, 'blocks', (draft, index) => ({ title: requireText(draft.title, `blocks[${index}].title`), startTime: clockValue(draft.startTime, `blocks[${index}].startTime`), endTime: clockValue(draft.endTime, `blocks[${index}].endTime`), slot: draft.slot === undefined ? 'other' : oneOf(draft.slot, `blocks[${index}].slot`, PLAN_SLOTS), category: textValue(draft.category), detail: textValue(draft.detail), landing: textValue(draft.landing), estimate: textValue(draft.estimate), inspiration: textValue(draft.inspiration), sourceRef: textValue(draft.sourceRef) }))
+    const ids = normalized.map((draft, index) => `${date}|${draft.startTime}|${index}`)
+    const existing = /** @type {{ id: string }[]} */ (this.db.prepare('SELECT id FROM plan_blocks WHERE plan_date = ? AND source = ?').all(date, 'schedule'))
+    const existingIds = new Set(existing.map(row => row.id))
+    const now = new Date().toISOString()
+    this.transaction(() => {
+      const add = this.db.prepare("INSERT INTO plan_blocks (id, plan_date, start_time, end_time, slot, category, title, detail, landing, estimate, inspiration, sort_order, source, source_ref, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'schedule', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET start_time = excluded.start_time, end_time = excluded.end_time, slot = excluded.slot, category = excluded.category, title = excluded.title, detail = excluded.detail, landing = excluded.landing, estimate = excluded.estimate, inspiration = excluded.inspiration, sort_order = excluded.sort_order, source = excluded.source, source_ref = excluded.source_ref, updated_at = excluded.updated_at")
+      normalized.forEach((draft, index) => add.run(ids[index], date, draft.startTime, draft.endTime, draft.slot,
+        draft.category, draft.title, draft.detail, draft.landing, draft.estimate, draft.inspiration, index,
+        draft.sourceRef, now, now))
+      if (ids.length === 0) this.db.prepare('DELETE FROM plan_blocks WHERE plan_date = ? AND source = ?').run(date, 'schedule')
+      else this.db.prepare(`DELETE FROM plan_blocks WHERE plan_date = ? AND source = ? AND id NOT IN (${ids.map(() => '?').join(', ')})`).run(date, 'schedule', ...ids)
+    })
+    return {
+      inserted: ids.filter(id => !existingIds.has(id)).length,
+      updated: ids.filter(id => existingIds.has(id)).length,
+      removed: existing.filter(row => !ids.includes(row.id)).length,
+    }
+  }
+  /** Read one day's bundle, including derived integrity warnings and stats.
+   * @param {string} date @returns {DayPlanBundle} */
+  dayPlan(date) {
+    const planDate = assertDate(date, 'date')
+    const row = /** @type {any} */ (this.db.prepare('SELECT plan_date AS date, weekday, day_kind AS dayKind, market_open, label, core_goal AS coreGoal, source FROM day_plans WHERE plan_date = ?').get(planDate))
+    const blocks = /** @type {PlanBlock[]} */ (this.db.prepare(`SELECT ${BLOCK_COLUMNS} FROM plan_blocks WHERE plan_date = ? ORDER BY sort_order, start_time, id`).all(planDate))
+    const tracks = /** @type {TrackRow[]} */ (this.db.prepare('SELECT id, name, lane, priority, state, blocker, sort_order AS sortOrder FROM tracks ORDER BY sort_order, id').all())
+    const nodes = /** @type {NodeRow[]} */ (this.db.prepare('SELECT id, track_id AS trackId, title, state, start_date AS startDate, end_date AS endDate, dep, done_when AS doneWhen FROM nodes WHERE state NOT IN (?, ?) AND (start_date IS NOT NULL OR end_date IS NOT NULL) AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) ORDER BY COALESCE(start_date, end_date), id LIMIT 12').all('已过', '撤销', addDays(planDate, 6), planDate))
+    const { market_open, ...rest } = row ?? { market_open: 0 }
+    const day = row === undefined ? null : { ...rest, marketOpen: market_open === 1 }
+    /** @type {{ code: string, blockId?: string }[]} */
+    const integrity = []
+    for (const block of blocks) if (block.landing === '') integrity.push({ code: 'landing-missing', blockId: block.id })
+    const evening = blocks.filter(block => block.slot === 'evening')
+    if (evening.length === 0) integrity.push({ code: 'evening-missing' })
+    for (const block of evening) if (block.inspiration === '') integrity.push({ code: 'inspiration-missing', blockId: block.id })
+    if (day === null) integrity.push({ code: 'unplanned-day' })
+    const done = blocks.filter(block => block.status === 'done').length
+    const skipped = blocks.filter(block => block.status === 'skipped').length
+    const inProgress = blocks.filter(block => block.status === 'in_progress').length
+    const stats = { total: blocks.length, done, inProgress, skipped, remaining: blocks.length - done - skipped }
+    return { day, blocks, tracks, nodes, integrity, stats }
+  }
+  /** Set a block's user status and optional notes (notes capped at 500 characters).
+   * @param {string} id @param {PlanStatus} status @param {string | null} [notes] @returns {PlanBlock} */
+  setBlockStatus(id, status, notes) {
+    if (typeof id !== 'string' || id === '') throw new GanttError('id is required')
+    if (notes !== undefined && notes !== null && typeof notes !== 'string') throw new GanttError('notes must be a string')
+    if (typeof notes === 'string' && [...notes].length > MAX_NOTES) throw new GanttError(`notes must be at most ${MAX_NOTES} characters`)
+    const nextStatus = oneOf(status, 'status', PLAN_STATUSES)
+    const nextNotes = notes === undefined ? undefined : notes === null ? '' : notes
+    const found = this.db.prepare('SELECT id FROM plan_blocks WHERE id = ?').get(id)
+    if (found === undefined) throw new GanttError(`plan block ${id} was not found`, 404)
+    const now = new Date().toISOString()
+    this.transaction(() => {
+      if (nextNotes === undefined) this.db.prepare('UPDATE plan_blocks SET status = ?, updated_at = ? WHERE id = ?').run(nextStatus, now, id)
+      else this.db.prepare('UPDATE plan_blocks SET status = ?, notes = ?, updated_at = ? WHERE id = ?').run(nextStatus, nextNotes, now, id)
+    })
+    return /** @type {PlanBlock} */ (this.db.prepare(`SELECT ${BLOCK_COLUMNS} FROM plan_blocks WHERE id = ?`).get(id))
+  }
 }
+

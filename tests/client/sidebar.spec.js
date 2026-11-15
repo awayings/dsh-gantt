@@ -34,7 +34,7 @@ describe('plugin registration', () => {
 
     const page = app.page()
     expect(page.def).toEqual({ name: 'main', key: 'gantt' })
-    expect(app.registrations.size).toBe(2)
+    expect(app.registrations.size).toBe(4)
   })
 
   it('registers a complete en/zh dictionary pair with no key drift', () => {

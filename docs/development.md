@@ -38,9 +38,9 @@ push to `main`.
 | husky `^9.1.7` | Runs the commit and push gates | `.husky/pre-commit`, `.husky/pre-push` |
 | jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
 
-There is **no build step**. All three source files are shipped as-is:
-`index.js` and `store.js` as ESM, `client.js` as the client artifact loaded by
-DSH.
+There is **no build step**. All four source files are shipped as-is:
+`index.js`, `store.js`, and `tracker.js` as ESM, `client.js` as the client
+artifact loaded by DSH.
 
 ## Quality gate commands
 
@@ -82,22 +82,33 @@ again in CI before a release is published.
 
 Coverage policy:
 
-- `store.js` and `index.js`: **100%** statements, branches, functions, lines.
+- `store.js`, `index.js`, and `tracker.js`: **100%** statements, branches,
+  functions, lines.
 - `client.js`: ratcheted floor — 99% statements, 98% branches, 99% functions,
-  99% lines (currently 99.79 / 98.62 / 99.36 / 100). Six UI branches are
-  unreachable through the UI; `client.js` line numbers are listed in the
-  coverage output and must not regress.
+  99% lines (currently 99.83 / 98.91 / 99.47 / 100). The unreachable UI
+  branches are listed in the coverage output and must not regress.
 - Never weaken a threshold without recording the decision here and in the
   review that changes it.
+
+Recorded decisions:
+
+- **2026-11-15 — `tracker.js` added at 100%**, not below the host floor: the
+  importer sits on the read path of the Today page, and a partial parse fails
+  silently in the UI.
+- **2026-11-15 — `client.js` line cap raised 2300 → 2700.** The Today page is a
+  second registered `main` page in the same single-file artifact (the artifact
+  cannot be split, see `docs/compatibility.md` §3.1); the addition is additive
+  UI, not a refactor.
 
 ## Test layout
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `store.js`: schema, dates, numbering, rollups, validation, CRUD, split, seed, delete |
-| `tests/host/` | `host` (Node) | `index.js`: route registration, body parsing, status codes, error mapping, store lifecycle |
-| `tests/client/` | `client` (jsdom) | `client.js`: rendering, tree/time-axis behavior, dialogs, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, and a SQLite file that survives a restart |
+| `tests/store/` | `host` (Node) | `store.js`: schema (tasks and plan tables), dates, numbering, rollups, validation, CRUD, split, seed, delete, plan upserts and integrity |
+| `tests/host/` | `host` (Node) | `index.js`: route registration, body parsing, status codes, error mapping, store lifecycle, the day/plan routes |
+| `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
+| `tests/client/` | `client` (jsdom) | `client.js`: rendering, tree/time-axis behavior, dialogs, Today page, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 `tests/client/setup.js` boots jsdom, stubs `window.__ModuleLoader__` so the
@@ -140,13 +151,38 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
+### The task-tracker import
+
+Schema version 2 adds four tables — `tracks`, `nodes`, `plan_blocks`,
+`day_plans` — filled only by the importer in `tracker.js`:
+
+```sh
+# UI: Today page → Import plan. API:
+curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
+  -H 'content-type: application/json' -d '{}'
+```
+
+- Source directory: `$DSH_GANTT_TRACKER_DIR`, else
+  `/data/home/clawd/projects/task-tracker`. An absolute `dir` in the body
+  overrides it for one call.
+- Files read: `SCHEDULE.md` (the future-7-day time grid), `TREE.md` (tracks and
+  nodes), `daily/YYYY-MM-DD.md` (the day's core goal). The tracker is
+  read-only for the plugin; nothing is written back and there is no watcher.
+- The import is idempotent: tracks/nodes are replaced, days and blocks are
+  upserted in one transaction, block `status`/`notes` set by hand survive, and
+  `tasks` is never touched.
+- Verify a fresh import by reading one day:
+  `GET /api/gantt/day?date=<today>` should return the day, its blocks, and
+  `integrity: []` for a fully planned day.
+
 ## Local dev loop
 
 1. `pnpm install`.
 2. `pnpm run deploy` links this checkout into the target DSH profile and
    verifies the composed tree (see [Install a checkout](#install-a-checkout)).
-3. Edit `index.js` / `store.js`: these run in the `dsh web` server process and
-   are re-read on restart, so restart `dsh web` after host changes.
+3. Edit `index.js` / `store.js` / `tracker.js`: these run in the `dsh web`
+   server process and are re-read on restart, so restart `dsh web` after host
+   changes.
 4. Edit `client.js`: the file metadata changes, so DSH derives a new client
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
@@ -217,13 +253,18 @@ curl -s -H "Cookie: $COOKIE" http://127.0.0.1:3080/api/gantt/meta
 curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   http://127.0.0.1:3080/api/gantt/seed -d '{}'
 curl -s -H "Cookie: $COOKIE" http://127.0.0.1:3080/api/gantt/tree
+curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
+  http://127.0.0.1:3080/api/gantt/plan/import -d '{"dir":"/absolute/path/to/task-tracker"}'
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/day"
 ```
 
 Expected: `meta` returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db",
-engine:"node:sqlite", endpoints:[…]}`; `seed` inserts 13 demo tasks and returns
-`seeded:true, taskCount:13` plus the snapshot; `tree` returns
-`stats:{total:13,done:2,inProgress:4,blocked:2,overdue:0,progress:15}`. An
-invalid JSON body returns HTTP 400 with
+engine:"node:sqlite", schemaVersion:2, endpoints:[…11 routes…]}`; `seed` inserts
+13 demo tasks and returns `seeded:true, taskCount:13` plus the snapshot; `tree`
+returns `stats:{total:13,done:2,inProgress:4,blocked:2,overdue:0,progress:15}`;
+`plan/import` returns `imported:{tracks,nodes,days,blocks}` with non-zero counts
+for a real tracker directory; `day` returns `day`, `blocks`, `nodes`,
+`integrity`, and `stats`. An invalid JSON body returns HTTP 400 with
 `{"ok":false,"error":"request body must be valid JSON"}`.
 
 Remove the disposable home when done: `rm -rf /tmp/dsh-gantt-verify`.
@@ -233,8 +274,8 @@ Remove the disposable home when done: `rm -rf /tmp/dsh-gantt-verify`.
 In the connected DSH Web GUI, use `cordis_inspect_query` → Client
 `Slots.listSubTree`:
 
-- `root: "sidebar.panellist"` shows the `gantt` entry.
-- `root: "main"` shows the page registered under key `gantt`.
+- `root: "sidebar.panellist"` shows the `gantt` and `today` entries.
+- `root: "main"` shows the pages registered under keys `gantt` and `today`.
 
 Registration proves composition, not rendering.
 
@@ -260,6 +301,12 @@ open the page in the connected Web GUI and check:
 - [ ] Narrow widths (down to ~390px) in both locales have no overlapping
       content; English labels are the truncation stress case.
 - [ ] Switching the harness language updates the plugin strings.
+- [ ] The **Today** entry opens the day plan: date nav (`‹` / `Today` / `›`),
+      day meta, core-goal callout, slot groups, status pills that persist on
+      reload, and the "this week's nodes" list.
+- [ ] **Import plan** on the Today page reports success (or a readable error),
+      and a fully planned day shows no integrity warnings while a day missing
+      its evening slot or an evening inspiration id does.
 
 ## Troubleshooting
 

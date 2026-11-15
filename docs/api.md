@@ -29,6 +29,9 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `POST` | `/api/gantt/task/split` | `{ id, children: [{ title, startDate?, endDate?, status?, progress?, description? }] }` | `200` parent + created children |
 | `POST` | `/api/gantt/task/delete` | `{ id }` | `200` deleted id + its former parent |
 | `POST` | `/api/gantt/seed` | `{}` (body ignored) | `200` seed result, plus snapshot when seeded |
+| `GET` | `/api/gantt/day?date=YYYY-MM-DD` | — | `200` one day's plan bundle |
+| `POST` | `/api/gantt/plan/status` | `{ id, status, notes? }` | `200 { ok, block }` |
+| `POST` | `/api/gantt/plan/import` | `{ dir?, year? }` | `200 { ok, dir, imported }` |
 
 Routes that read a body require a JSON object; any other JSON value is
 rejected with `400`. `GET` routes and `seed` do not read a body.
@@ -51,6 +54,14 @@ rejected with `400`. `GET` routes and `seed` do not read a body.
   read-only; the UI never authors them. Limitation: a parent that loses its last
   child keeps the last persisted rollup values (rule 7 in
   [compatibility.md](compatibility.md)).
+- **Plan status** is one of `todo`, `in_progress`, `done`, `skipped` — the
+  vocabulary of a *plan block* (a time slot on a day), not of a task.
+- **Plan slot** is one of `morning` (starts before `10:00`), `daytime` (starts
+  before `19:30`), `evening` (starts at or after `19:30`), `other` (no start
+  time). It is derived from the clock when the tracker is imported, not stored
+  by hand.
+- **Times** are `HH:MM` or `''`; `dayKind` is `workday`, `weekend`, or
+  `unknown`.
 
 ## Task object
 
@@ -144,7 +155,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "ok": true,
   "dbPath": "/home/you/.dsh/gantt/tasks.db",
   "statuses": ["todo", "in_progress", "blocked", "done"],
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "taskCount": 13,
   "engine": "node:sqlite",
   "endpoints": [
@@ -154,7 +165,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own eight-entry route catalog (abbreviated above).
+`endpoints` is the host's own eleven-entry route catalog (abbreviated above).
 
 ## Create a task
 
@@ -293,6 +304,113 @@ projects and their subtrees), which read back as
 `stats:{total:13,done:2,inProgress:4,blocked:2,overdue:0,progress:15}` on the
 day it was seeded.
 
+## Read a day plan
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/day?date=2026-11-15'
+```
+
+`date` is optional and defaults to the host's today; a blank value behaves like
+omitted. One bundle carries everything the Today page renders: the day's plan
+metadata, its time blocks, the task-tree nodes whose window overlaps the day and
+the following six days, the six tracks, derived integrity warnings, and block
+stats.
+
+```json
+{
+  "ok": true,
+  "today": "2026-11-15",
+  "date": "2026-11-15",
+  "day": {
+    "date": "2026-11-15",
+    "weekday": "周日",
+    "dayKind": "weekend",
+    "marketOpen": false,
+    "label": "周末（休市）· 主攻片（≥4h）",
+    "coreGoal": "上午把 1.8.1 这一周的读数收成一张表…",
+    "source": "schedule"
+  },
+  "blocks": [
+    {
+      "id": "2026-11-15|09:00|0",
+      "planDate": "2026-11-15",
+      "startTime": "09:00",
+      "endTime": "17:00",
+      "slot": "morning",
+      "category": "A 主攻片（① 投资系统 · 1.8 策略实盘化）",
+      "title": "1.8.1 S2 每日交易仓读数收口",
+      "detail": "…",
+      "landing": "easy_tdx（1.8.1 board/features 消费侧…）",
+      "estimate": "≥4h",
+      "inspiration": "",
+      "status": "todo",
+      "notes": "",
+      "sortOrder": 0,
+      "source": "schedule",
+      "sourceRef": "SCHEDULE.md"
+    }
+  ],
+  "nodes": [{ "id": "1.8.1", "trackId": "1", "title": "S2 每日交易仓读数", "state": "未开始", "startDate": "2026-11-09", "endDate": "2026-11-15", "dep": "", "doneWhen": "…" }],
+  "tracks": [{ "id": "1", "name": "投资系统", "lane": "赚钱", "priority": "高", "state": "进行", "blocker": "…", "sortOrder": 0 }],
+  "integrity": [{ "code": "inspiration-missing", "blockId": "2026-11-15|21:00|1" }],
+  "stats": { "total": 2, "done": 0, "inProgress": 0, "skipped": 0, "remaining": 2 }
+}
+```
+
+`day` is `null` when the date has no imported plan row. `blocks` is then `[]`,
+and `integrity` carries `unplanned-day`.
+
+Integrity codes name a rule from the source tracker, not a validation error:
+
+| Code | Meaning |
+| --- | --- |
+| `landing-missing` | a block has no landing target (the tracker rule is "no landing point = not scheduled") |
+| `evening-missing` | the day has no block in the evening slot (the fixed 21:00-22:00 slot) |
+| `inspiration-missing` | an evening block carries no inspiration id (`#12`, `#19.1`, …) |
+| `unplanned-day` | the day has no imported plan row |
+
+`stats` counts plan blocks: `total`, `done`, `inProgress`, `skipped`, and
+`remaining` (`total - done - skipped`).
+
+## Set a plan block status
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/status \
+  -H 'content-type: application/json' \
+  -d '{ "id": "2026-11-15|21:00|1", "status": "done", "notes": "列了 3 条可交 agent 的任务" }'
+```
+
+```json
+{ "ok": true, "block": { "id": "2026-11-15|21:00|1", "status": "done", "notes": "…", "…": "…" } }
+```
+
+- `status` must be a plan status; `notes` is optional and capped at 500
+  characters (an absent or `null` value leaves the stored notes untouched).
+- An unknown block id is `404`.
+- Re-importing the tracker rewrites block content but keeps `status` and
+  `notes`, so a marked block stays marked.
+
+## Import the task tracker
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
+  -H 'content-type: application/json' -d '{}'
+```
+
+```json
+{ "ok": true, "dir": "/data/home/clawd/projects/task-tracker", "imported": { "tracks": 6, "nodes": 48, "days": 9, "blocks": 27 } }
+```
+
+- The body is optional. `dir` overrides the tracker directory and must be an
+  absolute path; the default is `$DSH_GANTT_TRACKER_DIR`, else
+  `/data/home/clawd/projects/task-tracker`.
+- The import is read-only on the tracker side (no markdown is ever written) and
+  idempotent. It replaces `tracks` and `nodes`, upserts the days and their
+  blocks in one transaction, and never touches `tasks` or manually added blocks.
+- `year` (optional, integer 1970–9999) pins the year assumed for the
+  `MM/DD` day headings when the file's window note does not settle it.
+- A missing or unreadable directory is a `400`.
+
 ## Errors
 
 All failures are JSON with a `4xx`/`5xx` status:
@@ -308,6 +426,8 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | missing/invalid field | `title is required`, `status must be one of todo, in_progress, blocked, done`, `endDate must not be before startDate` |
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `404` | unknown task id | `task <id> was not found` |
+| `404` | unknown plan block id | `plan block <id> was not found` |
+| `400` | invalid plan/import input | `date must be a real calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `tracker directory is required` |
 | `500` | unexpected host failure | the thrown error's message |
 
 A wrong method or an unknown path is left to the harness's `/api` dispatch (it

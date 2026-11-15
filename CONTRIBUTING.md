@@ -57,7 +57,7 @@ squash-merged under the same gate.
 - **i18n.** `DICT_EN` and `DICT_ZH` in `client.js` must contain the same keys
   with no unused entries.
 - **File size.** Every source and test file stays under 1000 lines; `client.js`
-  has the documented 2300-line ratchet cap. Do not add a bundler or a `dist/`.
+  has the documented 2700-line ratchet cap. Do not add a bundler or a `dist/`.
 - **Docs.** Keep `docs/` lowercase, written in English, with valid relative
   links. There is no `Docs/` directory.
 

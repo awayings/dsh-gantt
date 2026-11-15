@@ -16,9 +16,9 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the eight documented endpoints with their methods', () => {
+  it('registers the eleven documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(8)
+    expect(routes.size).toBe(11)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
@@ -26,7 +26,9 @@ describe('route registration', () => {
     }
     expect(routes.get(ROUTES.tree).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.meta).methods).toEqual(['GET'])
-    for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed]) {
+    expect(routes.get(ROUTES.day).methods).toEqual(['GET'])
+    for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed,
+      ROUTES.planStatus, ROUTES.planImport]) {
       expect(routes.get(writePath).methods).toEqual(['POST'])
     }
   })
@@ -97,10 +99,10 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.schemaVersion).toBe(SCHEMA_VERSION)
     expect(payload.taskCount).toBe(0)
     expect(payload.engine).toBe('node:sqlite')
-    expect(payload.endpoints).toHaveLength(8)
+    expect(payload.endpoints).toHaveLength(11)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST',
+      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

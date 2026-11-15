@@ -74,6 +74,12 @@ export function applyPlugin(plugin, options = {}) {
     page() {
       return registrations.get('main:gantt')
     },
+    todaySidebar() {
+      return registrations.get('sidebar.panellist:today')
+    },
+    todayPage() {
+      return registrations.get('main:today')
+    },
     dispose() {
       for (const disposer of effects) if (typeof disposer === 'function') disposer()
     },
@@ -116,7 +122,7 @@ export function installFetch(routes) {
   const stub = vi.fn(async (path, options = {}) => {
     const call = { path, options }
     calls.push(call)
-    const handler = routes[path]
+    const handler = routes[path] ?? routes[path.split('?')[0]]
     if (typeof handler !== 'function') throw new Error(`unexpected fetch request: ${path}`)
     return handler(call, calls)
   })

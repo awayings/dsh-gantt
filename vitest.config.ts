@@ -7,7 +7,7 @@ export default defineConfig({
       {
         test: {
           name: 'host',
-          include: ['tests/store/**/*.spec.js', 'tests/host/**/*.spec.js'],
+          include: ['tests/store/**/*.spec.js', 'tests/host/**/*.spec.js', 'tests/tracker/**/*.spec.js'],
           environment: 'node',
         },
       },
@@ -37,7 +37,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['store.js', 'index.js', 'client.js'],
+      include: ['store.js', 'index.js', 'tracker.js', 'client.js'],
       reporter: ['text', 'html'],
       reportsDirectory: './coverage',
       thresholds: {
@@ -48,6 +48,12 @@ export default defineConfig({
           lines: 100,
         },
         'index.js': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        'tracker.js': {
           statements: 100,
           branches: 100,
           functions: 100,

@@ -11,6 +11,7 @@ backed by SQLite and an authenticated JSON API. Start with the
 | [development.md](development.md) | contributors | Prerequisites, setup, install, toolchain, quality gates, test layout, database, dev loop, verification, troubleshooting |
 | [api.md](api.md) | integrators | Complete JSON API reference: routes, auth, request/response examples, errors |
 | [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence, rules, limitations, verification |
+| [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The personal task-tracker model the plugin imports: tracks, nodes, plan blocks, day plans, source formats, integrity rules, deferred skills |
 
 ## Reference notes
 

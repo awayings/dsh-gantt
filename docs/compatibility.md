@@ -6,7 +6,10 @@ evidence for each. Paths marked `dsh:` are read from the installed harness under
 Source wins over this page.
 
 Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
-`0.2.2-rc.1`, Node `v24.22.2`).
+`0.2.2-rc.1`, Node `v24.22.2`). The `1.2.0` Today page and tracker import were
+verified by the automated gate and the disposable-profile host acceptance pass
+on **2026-11-15**; the manual GUI checklist for the new page is in
+`docs/development.md` and was not yet run at that date.
 
 ## 1 · Supported set
 
@@ -45,8 +48,15 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `index.js` registers eight exact paths this way.
-3. **Client services `slots` and `locale`.**
+   returns a `Response`. `index.js` registers eleven exact paths this way.
+3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
+   `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
+   (`dsh: dsh-client-ui-sidebar/lib/client.js:223,719-720`); the layout renders
+   the `main` slot with `entryKey: panelId`
+   (`dsh: dsh-client-ui-layout/lib/client.js:127`) and `selectPanel` throws when
+   no `main` entry has that key (`.../client.js:523`). The two registrations
+   therefore must use the same id: `gantt`/`gantt` and `today`/`today`.
+4. **Client services `slots` and `locale`.**
    `ctx.slots` is the renderer-owned `SlotRegistry` (`dsh:
    dsh-client-ui-renderer/lib/types/client/index.d.ts:27`, `register`/`inject`
    at `.../client/registry.d.ts:85,111`). `sidebar.panellist` is rendered by the
@@ -56,11 +66,18 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
    dsh-client-locale/lib/types/client/index.d.ts:136-219`). The client half
    injects exactly these two services, and `package.json` `dsh.client.inject`
    names the three packages that must arrive first.
-4. **`node:sqlite`.** `store.js` opens `DatabaseSync` from `node:sqlite`; the
+5. **`node:sqlite`.** `store.js` opens `DatabaseSync` from `node:sqlite`; the
    module is a Node built-in, so no dependency is declared. WAL and
    `foreign_keys = ON` are set on open; the file is created under
    `$DSH_HOME/gantt/tasks.db` (or `DSH_GANTT_DB`).
-5. **No external listener, token, or CORS setup.** All data routes ride the
+6. **The importer reads the task-tracker directory from the local filesystem.**
+   `POST /api/gantt/plan/import` reads `SCHEDULE.md`, `TREE.md`, and
+   `daily/YYYY-MM-DD.md` under the configured directory and writes only to
+   SQLite. This is a deliberate, explicit pull: no file watch, no write-back,
+   and no network access. The default path is this host's layout
+   (`/data/home/clawd/projects/task-tracker`); other machines must set
+   `DSH_GANTT_TRACKER_DIR` or pass `dir`.
+7. **No external listener, token, or CORS setup.** All data routes ride the
    harness's existing `/api` cookie authentication; the plugin never binds a
    port or reads a credential. Treating the cookie as a credential is
    documented in `docs/api.md`.
@@ -77,7 +94,7 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
    the old bytes; even a plain reload can show stale code. Keep the file
    monolithic by section (`DICT_*`, `CSS_*`, helpers, components) and, if real
    splitting is ever needed, bundle back into one `client.js`. The ratchet cap
-   is 2300 lines (`AGENTS.md`).
+   is 2700 lines (`AGENTS.md`; raised from 2300 when the Today page landed).
 2. **One SQLite writer per database file.** One `GanttStore` is opened per DSH
    process in `apply()` and closed through `ctx.effect`. WAL allows concurrent
    readers, not concurrent writers: two DSH processes sharing one `$DSH_HOME`
@@ -87,7 +104,7 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
 3. **Locale dictionaries stay complete and in parity.** `DICT_EN` and
    `DICT_ZH` are registered once through `ctx.locale.register(NS, DICTS)` and
    every visible string goes through `t(...)`/`ctx.locale.bind(NS)`. Both
-   dictionaries carry the same keys (80 at the time of writing) with no unused
+   dictionaries carry the same keys (117 at the time of writing) with no unused
    entries; a missing key silently falls back, so a parity gap is a bug, not a
    graceful degradation.
 4. **Errors are JSON, never HTML.** Every route returns
@@ -113,6 +130,15 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
 
 ## 4 · Limitations
 
+- **The tracker import is a pull, not a sync.** The page shows the state as of
+  the last import; `SCHEDULE.md` right-shifts daily in the source system, so a
+  stale page is expected until **Import plan** runs again. Failures are a
+  readable `400`, never a partial import (one transaction).
+- **The import follows the tracker's markdown shape.** Headings, column order,
+  and the `MM/DD 周X` day-heading convention are the contract; a format change
+  in the tracker degrades to fewer parsed blocks rather than an error. The
+  markdown itself is never modified.
+
 - **Viewport media queries instead of container queries.** The pane is the
   shell's center column and its width follows the sidebar's collapse and drag,
   but the stylesheet still has `@media (max-width: 980px)` and
@@ -131,7 +157,7 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
 
 ## 5 · Verification
 
-- **Check — syntax:** `pnpm run verify` (`node --check` on the three sources).
+- **Check — syntax:** `pnpm run verify` (`node --check` on the four sources).
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
@@ -140,8 +166,9 @@ Last verified: **2026-11-14** (`dsh-gantt` `1.1.0`; installed dsh
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta`, `/api/gantt/seed`, `/api/gantt/tree` with the session
-  cookie).
+  `/api/gantt/meta`, `/api/gantt/seed`, `/api/gantt/tree`,
+  `/api/gantt/plan/import` with a fixture directory, and `/api/gantt/day` with
+  the session cookie).
 - **Check — rendering:** the manual GUI checklist in `docs/development.md`.
 - **Procedure — add a supported DSH line:** install that release in a
   disposable profile, run the automated gate, run the install/host acceptance

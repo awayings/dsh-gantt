@@ -47,7 +47,7 @@ export function bootPlugin() {
  * JSON-encoded, and `undefined` sends no body at all.
  */
 export async function invoke(routes, apiPath, body) {
-  const definition = routes.get(apiPath)
+  const definition = routes.get(new URL(apiPath, 'http://localhost').pathname)
   if (!definition) throw new Error(`route ${apiPath} was not registered`)
   const init = { method: definition.methods[0] }
   if (body !== undefined) init.body = typeof body === 'string' ? body : JSON.stringify(body)
@@ -75,4 +75,7 @@ export const ROUTES = {
   split: '/api/gantt/task/split',
   remove: '/api/gantt/task/delete',
   seed: '/api/gantt/seed',
+  day: '/api/gantt/day',
+  planStatus: '/api/gantt/plan/status',
+  planImport: '/api/gantt/plan/import',
 }

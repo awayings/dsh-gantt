@@ -158,3 +158,192 @@ export function mutationTask(overrides = {}) {
     ...overrides,
   }
 }
+
+// ---- Today page payloads (mirrors GET /api/gantt/day) ----
+
+export const TODAY_DATE = '2026-11-15'
+
+const PLAN_ZEROS = { total: 0, done: 0, inProgress: 0, skipped: 0, remaining: 0 }
+
+function planBlock(fields) {
+  return {
+    id: 'b1',
+    planDate: TODAY_DATE,
+    startTime: '',
+    endTime: '',
+    slot: 'morning',
+    category: '',
+    title: 'Block',
+    detail: '',
+    landing: '',
+    estimate: '',
+    inspiration: '',
+    status: 'todo',
+    notes: '',
+    sortOrder: 0,
+    source: 'schedule',
+    sourceRef: 'SCHEDULE.md',
+    ...fields,
+  }
+}
+
+/** Five blocks across all four slots, one per plan status, mixed optional fields. */
+export function makePlanBlocks() {
+  return [
+    planBlock({
+      id: 'b1',
+      startTime: '09:00',
+      endTime: '12:00',
+      slot: 'morning',
+      category: 'A 主攻片',
+      title: '主攻片：写 Today 页',
+      detail: '把设计落到 client.js 并跑通测试',
+      landing: '合并到 main',
+      estimate: '≥4h',
+      status: 'todo',
+      sortOrder: 0,
+    }),
+    planBlock({
+      id: 'b2',
+      startTime: '14:00',
+      endTime: '17:00',
+      slot: 'daytime',
+      title: '评审 Today 页',
+      detail: '评审 Today 页',
+      landing: '无',
+      estimate: '1h',
+      inspiration: '#12',
+      status: 'in_progress',
+      sortOrder: 1,
+    }),
+    planBlock({
+      id: 'b3',
+      startTime: '21:00',
+      endTime: '22:00',
+      slot: 'evening',
+      category: 'C 复盘',
+      title: '晚间复盘',
+      detail: '记录三件事',
+      landing: '写入日志',
+      inspiration: '#34',
+      status: 'done',
+      sortOrder: 2,
+    }),
+    planBlock({
+      id: 'b4',
+      slot: 'other',
+      title: '机动：收尾杂事',
+      landing: '待定',
+      status: 'skipped',
+      sortOrder: 3,
+    }),
+    planBlock({
+      id: 'b5',
+      startTime: '19:00',
+      endTime: '19:30',
+      slot: 'daytime',
+      title: '清收件箱',
+      estimate: '30m',
+      status: 'todo',
+      sortOrder: 4,
+    }),
+  ]
+}
+
+/** Three task-tree nodes: full range, unplanned (null dates), ongoing (null end). */
+export function makePlanNodes() {
+  return [
+    {
+      id: '1.8.1',
+      trackId: '1',
+      title: '今天页上线',
+      state: '进行',
+      startDate: '2026-11-10',
+      endDate: '2026-11-18',
+      dep: '1.8',
+      doneWhen: '',
+    },
+    {
+      id: '2.3',
+      trackId: '2',
+      title: '导入任务跟踪器',
+      state: '',
+      startDate: null,
+      endDate: null,
+      dep: '',
+      doneWhen: '',
+    },
+    {
+      id: '3.1',
+      trackId: '3',
+      title: '持续打磨',
+      state: '进行中',
+      startDate: '2026-11-14',
+      endDate: null,
+      dep: '3',
+      doneWhen: '',
+    },
+  ]
+}
+
+export function planDay(overrides = {}) {
+  return {
+    date: TODAY_DATE,
+    weekday: '周六',
+    dayKind: 'weekend',
+    marketOpen: false,
+    label: '周末（休市）· 主攻片',
+    coreGoal: '把 Today 页跑通并合并',
+    source: 'schedule',
+    ...overrides,
+  }
+}
+
+/** Successful GET /api/gantt/day payload for a fully planned day. */
+export function dayPayload(overrides = {}) {
+  return {
+    ok: true,
+    today: TODAY_DATE,
+    date: TODAY_DATE,
+    day: planDay(),
+    blocks: makePlanBlocks(),
+    nodes: makePlanNodes(),
+    tracks: [{
+      id: '1',
+      name: '赚钱主线',
+      lane: '赚钱',
+      priority: '高',
+      state: '进行',
+      blocker: '',
+      sortOrder: 1,
+    }],
+    integrity: [{ code: 'landing-missing', blockId: 'b2' }],
+    stats: { total: 5, done: 1, inProgress: 1, skipped: 1, remaining: 3 },
+    ...overrides,
+  }
+}
+
+/** Day bundle for a planned day with no blocks and no nodes. */
+export function emptyDayPayload(overrides = {}) {
+  return dayPayload({
+    blocks: [],
+    nodes: [],
+    tracks: [],
+    integrity: [],
+    stats: { ...PLAN_ZEROS },
+    ...overrides,
+  })
+}
+
+/** Day bundle for a date with no day_plans row and no blocks. */
+export function unplannedDayPayload(overrides = {}) {
+  return dayPayload({
+    day: null,
+    blocks: [],
+    nodes: [],
+    tracks: [],
+    integrity: [{ code: 'unplanned-day' }],
+    stats: { ...PLAN_ZEROS },
+    ...overrides,
+  })
+}

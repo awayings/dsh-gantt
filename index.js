@@ -1,10 +1,13 @@
-import { GanttError, GanttStore, resolveDatabasePath } from './store.js'
+import path from 'node:path'
+import { GanttError, GanttStore, resolveDatabasePath, todayIso } from './store.js'
+import { importTaskTracker, resolveTrackerDir } from './tracker.js'
 
 /**
  * @typedef {import('./store.js').SplitChild} SplitChild
  * @typedef {import('./store.js').TaskInput} TaskInput
  * @typedef {import('./store.js').TaskPatch} TaskPatch
  * @typedef {import('./store.js').TaskStatus} TaskStatus
+ * @typedef {import('./store.js').PlanStatus} PlanStatus
  */
 
 /**
@@ -72,6 +75,21 @@ const ENDPOINTS = [
     method: 'POST',
     path: '/api/gantt/seed',
     description: 'Insert a small demo tree when the database is empty.',
+  },
+  {
+    method: 'GET',
+    path: '/api/gantt/day',
+    description: 'Read one day plan bundle. Query: date=YYYY-MM-DD (defaults to today).',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/plan/status',
+    description: 'Set a plan block status and optional notes. Body: { id, status, notes? }.',
+  },
+  {
+    method: 'POST',
+    path: '/api/gantt/plan/import',
+    description: 'Import the tracker markdown. Body: { dir?, year? }.',
   },
 ]
 
@@ -197,5 +215,34 @@ export function apply(ctx) {
       ...result,
       ...(result.seeded ? store.snapshot() : {}),
     })
+  })
+
+  route('GET', '/api/gantt/day', async (request) => {
+    const date = new URL(request.url, 'http://localhost').searchParams.get('date')
+    const target = date === null || date.trim() === '' ? todayIso() : date.trim()
+    return json({ ok: true, today: todayIso(), date: target, ...store.dayPlan(target) })
+  })
+
+  route('POST', '/api/gantt/plan/status', async (request) => {
+    const body = await readBody(request)
+    if (typeof body.id !== 'string' || body.id.length === 0) throw new GanttError('id is required')
+    const block = store.setBlockStatus(
+      body.id,
+      /** @type {PlanStatus} */ (body.status),
+      /** @type {string | null | undefined} */ (body.notes),
+    )
+    return json({ ok: true, block })
+  })
+
+  route('POST', '/api/gantt/plan/import', async (request) => {
+    const body = await readBody(request)
+    const dir = body.dir === undefined ? resolveTrackerDir() : body.dir
+    if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw new GanttError('dir must be an absolute path')
+    const { year } = body
+    if (year !== undefined && (typeof year !== 'number' || !Number.isInteger(year) || year < 1970 || year > 9999)) {
+      throw new GanttError('year must be an integer from 1970 to 9999')
+    }
+    const imported = importTaskTracker(store, { dir, year: /** @type {number | undefined} */ (year) })
+    return json({ ok: true, dir, imported })
   })
 }

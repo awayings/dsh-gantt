@@ -25,7 +25,10 @@ window.__ModuleLoader__.load({
       in_progress: 'var(--dsw-alias-brand-primary)',
       blocked: 'var(--dsw-alias-state-error-primary)',
       done: 'var(--dsw-alias-state-success-primary)',
+      skipped: 'var(--dsw-alias-label-secondary)',
     }
+    const SLOT_ORDER = ['morning', 'daytime', 'evening', 'other']
+    const PLAN_STATUSES = ['todo', 'in_progress', 'done', 'skipped']
 
     const DICT_EN = {
       'nav.label': 'Task Gantt',
@@ -108,6 +111,43 @@ window.__ModuleLoader__.load({
       'validation.splitChild': 'Every subtask needs a title and a valid date range.',
       'window.week': 'Weekly',
       'window.month': 'Monthly',
+      'nav.today': 'Today',
+      'today.title': 'Today',
+      'today.subtitle': 'Planned time blocks, their status, and the task-tree nodes in play.',
+      'today.prevDay': 'Previous day',
+      'today.nextDay': 'Next day',
+      'today.todayButton': 'Today',
+      'today.refresh': 'Refresh',
+      'today.import': 'Import plan',
+      'today.importDone': 'Plan imported',
+      'today.importFailed': 'Import failed',
+      'today.coreGoal': 'Core goal',
+      'today.integrityTitle': 'Integrity checks',
+      'today.integrity.landing-missing': 'A block has no landing target',
+      'today.integrity.evening-missing': 'No evening block for this day',
+      'today.integrity.inspiration-missing': 'An evening block carries no inspiration id',
+      'today.integrity.unplanned-day': 'This day has no plan yet',
+      'today.blocks': 'Time blocks',
+      'today.nodes': "This week's nodes",
+      'today.nodesEmpty': 'No task-tree nodes in play this week.',
+      'today.emptyTitle': 'No plan for this day',
+      'today.emptyHint': 'Import the task tracker to load the schedule board, task tree, and daily card.',
+      'today.emptyAction': 'Import now',
+      'today.emptyDay': 'No time blocks planned for this day.',
+      'slot.morning': 'Morning',
+      'slot.daytime': 'Daytime',
+      'slot.evening': 'Evening',
+      'slot.other': 'Unscheduled',
+      'planStatus.todo': 'To do',
+      'planStatus.in_progress': 'In progress',
+      'planStatus.done': 'Done',
+      'planStatus.skipped': 'Skipped',
+      'today.statusHint': 'Click to cycle the block status',
+      'today.open': 'Market open',
+      'today.closed': 'Market closed',
+      'today.weekdayLabel': 'Weekday',
+      'today.remaining': 'Remaining',
+      'today.doneCount': 'Done',
     }
 
     const DICT_ZH = {
@@ -191,6 +231,43 @@ window.__ModuleLoader__.load({
       'validation.splitChild': '每个子任务都需要标题和有效的日期范围。',
       'window.week': '周视图',
       'window.month': '月视图',
+      'nav.today': '今日',
+      'today.title': '今日安排',
+      'today.subtitle': '当天的时间格、执行状态，以及正在推进的任务树节点。',
+      'today.prevDay': '前一天',
+      'today.nextDay': '后一天',
+      'today.todayButton': '今天',
+      'today.refresh': '刷新',
+      'today.import': '导入计划',
+      'today.importDone': '计划已导入',
+      'today.importFailed': '导入失败',
+      'today.coreGoal': '核心目标',
+      'today.integrityTitle': '完整性检查',
+      'today.integrity.landing-missing': '有任务格缺少落点',
+      'today.integrity.evening-missing': '当天缺少晚间多元格',
+      'today.integrity.inspiration-missing': '晚间多元格缺少灵感编号',
+      'today.integrity.unplanned-day': '这一天还没有计划',
+      'today.blocks': '时间格',
+      'today.nodes': '本周节点',
+      'today.nodesEmpty': '本周没有推进中的节点。',
+      'today.emptyTitle': '这一天还没有计划',
+      'today.emptyHint': '导入任务跟踪器，载入未来 7 天日程、任务树和每日卡片。',
+      'today.emptyAction': '立即导入',
+      'today.emptyDay': '这一天没有安排时间格。',
+      'slot.morning': '盘前',
+      'slot.daytime': '工作时段',
+      'slot.evening': '晚间多元格',
+      'slot.other': '未定时',
+      'planStatus.todo': '待开始',
+      'planStatus.in_progress': '进行中',
+      'planStatus.done': '已完成',
+      'planStatus.skipped': '已跳过',
+      'today.statusHint': '点击切换时间格状态',
+      'today.open': '开市',
+      'today.closed': '休市',
+      'today.weekdayLabel': '星期',
+      'today.remaining': '剩余',
+      'today.doneCount': '已完成',
     }
 
     const DICTS = { en: DICT_EN, zh: DICT_ZH }
@@ -316,6 +393,13 @@ window.__ModuleLoader__.load({
     function formatWeekday(iso, locale) {
       return new Intl.DateTimeFormat(localeTag(locale), {
         weekday: 'narrow',
+        timeZone: 'UTC',
+      }).format(new Date(isoToDay(iso)))
+    }
+
+    function formatWeekdayLong(iso, locale) {
+      return new Intl.DateTimeFormat(localeTag(locale), {
+        weekday: 'long',
         timeZone: 'UTC',
       }).format(new Date(isoToDay(iso)))
     }
@@ -509,6 +593,45 @@ window.__ModuleLoader__.load({
       return { ...state, refresh }
     }
 
+    function useTodayData(date) {
+      const [state, setState] = useState({ status: 'loading', data: null, error: null })
+      const [revision, setRevision] = useState(0)
+      const refresh = useCallback(() => setRevision(value => value + 1), [])
+
+      useEffect(() => {
+        const controller = new AbortController()
+        let active = true
+        setState(previous => ({
+          ...previous,
+          status: previous.data ? 'refreshing' : 'loading',
+          error: null,
+        }))
+        requestJson(`api/gantt/day?date=${encodeURIComponent(date)}`, { signal: controller.signal })
+          .then((body) => {
+            if (active) setState({ status: 'ready', data: body, error: null })
+          })
+          .catch((error) => {
+            if (!active || error.name === 'AbortError') return
+            setState(previous => ({
+              ...previous,
+              status: 'error',
+              error: error instanceof Error ? error.message : String(error),
+            }))
+          })
+        return () => {
+          active = false
+          controller.abort()
+        }
+      }, [date, revision])
+
+      return { ...state, refresh }
+    }
+
+    function nextPlanStatus(status) {
+      const index = PLAN_STATUSES.indexOf(status)
+      return PLAN_STATUSES[(index + 1) % PLAN_STATUSES.length]
+    }
+
     function flattenTree(nodes) {
       const output = []
       const walk = (list) => {
@@ -597,6 +720,25 @@ window.__ModuleLoader__.load({
       h('rect', { x: 9, y: 10.3, width: 11, height: 3.4, rx: 1.7 }),
       h('rect', { x: 6, y: 16.6, width: 8, height: 3.4, rx: 1.7 }),
       h('path', { d: 'M3.5 3v18', opacity: 0.4 }),
+      )
+    }
+
+    function TodayGlyph({ size = 18, active = false }) {
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: active ? 2 : 1.8,
+        strokeLinecap: 'round',
+        'aria-hidden': 'true',
+        style: { display: 'block', opacity: active ? 1 : 0.85 },
+      },
+      h('rect', { x: 4, y: 5, width: 16, height: 15, rx: 3.2 }),
+      h('path', { d: 'M4 9.6h16', opacity: 0.55 }),
+      h('path', { d: 'M8 3v3.4M16 3v3.4' }),
+      h('circle', { cx: 12, cy: 14.6, r: 2.3, fill: 'currentColor', stroke: 'none' }),
       )
     }
 
@@ -1222,6 +1364,50 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function TodayBlock({ block, t, onCycle }) {
+      const time = [block.startTime, block.endTime].filter(Boolean).join('–') || '—'
+      return h('article', {
+        className: 'today-block',
+        'data-block-id': block.id,
+        'data-slot': block.slot,
+        'data-status': block.status,
+      },
+      h('div', { className: 'today-block-time' }, time),
+      h('div', { className: 'today-block-main' },
+        h('div', { className: 'today-block-head' },
+          block.category ? h('span', { className: 'today-chip' }, block.category) : null,
+          h('h4', { className: 'today-block-title', title: block.title }, block.title),
+          h(StatusPill, {
+            status: block.status,
+            label: t(`planStatus.${block.status}`),
+            interactive: true,
+            title: t('today.statusHint'),
+            onClick: () => onCycle(block),
+          }),
+        ),
+        block.detail && block.detail !== block.title
+          ? h('p', { className: 'today-block-detail' }, block.detail)
+          : null,
+        h('div', { className: 'today-block-meta' },
+          block.landing ? h('span', { className: 'today-chip today-chip-muted' }, `⤷ ${block.landing}`) : null,
+          block.estimate ? h('span', { className: 'today-chip today-chip-muted' }, block.estimate) : null,
+          block.inspiration ? h('span', { className: 'today-chip today-chip-muted' }, block.inspiration) : null,
+        ),
+      ),
+      )
+    }
+
+    function TodayNode({ node }) {
+      const range = [node.startDate, node.endDate].filter(Boolean).join(' – ')
+      return h('li', { className: 'today-node', 'data-state': node.state || 'unknown' },
+        h('span', { className: 'today-node-id' }, node.id),
+        h('span', { className: 'today-node-title', title: node.title }, node.title),
+        node.state ? h('span', { className: 'today-chip' }, node.state) : null,
+        range ? h('span', { className: 'today-node-range' }, range) : null,
+        node.dep ? h('span', { className: 'today-chip today-chip-muted' }, node.dep) : null,
+      )
+    }
+
     const CSS_BASE = `
       .gantt-page {
         --gantt-left: 340px;
@@ -1790,6 +1976,57 @@ window.__ModuleLoader__.load({
 
     const CSS = [CSS_BASE, CSS_HEAD, CSS_STATS, CSS_GRID, CSS_EMPTY, CSS_DIALOG, CSS_MISC].join('\n')
 
+    const CSS_TODAY = `
+      .today-page { container-type: inline-size; }
+      .today-page .today-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 14px 22px 26px; }
+      .today-meta { flex-wrap: wrap; gap: 8px 14px; padding: 10px 12px; border: 1px solid var(--gantt-line); border-radius: 10px; background: var(--gantt-surface); }
+      .today-meta-date { display: inline-flex; align-items: baseline; gap: 7px; }
+      .today-meta-date strong { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+      .today-weekday { font-size: 12px; color: var(--gantt-muted); }
+      .today-meta-label { font-size: 12px; color: var(--gantt-muted); }
+      .today-market { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--gantt-line-strong); color: var(--gantt-muted); white-space: nowrap; }
+      .today-market[data-open="true"] { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+      .today-meta .gantt-stat-progress { margin-left: auto; min-width: 200px; flex: 1 1 240px; max-width: 440px; }
+      .today-goal { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-left: 3px solid var(--gantt-accent); border-radius: 8px; background: color-mix(in srgb, var(--gantt-accent) 8%, transparent); }
+      .today-goal-text { margin: 0; font-size: 12.5px; }
+      .today-section-title { margin: 0; font-size: 11.5px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gantt-muted); }
+      .today-integrity { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border: 1px solid var(--gantt-line); border-radius: 10px; background: var(--gantt-surface); }
+      .today-integrity-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+      .today-integrity-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--gantt-muted); }
+      .today-blocks, .today-slot, .today-nodes { display: flex; flex-direction: column; }
+      .today-blocks { gap: 10px; }
+      .today-slot { gap: 7px; }
+      .today-nodes { gap: 8px; }
+      .today-slot-title { display: flex; align-items: baseline; gap: 7px; margin: 0; font-size: 12px; font-weight: 650; color: var(--gantt-muted); }
+      .today-slot-count { font-size: 10.5px; font-variant-numeric: tabular-nums; opacity: 0.8; }
+      .today-block { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; padding: 9px 11px; border: 1px solid var(--gantt-line); border-left: 3px solid var(--gantt-line-strong); border-radius: 10px; background: var(--gantt-surface); }
+      .today-block[data-status="in_progress"] { border-left-color: var(--dsw-alias-brand-primary); }
+      .today-block[data-status="done"] { border-left-color: var(--dsw-alias-state-success-primary); }
+      .today-block[data-status="todo"] { border-left-color: var(--dsw-alias-state-idle-primary); }
+      .today-block-time { font-size: 12px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .today-block-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+      .today-block-head { display: flex; align-items: center; gap: 7px; min-width: 0; flex-wrap: wrap; }
+      .today-block-title { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .today-block-detail { margin: 0; font-size: 11.5px; color: var(--gantt-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .today-chip { flex: 0 0 auto; font-size: 10.5px; line-height: 1; padding: 3px 7px; border-radius: 999px; border: 1px solid var(--gantt-line-strong); color: var(--gantt-muted); white-space: nowrap; }
+      .today-chip-muted { border-style: dashed; }
+      .today-block-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+      .today-muted { margin: 0; font-size: 12px; color: var(--gantt-muted); }
+      .today-node-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .today-node { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 7px 10px; border: 1px solid var(--gantt-line); border-radius: 9px; background: var(--gantt-surface); font-size: 12px; }
+      .today-node-id { color: var(--gantt-accent); font-size: 11px; font-variant-numeric: tabular-nums; }
+      .today-node-title { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .today-node-range { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .today-nav-date { min-width: 96px; text-align: center; font-size: 12px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+      .today-body .gantt-banner { margin: 0; }
+      @container (max-width: 560px) {
+        .today-page .today-body { padding: 12px 14px 22px; }
+        .today-block { grid-template-columns: 1fr; }
+        .today-meta .gantt-stat-progress { margin-left: 0; max-width: none; }
+        .today-node-title { flex-basis: 100%; }
+      }
+    `
+
     function GanttPage() {
       const { locale, t } = useLocale(runtime)
       const { status, data, error, refresh } = useGanttData()
@@ -2087,6 +2324,220 @@ window.__ModuleLoader__.load({
       ))
     }
 
+    function TodayPage() {
+      const { locale, t } = useLocale(runtime)
+      const [date, setDate] = useState(() => todayIso())
+      const { status, data, error, refresh } = useTodayData(date)
+      const [notice, setNotice] = useState(null)
+      const [writeError, setWriteError] = useState(null)
+      const [importing, setImporting] = useState(false)
+
+      const day = data?.day ?? null
+      const blocks = data?.blocks ?? []
+      const nodes = data?.nodes ?? []
+      const integrity = data?.integrity ?? []
+      const stats = data?.stats ?? { total: 0, done: 0, inProgress: 0, skipped: 0, remaining: 0 }
+      const percent = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
+      const serverToday = data?.today || todayIso()
+      const unplanned = day === null && blocks.length === 0
+
+      const shiftDay = useCallback(direction => setDate(current => addDays(current, direction)), [])
+      const goToday = useCallback(() => setDate(serverToday), [serverToday])
+
+      const cycleStatus = useCallback(async (block) => {
+        setNotice(null)
+        setWriteError(null)
+        try {
+          await requestJson('api/gantt/plan/status', {
+            method: 'POST',
+            body: JSON.stringify({ id: block.id, status: nextPlanStatus(block.status) }),
+          })
+          refresh()
+        } catch (failure) {
+          setWriteError(failure instanceof Error ? failure.message : String(failure))
+        }
+      }, [refresh])
+
+      const importPlan = useCallback(async () => {
+        setNotice(null)
+        setWriteError(null)
+        setImporting(true)
+        try {
+          await requestJson('api/gantt/plan/import', { method: 'POST', body: '{}' })
+          setNotice(t('today.importDone'))
+          refresh()
+        } catch (failure) {
+          const message = failure instanceof Error ? failure.message : String(failure)
+          setWriteError(`${t('today.importFailed')}: ${message}`)
+        } finally {
+          setImporting(false)
+        }
+      }, [refresh, t])
+
+      const shell = children => h('div', { className: 'gantt-page today-page' },
+        h('style', { key: 'gantt-css' }, CSS),
+        h('style', { key: 'today-css' }, CSS_TODAY),
+        children,
+      )
+
+      if (status === 'loading' && data === null) {
+        return shell(h('div', { className: 'gantt-center' },
+          h('span', { className: 'gantt-spinner' }),
+          h('span', null, t('loading')),
+        ))
+      }
+
+      if (status === 'error' && data === null) {
+        return shell(h('div', { className: 'gantt-center' },
+          h('div', { className: 'gantt-empty-title' }, t('error.title')),
+          h('div', { className: 'gantt-empty-body' }, error),
+          h('div', { className: 'gantt-empty-actions' },
+            h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: refresh }, t('error.retry')),
+            h('button', { className: 'gantt-btn', type: 'button', onClick: importPlan }, t('today.import')),
+          ),
+        ))
+      }
+
+      const header = h('header', { className: 'gantt-head' },
+        h('div', { className: 'gantt-brand' },
+          h('span', { className: 'gantt-brand-mark' }, h(TodayGlyph, { size: 22 })),
+          h('div', { className: 'gantt-brand-text' },
+            h('h1', { className: 'gantt-title' }, t('today.title')),
+            h('p', { className: 'gantt-subtitle' }, t('today.subtitle')),
+          ),
+        ),
+        h('div', { className: 'gantt-actions' },
+          h('button', {
+            className: 'gantt-btn gantt-icon-btn',
+            type: 'button',
+            title: t('today.prevDay'),
+            'aria-label': t('today.prevDay'),
+            onClick: () => shiftDay(-1),
+          }, '‹'),
+          h('span', { className: 'today-nav-date' }, formatDate(date, locale, true)),
+          h('button', {
+            className: 'gantt-btn gantt-icon-btn',
+            type: 'button',
+            title: t('today.nextDay'),
+            'aria-label': t('today.nextDay'),
+            onClick: () => shiftDay(1),
+          }, '›'),
+          h('button', { className: 'gantt-btn', type: 'button', onClick: goToday }, t('today.todayButton')),
+          h('button', {
+            className: 'gantt-btn gantt-icon-btn',
+            type: 'button',
+            title: t('today.refresh'),
+            'aria-label': t('today.refresh'),
+            disabled: status === 'refreshing',
+            onClick: refresh,
+          }, status === 'refreshing' ? '…' : '⟳'),
+          h('button', {
+            className: 'gantt-btn gantt-btn-primary',
+            type: 'button',
+            disabled: importing,
+            onClick: importPlan,
+          }, t('today.import')),
+        ),
+      )
+
+      const meta = h('section', { className: 'gantt-stats today-meta' },
+        h('div', { className: 'today-meta-date' },
+          h('strong', null, formatDate(date, locale, true)),
+          h('span', { className: 'today-weekday', title: t('today.weekdayLabel') }, formatWeekdayLong(date, locale)),
+        ),
+        day?.label ? h('span', { className: 'today-meta-label' }, day.label) : null,
+        h('span', { className: 'today-market', 'data-open': day?.marketOpen ? 'true' : 'false' },
+          day?.marketOpen ? t('today.open') : t('today.closed')),
+        h('div', { className: 'gantt-stat-progress' },
+          h('span', null, `${t('today.doneCount')} ${stats.done}/${stats.total}`),
+          h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${percent}%` } })),
+          h('span', null, `${t('today.remaining')} ${stats.remaining}`),
+        ),
+      )
+
+      const goal = day && day.coreGoal
+        ? h('section', { className: 'today-goal' },
+          h('span', { className: 'gantt-label' }, t('today.coreGoal')),
+          h('p', { className: 'today-goal-text' }, day.coreGoal),
+        )
+        : null
+
+      const integritySection = integrity.length > 0
+        ? h('section', { className: 'today-integrity' },
+          h('div', { className: 'today-integrity-head' },
+            h('h2', { className: 'today-section-title' }, t('today.integrityTitle')),
+            h('button', { className: 'gantt-btn', type: 'button', disabled: importing, onClick: importPlan }, t('today.import')),
+          ),
+          h('ul', { className: 'today-integrity-list' },
+            integrity.map(item => h('li', {
+              key: `${item.code}:${item.blockId || ''}`,
+              className: 'today-integrity-item',
+              'data-code': item.code,
+            }, t(`today.integrity.${item.code}`))),
+          ),
+        )
+        : null
+
+      const content = unplanned
+        ? h('div', { className: 'gantt-empty-wrap' },
+          h('div', { className: 'gantt-empty' },
+            h('span', { className: 'gantt-empty-icon' }, h(TodayGlyph, { size: 26 })),
+            h('div', { className: 'gantt-empty-title' }, t('today.emptyTitle')),
+            h('div', { className: 'gantt-empty-body' }, t('today.emptyHint')),
+            h('div', { className: 'gantt-empty-actions' },
+              h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', disabled: importing, onClick: importPlan }, t('today.emptyAction')),
+            ),
+          ),
+        )
+        : h(React.Fragment, null,
+          h('section', { className: 'today-blocks' },
+            h('h2', { className: 'today-section-title' }, t('today.blocks')),
+            blocks.length === 0
+              ? h('p', { className: 'today-muted' }, t('today.emptyDay'))
+              : SLOT_ORDER.map((slot) => {
+                const list = blocks.filter(block => block.slot === slot)
+                return list.length === 0 ? null : h('section', {
+                  key: slot,
+                  className: 'today-slot',
+                  'data-slot': slot,
+                },
+                h('h3', { className: 'today-slot-title' },
+                  h('span', null, t(`slot.${slot}`)),
+                  h('span', { className: 'today-slot-count' }, list.length),
+                ),
+                list.map(block => h(TodayBlock, { key: block.id, block, t, onCycle: cycleStatus })),
+                )
+              }),
+          ),
+          h('section', { className: 'today-nodes' },
+            h('h2', { className: 'today-section-title' }, t('today.nodes')),
+            nodes.length === 0
+              ? h('p', { className: 'today-muted' }, t('today.nodesEmpty'))
+              : h('ul', { className: 'today-node-list' },
+                nodes.map(node => h(TodayNode, { key: node.id, node })),
+              ),
+          ),
+        )
+
+      return shell(h(React.Fragment, null,
+        header,
+        h('div', { className: 'today-body' },
+          meta,
+          error && data
+            ? h('div', { className: 'gantt-banner' },
+              h('span', null, error),
+              h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
+            )
+            : null,
+          writeError ? h('div', { className: 'gantt-banner' }, h('span', null, writeError)) : null,
+          goal,
+          integritySection,
+          content,
+        ),
+        notice ? h('div', { className: 'gantt-toast', role: 'status' }, notice) : null,
+      ))
+    }
+
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
@@ -2106,6 +2557,16 @@ window.__ModuleLoader__.load({
           name: 'main',
           key: 'gantt',
         }, GanttPage))
+        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist',
+          id: 'today',
+          order: 21,
+          label: () => t('nav.today'),
+        }, TodayGlyph))
+        ctx.slots.inject('main', () => ctx.slots.register({
+          name: 'main',
+          key: 'today',
+        }, TodayPage))
       },
     }
   },
