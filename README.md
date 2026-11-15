@@ -3,18 +3,22 @@
 A persistent DeepSeek Harness Web UI plugin that adds two entries to the left
 sidebar:
 
-- **Task Gantt** — a hierarchical task tree with automatic `1`, `1.1`, `1.1.1`
+- **Task Gantt** — one hierarchical task tree with automatic `1`, `1.1`, `1.1.1`
   numbering; weekly and monthly timelines with zoom-out / zoom-in navigation;
   status, progress, and roll-up values on parent tasks; creation, editing,
-  splitting, moving, deletion.
-- **Today (今日安排)** — the day's planned time blocks from a personal
-  task-tracker workspace, grouped by slot, with one-click status, the task-tree
-  nodes in play, the day's core goal, and integrity warnings for missing
-  landing targets or a missing evening slot.
+  splitting, moving, deletion. The six imported tracks are the tree roots and
+  their Hermes nodes hang below them, so the imported work is visible here.
+  Decompose a node into subtasks, schedule a node into a day plan, and export
+  the whole tree as markdown model context.
+- **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
+  one-click status, the tree nodes in play, the day's core goal, and integrity
+  warnings for missing landing targets or a missing evening slot. Blocks created
+  by scheduling a tree node show where they came from.
 
 Both pages share a local SQLite database and an authenticated JSON API. The
 tracker import is an explicit, idempotent pull from markdown files — no watcher,
-no write-back.
+no write-back — and it materializes the imported tree into the same working tree
+the Gantt page renders.
 
 No build step, no runtime dependencies, no second server: the host half is plain
 ESM shipped in this repository, and the client half is a single browser artifact
@@ -59,8 +63,9 @@ pnpm run deploy --uninstall     # remove the bundle from the profile
 ```
 
 Every form records a pnpm `link:` dependency, so the profile resolves this
-directory rather than a copy: restart `dsh web` after editing `index.js` or
-`store.js`, and reload the page after editing `client.js` — no reinstall step.
+directory rather than a copy: restart `dsh web` after editing `index.js`,
+`store.js`, `tracker.js`, or `tree.js`, and reload the page after editing
+`client.js` — no reinstall step.
 `pnpm run deploy` takes `--profile <name>` and `--home <dir>` when the target is
 not the default `web` profile under `$DSH_HOME` (`~/.dsh`).
 
@@ -74,11 +79,16 @@ is always by path — it is not published to npm.
 2. On an empty database, click **Load demo data** to get a small two-project
    tree (13 tasks) and explore the timeline, status cycling, and rollups.
 3. Use **New task**, the row actions, and **Split** to build your own tree;
-   **Week** / **Month**, the arrows, and **Today** move the time axis.
+   **Week** / **Month**, the arrows, and **Today** move the time axis. The
+   depth zoom collapses the tree to all nodes, two levels, or one level.
 4. The **API** button shows the resolved database path and the full endpoint
    catalog, ready to copy into `curl`.
 5. Open **Today** in the sidebar and press **Import plan** to pull the personal
-   task tracker into the database; then browse days with `‹` / `›`.
+   task tracker into the database. The imported tracks and nodes now appear as
+   the Gantt tree too; browse days with `‹` / `›`.
+6. On a tree row, **Decompose** creates subtasks (and optionally schedules each
+   one), **Schedule** puts an existing node into a day's plan, and **Export
+   context** copies the tree plus today's plan as markdown.
 
 ## Data source
 
@@ -94,22 +104,30 @@ $DSH_HOME/gantt/tasks.db
 DSH_GANTT_DB=/absolute/path/to/tasks.db dsh web
 ```
 
-The schema is created on first activation. Dates are `YYYY-MM-DD`; task status
-is one of `todo`, `in_progress`, `blocked`, `done`; plan-block status is one of
-`todo`, `in_progress`, `done`, `skipped`.
+The schema is created on first activation and upgraded in place; a v2 database
+is migrated to schema version 3 on open (the append-only migration and its
+one-time backfill are in [docs/compatibility.md](docs/compatibility.md)). Dates
+are `YYYY-MM-DD`; task status is one of `todo`, `in_progress`, `blocked`, `done`;
+plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
-The Today page reads four additional tables (`tracks`, `nodes`, `plan_blocks`,
-`day_plans`) filled by importing a task-tracker markdown workspace
-(`SCHEDULE.md`, `TREE.md`, `daily/*.md`). The directory defaults to
-`/data/home/clawd/projects/task-tracker` and can be overridden with
-`DSH_GANTT_TRACKER_DIR`; the import never writes to it. See
-[docs/personal-task-system.md](docs/personal-task-system.md) for what the
-importer understands and what the integrity checks enforce. When a task has children, its
-dates, progress, and status are rolled up from them on read — parent fields are
-never authored directly in the UI. Known limitation: a parent that loses its
+Schema version 3 keeps one working tree in `tasks`: `kind='track'` roots (the
+six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
+manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
+`lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
+and the plugin's `links`; `(kind, ref)` is unique for imported rows. The
+`tracks`/`nodes` tables remain as import snapshots and idempotency keys, and
+`plan_blocks`/`day_plans` hold the time grid. The import reads a task-tracker
+markdown workspace (`SCHEDULE.md`, `TREE.md`, `daily/*.md`) from
+`/data/home/clawd/projects/task-tracker` by default (`DSH_GANTT_TRACKER_DIR`
+overrides it) and never writes to it. See
+[docs/personal-task-system.md](docs/personal-task-system.md) for the domain
+model and the integrity checks. When a task has children, its dates and progress
+are rolled up from them on read, and its status follows the tracker rule: the
+parent's own tracker state wins over a weaker child-derived state. Parent fields
+are never authored directly in the UI. Known limitation: a parent that loses its
 last child keeps its last rolled-up values (see
-[docs/compatibility.md](docs/compatibility.md)). The full contract is in
-[docs/api.md](docs/api.md#conventions).
+[docs/compatibility.md](docs/compatibility.md)).
+The full contract is in [docs/api.md](docs/api.md#conventions).
 
 WAL mode keeps `tasks.db-wal` / `tasks.db-shm` beside the database. One DSH
 process owns one database file; do not point concurrent DSH processes at the
@@ -127,24 +145,27 @@ axis changes.
 
 ## JSON API
 
-All routes are mounted on the harness's existing authenticated `/api` channel.
+All fourteen routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/gantt/tree` | Task tree, numbers, rollups, stats |
-| `GET` | `/api/gantt/meta` | Database path, statuses, endpoint catalog |
-| `POST` | `/api/gantt/tasks` | Create a task |
-| `POST` | `/api/gantt/task/update` | Update any task fields |
+| `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, and the frontier/next `brief` |
+| `GET` | `/api/gantt/meta` | Database path, statuses, kinds, link types, endpoint catalog |
+| `POST` | `/api/gantt/tasks` | Create a task (including the tracker metadata fields) |
+| `POST` | `/api/gantt/task/update` | Update any writable task fields |
 | `POST` | `/api/gantt/task/status` | Change status/progress only |
 | `POST` | `/api/gantt/task/split` | Create child subtasks |
+| `POST` | `/api/gantt/task/decompose` | Decompose a node and optionally schedule each child |
+| `POST` | `/api/gantt/task/schedule` | Put an existing node into a day's plan (idempotent) |
 | `POST` | `/api/gantt/task/delete` | Delete a task and its descendants |
+| `GET` | `/api/gantt/context` | Export the tree and a day plan as markdown model context |
 | `POST` | `/api/gantt/seed` | Insert demo tasks when the database is empty |
-| `GET` | `/api/gantt/day` | One day's plan bundle (blocks, nodes, integrity, stats) |
+| `GET` | `/api/gantt/day` | One day's plan bundle (blocks, tree nodes, integrity, stats) |
 | `POST` | `/api/gantt/plan/status` | Set a plan block's status and optional notes |
-| `POST` | `/api/gantt/plan/import` | Import the task-tracker markdown |
+| `POST` | `/api/gantt/plan/import` | Import the task-tracker markdown into the unified tree |
 
 A terminal `curl` needs the page's session cookie — open the tokenized URL
 printed by `dsh web` once, then copy the `Cookie` request header from an
@@ -156,7 +177,7 @@ Full request/response examples, field tables, and error codes:
 ## Verification
 
 ```sh
-pnpm run verify    # node --check on the four source files
+pnpm run verify    # node --check on the five source files
 pnpm run static    # lint + typecheck (the commit hook)
 pnpm run test      # vitest (host + jsdom client unit suites)
 pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
@@ -198,7 +219,7 @@ into runtime modules (`require('./client.foo.js')`) leaves the entry file
 untouched, so the revision does not change, the chunk URL does not change, and
 the browser keeps serving the old bytes from its cache — HMR stops firing and
 even a plain reload can show stale code. The entry file must stay monolithic,
-with a 2700-line ratchet cap documented in [AGENTS.md](AGENTS.md) and
+with a 3600-line ratchet cap documented in [AGENTS.md](AGENTS.md) and
 [docs/compatibility.md](docs/compatibility.md).
 
 Organize the single file by section instead:
@@ -207,10 +228,11 @@ Organize the single file by section instead:
 | --- | --- |
 | `DICT_EN`, `DICT_ZH`, `DICTS` | locale dictionaries registered with the Client locale service |
 | `CSS_BASE`, `CSS_HEAD`, `CSS_STATS`, `CSS_GRID`, `CSS_EMPTY`, `CSS_DIALOG`, `CSS_MISC` | stylesheet sections, joined once into the rendered `<style>` |
-| `isoToDay`/`dayToIso`/`addDays`/`buildWindow`/`flattenTree` helpers | pure date and tree helpers |
+| `isoToDay`/`dayToIso`/`addDays`/`buildWindow`/`flattenTree`/`visibleRows`/`collapseForLevel` helpers | pure date, tree, and depth-zoom helpers |
 | `CSS_TODAY` | stylesheet section for the Today page, rendered beside `CSS` when that page mounts |
-| `GanttPage`, `TimelineHeader`, `GanttRow`, `TaskDialog`, `SplitDialog`, `ApiDialog` | Gantt page components |
-| `TodayPage`, `TodayGlyph`, `useTodayData` | Today page component, its sidebar glyph, and its data hook |
+| `GanttPage`, `TimelineHeader`, `GridLines`, `GanttRow`, `TaskBar`, `MetaChips`, `BriefStrip` | Gantt page components: the tree, its timeline, the frontier strip, and the row metadata chips |
+| `TaskDialog`, `SplitDialog`, `DecomposeDialog`, `ScheduleDialog`, `ApiDialog`, `ContextDialog` | the page's dialogs |
+| `TodayPage`, `TodayBlock`, `TodayNode`, `TodayGlyph`, `useTodayData` | Today page components, its sidebar glyph, and its data hook |
 
 If the file ever needs real splitting, bundle it back into a single `client.js`
 (for example with esbuild) so the entry artifact still changes on every edit.
@@ -221,7 +243,7 @@ There is no build step: `pnpm install`, edit, run the gates.
 
 | Command | What it enforces |
 | --- | --- |
-| `pnpm run verify` | Syntax of `index.js`, `store.js`, `tracker.js`, `client.js` |
+| `pnpm run verify` | Syntax of `index.js`, `store.js`, `tracker.js`, `tree.js`, `client.js` |
 | `pnpm run lint` | oxlint |
 | `pnpm run typecheck` | TypeScript `checkJs` across host, client, and tests |
 | `pnpm run static` | lint + typecheck; what the commit hook runs (~3s) |
@@ -230,9 +252,10 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run e2e` | Shipped client artifact against real HTTP and a real SQLite file |
 | `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
-Coverage is 100% per-file for `store.js` and `index.js`, with a documented floor
-for `client.js`. Commits only run the static check; `.husky/pre-push` runs the
-full gate before a push reaches `main`, and refuses a tree that is not green.
+Coverage is 100% per-file for `store.js`, `index.js`, `tracker.js`, and
+`tree.js`, with a documented floor for `client.js`. Commits only run the static
+check; `.husky/pre-push` runs the full gate before a push reaches `main`, and
+refuses a tree that is not green.
 There is no pull request step. CI re-runs the same full gate only when a release
 tag is pushed (`.github/workflows/release.yml`). `pnpm run deploy` links this
 checkout into a DSH profile and verifies the composed tree (see
@@ -246,7 +269,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
-- [docs/personal-task-system.md](docs/personal-task-system.md) — task-tracker domain model, imported formats, integrity rules
+- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
 - [AGENTS.md](AGENTS.md) — engineering policy (priorities, tests, file size, gate)
 

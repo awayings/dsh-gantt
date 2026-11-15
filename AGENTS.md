@@ -5,15 +5,20 @@ by a local SQLite database and an authenticated JSON API.
 
 ## Shape
 
-- Host half `index.js` (runs in the `dsh web` process): registers `/api/gantt/*`
-  through the Connection service; `store.js` owns SQLite; `tracker.js` parses
-  the external task-tracker markdown and imports it (pure parsers + importer).
+- Host half `index.js` (runs in the `dsh web` process): registers the fourteen
+  `/api/gantt/*` routes through the Connection service; `store.js` owns SQLite;
+  `tracker.js` parses the external task-tracker markdown and imports it;
+  `tree.js` holds the pure tree helpers (numbering, flattening, rollups, stats,
+  frontier/next, context markdown).
 - Client half `client.js`: one browser artifact loaded by the DSH module loader;
   registers two sidebar icons and two keyed `main` pages (`gantt`, `today`).
-- **No build step**, no bundler, no `dist/`: all four files ship as source.
+- **No build step**, no bundler, no `dist/`: all five files ship as source.
   `client.js` must stay one classic script — DSH derives the artifact revision
   from `exports["./client"]` metadata (mtime/ctime/size) only, so splitting the
-  entry would serve stale bytes from the immutable cache. Cap: 2700 lines.
+  entry would serve stale bytes from the immutable cache. Cap: 3600 lines.
+- One working tree: imported tracks/nodes, manual tasks, and decomposed tasks
+  all live in `tasks`; `tracks`/`nodes` are import snapshots only. Details in
+  `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`, `lib/types/`)
   before deciding anything. Never guess a seam, lifecycle, or wire shape.
@@ -30,8 +35,8 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   and skipped while the tree is unchanged; the push is refused unless the stamp
   matches the pushed tree, so commit or stash first. `--full` forces a run.
 - Never `--no-verify`, never push a red or uncommitted tree, no history rewrites.
-- Coverage floors live in `vitest.config.ts` and ratchet up: 100% for `store.js`
-  and `index.js`; `client.js` 99/98/99/99 (measured 99.79/98.62/99.36/100).
+- Coverage floors live in `vitest.config.ts` and ratchet up: 100% for `store.js`,
+  `index.js`, `tracker.js`, and `tree.js`; `client.js` 99/98/99/99.
   Weakening one needs a recorded decision in `docs/development.md`.
 - CI runs the same gate only on `v*` release tags
   (`.github/workflows/release.yml`); branches have no CI.
@@ -40,17 +45,18 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 
 - UX, data accuracy, and data integrity first; never trade them for refactors,
   speed, or convenience. Verify with real tests, not assumptions.
-- SQLite is the source of truth. Hierarchy numbers and stats are derived at read
-  time, never stored. Parent rollups are a cache: a parent that loses its last
-  child keeps its last rolled-up values (known limitation in
-  `docs/compatibility.md`).
+- SQLite is the source of truth. One working tree in `tasks`; `tracks`/`nodes`
+  are import snapshots, never a second UI tree. Hierarchy numbers, stats,
+  frontier/next, and context markdown are derived at read time, never stored.
+  Parent rollups are a cache: a parent that loses its last child keeps its last
+  rolled-up values (known limitation in `docs/compatibility.md`).
 - Multi-row writes use one `BEGIN IMMEDIATE` transaction; validate before
   mutating (dates, status vocabulary, progress bounds, parent existence,
   cycles). The client refetches after every write and shows an error banner
   instead of stale data.
 - Smallest change that fully solves it; reuse existing helpers; no abstraction
   with a single caller, no unused option; delete dead code and old tests.
-- All source and test files < 1000 lines (`client.js`: 2700 cap).
+- All source and test files < 1000 lines (`client.js`: 3600 cap).
 - Tests: `tests/store|host|client` (unit, Node/jsdom) and `tests/e2e` (real
   artifact → real HTTP → real SQLite; small, behavior only). Narrowest run
   first: `pnpm exec vitest run tests/<area>/<file>.spec.js -t "<case>"`.
@@ -74,7 +80,7 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 
 ## Runbook
 
-- `pnpm install`; `pnpm run verify` = `node --check` on the four sources.
+- `pnpm install`; `pnpm run verify` = `node --check` on the five sources.
 - Live UI: start `dsh web`, open the printed `http://127.0.0.1:3080/?token=…`
   URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`;
   override with an absolute `DSH_GANTT_DB`.
