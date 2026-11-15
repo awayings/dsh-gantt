@@ -25,7 +25,7 @@ toolchain, and verification in depth.
 request step. `main` blocks force-pushes and deletion.
 
 1. Edit the source. No build step: `index.js`, `store.js`, `tracker.js`,
-   `tree.js`, and `client.js` are served as-is.
+   `tree.js`, `daily.js`, `chat.js`, and `client.js` are served as-is.
 2. `pnpm run static` runs on every commit (lint + typecheck, ~3 s).
 3. `pnpm run check` runs before a push reaches the remote (`pre-push` hook):
    lint, typecheck, unit coverage thresholds, and the end-to-end suite in
@@ -55,11 +55,13 @@ squash-merged under the same gate.
   behavior in a breaking way. When a change is compatibility-relevant, update
   `docs/compatibility.md` in the same commit. Keep one working tree: new read
   surfaces use `tasks` (tracks/nodes are import snapshots), and a schema change
-  needs an append-only migration plus the one-time backfill rule.
+  needs an append-only migration plus the one-time backfill rule. The daily
+  report is a stored snapshot refreshed by recompute, and the AI path is an
+  optional read-only model call that never writes the tree.
 - **i18n.** `DICT_EN` and `DICT_ZH` in `client.js` must contain the same keys
   with no unused entries.
 - **File size.** Every source and test file stays under 1000 lines; `client.js`
-  has the documented 3600-line ratchet cap. Do not add a bundler or a `dist/`.
+  has the documented 4800-line ratchet cap. Do not add a bundler or a `dist/`.
 - **Docs.** Keep `docs/` lowercase, written in English, with valid relative
   links. There is no `Docs/` directory.
 

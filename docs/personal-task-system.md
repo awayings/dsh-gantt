@@ -2,9 +2,10 @@
 
 How `dsh-gantt` models 张靖's personal task-management system: one task tree in
 the plugin's SQLite database, imported from a Hermes-maintained markdown
-workspace and extended in place. The conventions come from a set of Hermes
-productivity skills; only the parts that are machine-checkable are adopted, the
-rest stay with the agent that runs them.
+workspace and extended in place, plus the deterministic daily 该动 report built
+from it. The conventions come from a set of Hermes productivity skills; only the
+parts that are machine-checkable are adopted, the rest stay with the agent that
+runs them.
 
 This page is rationale, not reference: routes and payloads are in
 [api.md](api.md); schema, migration, and test layout in
@@ -187,10 +188,13 @@ importer.
 
 ## Decomposition discipline
 
-Decomposition in this system is not an algorithm. There is no auto-scheduler and
-no ranking model (both are frozen, see [Not adopted](#not-adopted--deferred));
-the human-facing agent and the user do the thinking, and the plugin provides the
-mechanics. The discipline the plugin reflects:
+Decomposition in this system is not an algorithm. There is no auto-scheduler
+solver and no ranking model (M1/M2 stay frozen; the daily brief is a
+deterministic heuristic, see [Not adopted](#not-adopted--deferred)); the
+human-facing agent and the user do the thinking, and the plugin provides the
+mechanics. The AI sidebar can draft a decomposition with a model, but the user
+applies it through the normal decompose route. The discipline the plugin
+reflects:
 
 ### Two questions before a node
 
@@ -283,7 +287,120 @@ how far the track has reached, the next shows where work can start.
 
 `brief.lanes` repeats the per-track view — track id, `ref`, name, lane, raw
 state, blocker text, and the frontier/next entry for that track — so a client
-can render the report without joining the tree.
+can render the report without joining the tree. The daily brief below builds on
+these lanes when it chooses what to move today.
+
+## The daily brief report
+
+The daily 该动 report answers the other half of the tracker's "what next"
+question: not which leaf is furthest along, but **which task goes into which
+window today**. It is the plugin's productised subset of the Hermes scheduling
+rules: deterministic, explainable, stored as a morning snapshot, and computed
+from the tree, the day's plan blocks, and the previously stored reports.
+
+The window model comes from Hermes `RULES.md` 5.1 and 5.4: a workday has only
+the evening 21:00-22:00 slot, a weekend has a morning, an afternoon/daytime, and
+an evening block, and the personal track rotates across 主攻/轮转/定义 work. The
+selection layer is a deterministic heuristic, not the frozen M1–M3 solver; see
+[Not adopted](#not-adopted--deferred). It starts from the same per-track
+[frontier and next](#frontier-and-next) view, and the result is rendered both in
+the Gantt page's brief strip and in the [Today page](#day-plans-and-the-today-page)
+section.
+
+### Windows
+
+- When the day has plan blocks, each block becomes a window: its stored times
+  are kept, its slot is the stored slot (or derived from the start time when the
+  block has none), and its `blockId` points at the block.
+- When the day has no blocks, the day kind supplies the template: `workday` has
+  one `evening` 21:00-22:00 window; `weekend` has `morning` 09:00-12:00,
+  `daytime` 14:00-18:00, and `evening` 19:00-21:30; `unknown` without blocks has
+  no windows. Template windows carry an empty `blockId`.
+- `minutes` is the clock duration (0 when a time is missing or the range is
+  inverted). Window `kind` is `core` at 120 minutes or more, `definition` under
+  90 minutes or with unknown times, and `rotation` in between. Windows are
+  chronological, with unknown times last.
+
+### Candidates and track roles
+
+- A candidate is a **ready leaf**: no children, `status` `todo` or `blocked`,
+  and an empty `dep` or a `dep` whose dotted node id is `done`.
+- A track's role is `core` when its state is 进行/进行中 or its status is
+  `in_progress`; `blocked` when its state is 卡住 or its status is `blocked`;
+  `done` when its state is 已过/撤销 or its status is `done`; otherwise
+  `rotation` (a cold-start track).
+
+### Budgets and assignment
+
+For `W` windows the role budgets are:
+
+| Role | Budget | Purpose |
+| --- | --- | --- |
+| `core` | `max(1, round(0.7 * W))` | The main line's windows |
+| `rotation` | `max(0, round(0.2 * W))` | Rotate a cold or secondary track |
+| `definition` | `max(0, W - core - rotation)` | Definition/decomposition and cold-start work |
+
+Windows are filled in chronological order:
+
+1. A `core` window takes the core budget while it remains; a `definition`
+   window takes the definition budget while it remains (this is where 冷项目回暖
+   enters); every other window — and a window whose matching budget is spent —
+   is assigned the `rotation` role.
+2. The pick chain for an item role is `core → rotation → blocked` for `core`,
+   `rotation → core → blocked` for `rotation`, and `rotation → core → blocked`
+   for `definition` — the definition/rotation slice prefers a track that has not
+   been picked yet today.
+3. Within a tier, picks round-robin across that tier's track order — `sortOrder`
+   then id for the core and blocked tiers, the fairness order below for
+   rotation — so one track cannot fill every window. Each track's queue starts
+   with its `next` entry, followed by its other ready leaves in `compareRefs`
+   order. The same task is never picked twice on one day.
+4. **Rotation fairness** is read from the previously stored reports: tracks that
+   were never picked come first in `sortOrder` order, then the least recently
+   picked track (the store keeps up to 30 earlier reports for this).
+
+### Report shape, storage, and refresh
+
+The report records the date, `generatedAt`, `source` (`auto` or `manual`), the
+day kind, the windows, one item per filled window (`taskId`, `ref`, title,
+track, role), a per-track summary (`role`, `picks`, frontier/next), the indexes
+of unfilled windows, and short English diagnostics in `notes`. The full JSON
+shape is in [api.md](api.md#dailybrief).
+
+Persistence is a `daily_briefs` row per date (`plan_date` primary key,
+`generated_at`, `source`, and the report JSON). The host reads a stored report
+as a cache; when today's report is absent it computes one from the tree, the day
+plan, and the earlier reports, and stores it with `source: 'auto'`. Past and
+future dates are computed without being stored. A manual **Recompute** call
+forces a fresh report and stores it with `source: 'manual'`.
+
+A stored report is a **morning snapshot**: until the next recompute (or the next
+08:00 run), it describes the tree as it was when generated, so status edits made
+later in the day do not move its picks. The host recomputes today's report every
+local 08:00 with an in-process `setTimeout` (unref'ed, disposed with the plugin);
+the timer only fires while the host process is running, and the manual route is
+the fallback after downtime.
+
+## Perspectives: all, to do, done
+
+The Gantt page can render the same tree through three perspectives; the
+timeline and row set are filtered from the pruned tree, not merely collapsed.
+
+- **All** — the full tree, using the depth level and manual collapse controls as
+  before.
+- **To do** (待做) — keep only the **paths** from the focus leaves to their track
+  root. A focus leaf is a lane's frontier or next id, plus every
+  `dailyBrief.items[].taskId`. Siblings of a path ancestor that are not on a kept
+  path are pruned, which hides completed siblings and unrelated branches; a
+  track with no kept path disappears.
+- **Done** (已完成) — keep done nodes and their not-done ancestors as path
+  context, and prune the pending branches, so finished work can be reviewed.
+
+The pruning rule is: a node survives when it is in the keep set or has a
+surviving descendant. Switching to 待做/已完成 clears the collapse set so every
+kept path is visible; switching back to 全部 re-applies the depth-level
+collapse. The page shows the number of kept focus tasks next to the switch and a
+mode-specific empty hint when the result is empty.
 
 ## Links
 
@@ -325,6 +442,9 @@ only.
 - A today section: the day's metadata, core goal, and its time blocks with slot,
   landing point, estimate, and inspiration.
 - An integrity section listing the same warnings the Today page derives.
+- A `## 今日窗口 · YYYY-MM-DD` section listing the daily-brief windows and picks
+  (`HH:MM-HH:MM role：trackName ref title`, `未填` for an unfilled window); it
+  participates in the same character limit.
 
 Options: `date` defaults to today; `root` limits the export to one subtree;
 `limit` caps the markdown length (default 12000 characters, 1000-60000). Over
@@ -332,16 +452,59 @@ the limit the renderer drops the deepest nodes first, then the oldest day
 detail, and sets `truncated: true`; only a document whose headers alone exceed
 the limit is hard-cut.
 
-The export is the future seam for memory auto-injection — a caller could take
-`markdown` and put it in a model prompt — but nothing in this round wires it
-into the harness automatically. The page offers it as a read-only dialog with a
-copy button.
+The export is a read-only seam: the page offers it as a dialog with a copy
+button, and the host reuses the same markdown for the AI decompose sidebar (the
+chat route puts the context, clamped to 9000 characters, plus today's windows
+into the model prompt). Automatic memory injection — feeding the tree into a
+model prompt without a user action — is still deferred; see
+[Not adopted](#not-adopted--deferred).
+
+## AI decompose sidebar
+
+The Gantt page has an optional AI decompose sidebar that turns a conversation
+into a decomposition proposal. It is additive: when the host has no model
+service the feature reports that instead of breaking the page.
+
+- **Entry points.** The header button **AI 拆解** toggles the right-hand panel;
+  a row action (✦) focuses that task and opens the panel. The panel is 360 px
+  wide with its own scroll on desktop and becomes a full-width overlay/stacked
+  panel when the page is narrow (container query, no horizontal crush).
+- **Context.** The host builds the model request from the focused task (its ref,
+  title, depth, `doneWhen`, and direct children), the full tree context markdown
+  clamped to 9000 characters, and today's 该动 windows. The system prompt states
+  the Hermes decomposition discipline: four levels including the track root, a
+  verifiable `done_when` per child, ≤30-minute A-class steps or a B-class
+  definition/decomposition task that occupies a window, parallel siblings with
+  at most one `dep`, and no invented tasks.
+- **Conversation.** The client posts `{ message, taskId, history }` to
+  `POST /api/gantt/chat` and keeps the last eight turns in `history`. The reply
+  is rendered as prose; when it contains a valid fenced JSON proposal (the last
+  fenced block wins), the panel shows a proposal card with each child's title,
+  `doneWhen`, estimate, and plan time.
+- **Apply.** **应用拆解** calls the existing `POST /api/gantt/task/decompose`
+  with the focused task id, the proposal's `planDate`, and its `children`; on
+  success the tree refreshes, a toast reports it, and the card collapses. Apply
+  is disabled while no task is focused. The proposal is only a request: the
+  normal decompose validation, depth cap, and transaction still apply.
+- **Failure modes.** A host without a model (or without a default model
+  selection) returns `503` and the panel shows the no-model copy; upstream
+  failures (`502`) and invalid input (`400`) show the error banner. No tool
+  schemas are sent to the model, and the request times out after 60 seconds.
+
+The route contract, proposal rules, and errors are in
+[api.md](api.md#chat-about-a-decomposition).
 
 ## Day plans and the Today page
 
 The Today page reads one day bundle: day metadata, time blocks, the tree nodes
-in play, derived integrity warnings, and block stats.
+in play, derived integrity warnings, block stats, and the daily 该动 report as
+`brief`.
 
+- The **今日该动** section sits at the top of the body, after the core goal: one
+  row per daily-brief window (time, role badge, track, task title, or 未填), the
+  report's `generatedAt` and `source`, and a **重新计算** button that POSTs
+  `api/gantt/brief/compute` and refreshes the bundle. A missing report shows a
+  muted hint plus the same button.
 - `plan_blocks.source` is `schedule` for imported blocks and `task` for blocks
   created by `task/decompose` or `task/schedule`. Re-import only rewrites
   `schedule` rows; `status` and `notes` are user state and survive on every row.
@@ -363,6 +526,9 @@ in play, derived integrity warnings, and block stats.
 | `evening-missing` | The day has no block in the 21:00-22:00 evening slot | `RULES.md` 4.2, `SCHEDULE.md` 二、硬约束 1 |
 | `inspiration-missing` | An evening block carries no inspiration id | `SCHEDULE.md` 二、硬约束 1, `RULES.md` 第十一节 |
 | `unplanned-day` | The date has no plan row; a never-planned day is reported as empty, never filled in on the fly | `SCHEDULE.md` 一、维护方式, `daily` iron rule 4 |
+
+The 今日该动 rows are advisory like the integrity list: they come from a stored
+morning snapshot and do not block any edit on the page.
 
 ## Source formats and paths
 
@@ -404,17 +570,26 @@ half-built.
 
 | Item | Why not now | What it would need |
 | --- | --- | --- |
-| **Auto-scheduler** (M1 priority ranking, M2 direction scoring, M3 slot auto-fill) | Frozen in `RULES.md:341-351` ("先用起来，不是先做工具"); scheduling stays manual and explicit | A ranking model and a slot-filling service; the current routes only place a node into a day the user names |
+| **Auto-scheduler solver** (M1 priority ranking, M2 direction scoring, M3 slot auto-fill) | M1/M2 stay frozen (`RULES.md:341-351`, "先用起来，不是先做工具"); M3 is only partially productised as the deterministic daily brief, not a solver | A ranking/scoring model and a week-level optimiser; the current engine fills today's windows from ready leaves and explicit rules only |
 | **Session digests** (`session-digest-reports`) | Inputs are session JSONL and spend logs outside the tracker; output is a digest file, not a schedule | A digest table plus an ingestion route |
 | **Session-history recall** (`session-history-recall`) | Needs the Hermes state database and a session-lookup API the plugin does not have | A read-only session lookup in the host half plus a link component |
 | **Writing plans** (`writing-plans`) | It authors implementation plans for coding agents, not personal tasks, and it is a write surface | A plan-document store and editor, and a decision on which page owns it |
 | **Memory auto-injection wiring** | `links` and the context export exist as data, but nothing feeds the tree into a model prompt automatically | A harness seam that calls `GET /api/gantt/context` and injects the result; deferred until the export format has been used by hand |
+
+The frozen scheduler decision still holds: the daily brief productises the M3
+*direction* for today as a deterministic heuristic (windows, role budgets,
+rotation fairness), with no priority ranking (M1), no direction scoring (M2),
+and no week-level optimiser. The AI sidebar also does not schedule anything by
+itself: the model proposes children and the user applies them through the normal
+decompose route.
 
 The work-vs-personal dependency rules and habit logging remain out of scope for
 the same reason: they need a field or a scheduled job the plugin does not have.
 
 ## See also
 
-- [api.md](api.md) — the tree, decompose, schedule, context, and day routes.
+- [api.md](api.md) — the tree, daily brief, chat, decompose, schedule,
+  context, and day routes.
 - [development.md](development.md) — schema, migration runbook, test layout.
-- [compatibility.md](compatibility.md) — v2→v3 migration and known limitations.
+- [compatibility.md](compatibility.md) — v2→v4 migration, the optional LLM
+  seam, and known limitations.

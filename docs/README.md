@@ -1,19 +1,20 @@
 # Documentation
 
 `dsh-gantt` is a DeepSeek Harness Web UI plugin: a hierarchical task tree, a
-personal day plan, and an authenticated JSON API, backed by SQLite. The Gantt
-page and the Today page render one unified tree imported from an external
-task-tracker workspace. Start with the [README](../README.md) for installation
-and a feature tour.
+personal day plan, a deterministic daily 该动 brief, and an authenticated JSON
+API, backed by SQLite. The Gantt page and the Today page render one unified tree
+imported from an external task-tracker workspace; the Gantt page adds the brief
+strip, perspectives, and an optional AI decompose sidebar. Start with the
+[README](../README.md) for installation and a feature tour.
 
 ## Guides
 
 | Document | Audience | Contents |
 | --- | --- | --- |
 | [development.md](development.md) | contributors | Prerequisites, setup, install, toolchain, quality gates, test layout, database, schema migration and import runbooks, dev loop, verification, troubleshooting |
-| [api.md](api.md) | integrators | Complete JSON API reference: fourteen routes, auth, the extended task shape, `brief`, decompose/schedule/context, request/response examples, errors |
-| [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence, rules, v2→v3 migration and data layering, limitations, verification |
-| [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The unified task tree: why the two datasets were merged, tracks/nodes/decomposed tasks, refs and provenance, the state mapping, decomposition discipline, frontier/next, links, context export, deferred work |
+| [api.md](api.md) | integrators | Complete JSON API reference: seventeen routes, auth, the extended task shape, frontier `brief` and the daily report, decompose/schedule/context, brief read/recompute, chat and its proposal contract, request/response examples, errors |
+| [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence (including the optional LLM service), rules, v2→v4 migration and data layering, limitations, verification |
+| [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The unified task tree and the system built on it: tracks/nodes/decomposed tasks, refs and provenance, state mapping, decomposition discipline, frontier/next, the daily 该动 report algorithm, perspectives, AI decompose sidebar, links, context export, deferred work |
 
 ## Reference notes
 

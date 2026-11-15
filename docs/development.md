@@ -38,15 +38,15 @@ push to `main`.
 | husky `^9.1.7` | Runs the commit and push gates | `.husky/pre-commit`, `.husky/pre-push` |
 | jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
 
-There is **no build step**. All five source files are shipped as-is:
-`index.js`, `store.js`, `tracker.js`, and `tree.js` as ESM, `client.js` as the
-client artifact loaded by DSH.
+There is **no build step**. All seven source files are shipped as-is: the six
+host modules `index.js`, `store.js`, `tracker.js`, `tree.js`, `daily.js`, and
+`chat.js` as ESM, plus `client.js` as the client artifact loaded by DSH.
 
 ## Quality gate commands
 
 | Command | What it runs | What it enforces |
 | --- | --- | --- |
-| `pnpm run verify` | `node --check` on `index.js`, `store.js`, `tracker.js`, `tree.js`, `client.js` | Syntax only; the fastest smoke check. |
+| `pnpm run verify` | `node --check` on the six host modules and `client.js` | Syntax only; the fastest smoke check. |
 | `pnpm run lint` | `oxlint` | Lint rules and unused code. |
 | `pnpm run lint:fix` | `oxlint --fix` | Auto-fixes what it can; review the diff afterwards. |
 | `pnpm run typecheck` | `tsc --noEmit` against all three tsconfigs | Host under `strict`; client and tests under `checkJs` with looser settings. |
@@ -82,8 +82,8 @@ again in CI before a release is published.
 
 Coverage policy:
 
-- `store.js`, `index.js`, `tracker.js`, and `tree.js`: **100%** statements,
-  branches, functions, lines.
+- `store.js`, `index.js`, `tracker.js`, `tree.js`, `daily.js`, and `chat.js`:
+  **100%** statements, branches, functions, lines.
 - `client.js`: ratcheted floor — 99% statements, 98% branches, 99% functions,
   99% lines. The unreachable UI branches are listed in the coverage output and
   must not regress; the measured values are printed by `pnpm run coverage` and
@@ -101,6 +101,10 @@ Recorded decisions:
   functions (numbering, flattening, rollups, stats, frontier/next, context
   markdown), so there is no excuse for a partial branch. Read-time derivation
   bugs would show up as wrong numbers on every page.
+- **2026-11-15 — `daily.js` and `chat.js` added at 100%.** The daily-brief
+  engine decides which task goes into which window and the chat module parses
+  model output into a tree mutation; both are pure (or stream-shaped) and a
+  partial branch would silently mis-plan a day or accept a malformed proposal.
 - **2026-11-15 — `client.js` line cap raised 2300 → 2700.** The Today page is a
   second registered `main` page in the same single-file artifact (the artifact
   cannot be split, see `docs/compatibility.md` §3.1); the addition is additive
@@ -109,21 +113,34 @@ Recorded decisions:
   roughly doubles the Gantt page surface: track and node metadata rows, links
   chips, the decompose dialog, the schedule dialog, and the context dialog. The
   artifact still cannot be split, so the cap moves with the surface rather than
-  the file becoming a bundle. Revisit this decision when the page grows another
-  feature set of similar size: at that point the right answer is a bundled
-  single artifact (bundler output into `client.js`, so the entry metadata still
-  changes) or moving the Today page out, not a fourth cap raise.
+  the file becoming a bundle.
+- **2026-11-15 — `client.js` line cap raised 3600 → 4800.** The daily-brief
+  strip (three aligned blocks, lanes grid, window cards), the three
+  perspectives with path pruning, and the right-hand AI sidebar add a second
+  feature layer to the same single classic script. The artifact still cannot be
+  split (see `docs/compatibility.md` §3.1), so the ratchet moves with the
+  features. Revisit before a fourth raise: the right answer is a bundled single
+  artifact (bundler output into `client.js`, so the entry metadata still
+  changes) or moving one surface (the Today page or the AI sidebar) out of the
+  page, not an ever-growing monolith.
 
 ## Test layout
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `store.js` and `tree.js`: schema v3 migration (v1→v3, v2→v3, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity |
-| `tests/host/` | `host` (Node) | `index.js`: all fourteen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief`, `decompose`/`schedule`/`context`, the day/plan routes |
+| `tests/store/` | `host` (Node) | `store.js`, `tree.js`, and `daily.js`: schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `index.js` and `chat.js`: all seventeen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, `decompose`/`schedule`/`context`, the day/plan routes, chat request validation, model streaming assembly, proposal parsing, and the 400/502/503 mapping |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `client.js`: rendering the unified tree (track/node metadata, links chips), decompose/schedule/context dialogs, tree/time-axis behavior, Today page and task-sourced blocks, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 3, and a SQLite file that survives a restart |
-| `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
+| `tests/client/` | `client` (jsdom) | `client.js`: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the AI sidebar (focus, send, proposal, apply, no-model banner), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, chat answering `503` without a model, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
+| `tests/helpers/` | — | Shared fixtures, a fake host context for the `host` project, and a fake `llm` stream (`tests/helpers/llm.js`) for chat tests |
+
+New in the daily-brief / AI-sidebar round: `tests/store/daily-brief.spec.js` and
+`tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
+`tests/host/routes-chat.spec.js`, and `tests/host/chat.spec.js`,
+`tests/e2e/brief.spec.js`, and `tests/client/chat.spec.js`; the existing tree,
+page, today, and fixtures specs gained the brief strip, perspective, and
+Today-section cases.
 
 `tests/client/setup.js` boots jsdom, stubs `window.__ModuleLoader__` so the
 factory can be called with the real React, and resets the document between
@@ -165,7 +182,7 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
-### Schema version 3: one working tree
+### Schema version 4: one working tree plus daily reports
 
 The tree data lives in `tasks`, one row per node, with `kind` marking the layer:
 
@@ -179,27 +196,36 @@ Each row also carries the tracker metadata (`state`, `lane`, `dep`, `done_when`,
 `landing`, `estimate`, `category`, `inspiration`, `links`) and `source`
 (`tracker` | `manual`). A unique index on `(kind, ref)` (where `ref <> ''`) is
 the import's upsert key. `tracks` and `nodes` stay as import snapshots;
-`plan_blocks` and `day_plans` remain the time grid. The rationale is in
+`plan_blocks` and `day_plans` remain the time grid. Schema version 4 adds
+`daily_briefs` (`plan_date` primary key, `generated_at`, `source`, `report`
+JSON), the persisted daily 该动 snapshots. The rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
-#### Migrate a v2 database
+The host also starts an in-process scheduler: a `setTimeout` to the next local
+08:00 recomputes today's report with `source: 'auto'`; the timer is unref'ed and
+disposed with the plugin, so it only runs while `dsh web` is up.
+
+#### Migrate a v2 or v3 database
 
 The host runs the append-only migration when it opens a database whose
-`PRAGMA user_version` is below 3. It adds the twelve columns, the index, and
-backfills the existing `tracks`/`nodes` snapshots into `tasks` once.
+`PRAGMA user_version` is below 4. A v2 database additionally gets the twelve
+`tasks` columns, the `(kind, ref)` index, and the one-time backfill of
+`tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and only
+gains `daily_briefs`.
 
 1. Stop `dsh web`, then copy the database aside:
-   `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v2.db` (also copy `-wal`/`-shm` if
+   `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v3.db` (also copy `-wal`/`-shm` if
    present, or run `sqlite3 tasks.db 'PRAGMA wal_checkpoint(TRUNCATE)'` first).
 2. Start the new build / restart `dsh web`. No separate migration command
    exists; opening the store performs it.
-3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `3` and `taskCount`
-   includes the track roots and imported nodes. `GET /api/gantt/tree` returns
-   six root tracks with their nodes as children, and `brief` is populated.
-4. Run the import once (`POST /api/gantt/plan/import`); it must report the same
-   track/node counts as the snapshot and must not duplicate rows (the unique
-   `(kind, ref)` index would reject a second copy).
+3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `4` and `taskCount`
+   is unchanged on a v3 upgrade. `GET /api/gantt/tree` still has the same tree
+   and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
+   today's report.
+4. On a v2 upgrade, run the import once (`POST /api/gantt/plan/import`); it must
+   report the same track/node counts as the snapshot and must not duplicate rows
+   (the unique `(kind, ref)` index would reject a second copy).
 5. The upgrade is one-way. If it fails, restore the copy from step 1 and report
    the error; do not hand-edit `PRAGMA user_version`.
 
@@ -228,18 +254,20 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
   when the normalized tracker state changed, and `links` is never written. A
   stale imported row that has children is kept, so user decompositions survive.
 - Verify a fresh import by reading the tree and one day: `/tree` returns the
-  six tracks with the imported nodes, and
-  `GET /api/gantt/day?date=<today>` returns the day, its blocks, tree-derived
-  `nodes`/`tracks`, and `integrity: []` for a fully planned day.
+  six tracks with the imported nodes, `GET /api/gantt/day?date=<today>` returns
+  the day, its blocks, tree-derived `nodes`/`tracks`, its `brief`, and
+  `integrity: []` for a fully planned day, and `GET /api/gantt/brief` returns a
+  report whose windows match that day's blocks.
 
 ## Local dev loop
 
 1. `pnpm install`.
 2. `pnpm run deploy` links this checkout into the target DSH profile and
    verifies the composed tree (see [Install a checkout](#install-a-checkout)).
-3. Edit `index.js` / `store.js` / `tracker.js` / `tree.js`: these run in the
-   `dsh web` server process and are re-read on restart, so restart `dsh web`
-   after host changes.
+3. Edit `index.js` / `store.js` / `tracker.js` / `tree.js` / `daily.js` /
+   `chat.js`: these run in the `dsh web` server process and are re-read on
+   restart, so restart `dsh web` after host changes. The daily-brief scheduler
+   restarts with the process.
 4. Edit `client.js`: the file metadata changes, so DSH derives a new client
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
@@ -274,8 +302,8 @@ agent session must run it with full filesystem access.
 
 Because the dependency is a link, the profile never holds a copy:
 
-- `index.js`, `store.js`, `tracker.js`, and `tree.js` are re-read when `dsh web`
-  starts — restart after editing them.
+- `index.js`, `store.js`, `tracker.js`, `tree.js`, `daily.js`, and `chat.js`
+  are re-read when `dsh web` starts — restart after editing them.
 - `client.js` is served from this directory on every page load and its revision
   follows the file metadata, so a reload serves the new bytes.
 - No edit requires a reinstall. Run `pnpm run deploy` again only when the
@@ -324,21 +352,33 @@ curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   http://127.0.0.1:3080/api/gantt/task/schedule \
   -d '{"id":"<task-id>","date":"<today>","startTime":"21:00","endTime":"22:00"}'
 curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/context"
+# Daily brief:
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/brief"
+curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
+  http://127.0.0.1:3080/api/gantt/brief/compute -d '{}'
+# AI chat (a host without a model service must answer 503, not 500):
+curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
+  http://127.0.0.1:3080/api/gantt/chat -d '{"message":"拆解这个任务"}'
 ```
 
 Expected: `meta` returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db",
-engine:"node:sqlite", schemaVersion:3, kinds:[…], linkTypes:[…],
-endpoints:[…14 routes…]}`; `seed` on an empty database inserts 13 demo tasks
+engine:"node:sqlite", schemaVersion:4, kinds:[…], linkTypes:[…],
+endpoints:[…17 routes…]}`; `seed` on an empty database inserts 13 demo tasks
 and returns `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
-track roots with their imported children and a `brief` whose `lanes` has one
-entry per track; `plan/import` returns `imported:{tracks,nodes,days,blocks}`
-with non-zero counts for a real tracker directory; `day` returns `day`,
-`blocks`, tree-derived `nodes`/`tracks`, `integrity`, and `stats`; `decompose`
-returns the parent with a new child and no `blocks` when no `plan` was given;
-`schedule` returns the block with id `task|<task-id>|<date>`, and repeating the
-same call returns the same block id instead of a duplicate; `context` returns
-markdown with `chars`, `truncated`, and `counts`. An invalid JSON body returns
-HTTP 400 with `{"ok":false,"error":"request body must be valid JSON"}`.
+track roots with their imported children, a `brief` whose `lanes` has one entry
+per track, and a `dailyBrief` for today; `plan/import` returns
+`imported:{tracks,nodes,days,blocks}` with non-zero counts for a real tracker
+directory; `day` returns `day`, `blocks`, tree-derived `nodes`/`tracks`,
+`integrity`, `stats`, and `brief`; `decompose` returns the parent with a new
+child and no `blocks` when no `plan` was given; `schedule` returns the block
+with id `task|<task-id>|<date>`, and repeating the same call returns the same
+block id instead of a duplicate; `context` returns markdown with `chars`,
+`truncated`, `counts`, and a `## 今日窗口` section; `brief` returns the report
+with `cached` and the report's `slots`/`items`/`tracks`, and
+`brief/compute` returns the same shape with `source: 'manual'`; `chat` returns
+`503 {"ok":false,"error":"model unavailable"}` on a host without a model (a
+500 there means the optional-seam handling is broken). An invalid JSON body
+returns HTTP 400 with `{"ok":false,"error":"request body must be valid JSON"}`.
 
 Remove the disposable home when done: `rm -rf /tmp/dsh-gantt-verify`.
 
@@ -364,8 +404,19 @@ open the page in the connected Web GUI and check:
 - [ ] Imported track rows show the lane chip and the raw tracker state chip;
       node rows show `state`, `doneWhen`, `landing`, `estimate`, `category`,
       `inspiration`, and links chips with the full link in a tooltip.
-- [ ] A running (`持续`) node renders as a hatched bar ending today, and the
-      depth zoom switches between all nodes, two levels, and one level.
+- [ ] A running (`持续`) node's bar ends at today, and the depth zoom switches
+      between all nodes, two levels, and one level.
+- [ ] The brief strip shows three aligned blocks — header (title, pending
+      count, generated-at, recompute), a three-column `支线 / 前沿 / 该动` grid
+      with single-line ellipsis and one row per track, and `今日窗口` cards with
+      time, role badge, task (`ref title`), or `未填`. Column alignment is
+      independent of title length at desktop width and the cards stack at
+      ~390 px; clicking a pick reveals that task.
+- [ ] The perspective switch offers 全部 / 待做 / 已完成: 待做 keeps only the
+      frontier/next/daily-brief paths to the track roots and hides completed
+      siblings, 已完成 keeps done nodes with their ancestors, and each view
+      shows its kept count and an empty hint. Switching clears the manual
+      collapse for 待做/已完成 and restores the depth-level collapse for 全部.
 - [ ] **Decompose** opens from a node row, requires a title and `done_when` per
       child, can add/remove rows, and schedules a child into a day when its
       date/time row is filled; success reports the child and block counts.
@@ -392,6 +443,16 @@ open the page in the connected Web GUI and check:
       reload, and the "this week's nodes" list now fed by the unified tree.
 - [ ] A block created by scheduling shows its tree-node origin marker and can
       still change status like an imported block.
+- [ ] The Today page shows the **今日该动** section above the slot groups: one
+      row per window (time, role, track, task, or 未填), generated-at and
+      source, and **重新计算** recomputes and refreshes; an empty report shows
+      the muted hint plus the button.
+- [ ] The **AI 拆解** header button opens the right sidebar; a row's ✦ action
+      focuses that task and opens it. With a model, sending a decomposition
+      request renders the reply and a proposal card, **应用拆解** calls
+      decompose and refreshes; without a model the panel shows the no-model
+      banner instead of breaking. Enter sends, Shift+Enter inserts a newline,
+      and the panel becomes a full-width overlay at narrow widths.
 - [ ] **Import plan** on the Today page reports success (or a readable error),
       and a fully planned day shows no integrity warnings while a day missing
       its evening slot or an evening inspiration id does.
@@ -436,6 +497,23 @@ interleave writes and hit lock errors; there is no cross-process arbitration in
 this plugin. Run one DSH process per database file, or set a distinct
 `DSH_GANTT_DB` for each. The full rule is in `docs/compatibility.md`.
 
+### The daily brief looks stale or empty
+
+The report is a stored morning snapshot: it reflects the tree when it was
+generated, so status edits made later in the day do not move its picks. Press
+**Recompute** (or `POST /api/gantt/brief/compute`) to refresh it; the host also
+recomputes at the next local 08:00 only while `dsh web` is running. An empty
+window list usually means an `unknown` day kind with no plan blocks — import the
+day plan or classify the day. See `docs/compatibility.md` §5 for the full list.
+
+### The AI sidebar says no model
+
+`POST /api/gantt/chat` answers `503 model unavailable` when the host exposes no
+`llm` service or no `agentDefaultModel` selection; the panel shows the no-model
+copy and nothing is broken. Configure a model in the harness (or use a host that
+provides one) and reopen the panel. A `502` is an upstream model failure or the
+60-second timeout, not a plugin state problem.
+
 ### Concurrent coverage runs collide on `./coverage`
 
 `vitest run --coverage` writes its report to `./coverage` by default. Two
@@ -457,7 +535,7 @@ or the composition itself. `pnpm run deploy` repairs all four. If the profile
 is correct but the page still has no sidebar entry, reload the page once and
 then restart `dsh web`: a running process serves the linked `client.js` on
 reload, but a host-side change (`index.js`, `store.js`, `tracker.js`,
-`tree.js`, or the bundle patch) needs the restart.
+`tree.js`, `daily.js`, `chat.js`, or the bundle patch) needs the restart.
 
 ### No build, no dist
 

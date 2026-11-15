@@ -9,11 +9,16 @@ sidebar:
   splitting, moving, deletion. The six imported tracks are the tree roots and
   their Hermes nodes hang below them, so the imported work is visible here.
   Decompose a node into subtasks, schedule a node into a day plan, and export
-  the whole tree as markdown model context.
+  the whole tree as markdown model context. The **daily 该动 brief** above the
+  tree shows each track's frontier/next and today's windows with the task picked
+  for each role (core / rotation / definition); **全部 / 待做 / 已完成**
+  perspectives prune the tree to the paths that matter; an optional **AI 拆解**
+  sidebar turns a conversation about a task into a decomposition proposal.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
   one-click status, the tree nodes in play, the day's core goal, and integrity
   warnings for missing landing targets or a missing evening slot. Blocks created
-  by scheduling a tree node show where they came from.
+  by scheduling a tree node show where they came from, and the **今日该动**
+  section lists the daily-brief windows with a manual recompute.
 
 Both pages share a local SQLite database and an authenticated JSON API. The
 tracker import is an explicit, idempotent pull from markdown files — no watcher,
@@ -22,7 +27,8 @@ the Gantt page renders.
 
 No build step, no runtime dependencies, no second server: the host half is plain
 ESM shipped in this repository, and the client half is a single browser artifact
-loaded by DeepSeek Harness.
+loaded by DeepSeek Harness. The AI sidebar is optional — it uses the harness's
+model service when one is present and reports a clear "no model" state when not.
 
 ## Destination
 
@@ -89,6 +95,14 @@ is always by path — it is not published to npm.
 6. On a tree row, **Decompose** creates subtasks (and optionally schedules each
    one), **Schedule** puts an existing node into a day's plan, and **Export
    context** copies the tree plus today's plan as markdown.
+7. Read the **daily brief** above the tree: the frontier/next table for each
+   track and today's windows with their picked tasks. **Recompute** refreshes
+   it; **待做** / **已完成** switch the tree to the focus paths or the finished
+   work only.
+8. On a row, ✦ opens the optional **AI 拆解** sidebar, where a conversation
+   proposes child tasks; **应用拆解** applies the proposal through the normal
+   decompose route. Without a configured model the panel explains that instead
+   of failing.
 
 ## Data source
 
@@ -104,19 +118,23 @@ $DSH_HOME/gantt/tasks.db
 DSH_GANTT_DB=/absolute/path/to/tasks.db dsh web
 ```
 
-The schema is created on first activation and upgraded in place; a v2 database
-is migrated to schema version 3 on open (the append-only migration and its
-one-time backfill are in [docs/compatibility.md](docs/compatibility.md)). Dates
-are `YYYY-MM-DD`; task status is one of `todo`, `in_progress`, `blocked`, `done`;
-plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
+The schema is created on first activation and upgraded in place; a v2 or v3
+database is migrated to schema version 4 on open (the append-only migration,
+the one-time tree backfill for v2, and the new `daily_briefs` table are in
+[docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD`; task
+status is one of `todo`, `in_progress`, `blocked`, `done`; plan-block status is
+one of `todo`, `in_progress`, `done`, `skipped`.
 
-Schema version 3 keeps one working tree in `tasks`: `kind='track'` roots (the
+Schema version 4 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
 manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
 `lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
 and the plugin's `links`; `(kind, ref)` is unique for imported rows. The
 `tracks`/`nodes` tables remain as import snapshots and idempotency keys, and
-`plan_blocks`/`day_plans` hold the time grid. The import reads a task-tracker
+`plan_blocks`/`day_plans` hold the time grid. The `daily_briefs` table stores
+one report per date: a deterministic, persisted snapshot of today's windows and
+picked tasks, recomputed by the host at 08:00, by **Recompute**, or on the first
+read of a day without a stored report. The import reads a task-tracker
 markdown workspace (`SCHEDULE.md`, `TREE.md`, `daily/*.md`) from
 `/data/home/clawd/projects/task-tracker` by default (`DSH_GANTT_TRACKER_DIR`
 overrides it) and never writes to it. See
@@ -145,14 +163,14 @@ axis changes.
 
 ## JSON API
 
-All fourteen routes are mounted on the harness's existing authenticated `/api` channel.
+All seventeen routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, and the frontier/next `brief` |
+| `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief` |
 | `GET` | `/api/gantt/meta` | Database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | Create a task (including the tracker metadata fields) |
 | `POST` | `/api/gantt/task/update` | Update any writable task fields |
@@ -163,21 +181,25 @@ status.
 | `POST` | `/api/gantt/task/delete` | Delete a task and its descendants |
 | `GET` | `/api/gantt/context` | Export the tree and a day plan as markdown model context |
 | `POST` | `/api/gantt/seed` | Insert demo tasks when the database is empty |
-| `GET` | `/api/gantt/day` | One day's plan bundle (blocks, tree nodes, integrity, stats) |
+| `GET` | `/api/gantt/day` | One day's plan bundle (blocks, tree nodes, integrity, stats, `brief`) |
 | `POST` | `/api/gantt/plan/status` | Set a plan block's status and optional notes |
 | `POST` | `/api/gantt/plan/import` | Import the task-tracker markdown into the unified tree |
+| `GET` | `/api/gantt/brief` | The daily 该动 report for a date, cached when stored |
+| `POST` | `/api/gantt/brief/compute` | Recompute and persist the daily report |
+| `POST` | `/api/gantt/chat` | Chat with the optional model about a decomposition (proposes, never applies) |
 
 A terminal `curl` needs the page's session cookie — open the tokenized URL
 printed by `dsh web` once, then copy the `Cookie` request header from an
 authenticated request in DevTools. Treat that cookie as a credential.
 
-Full request/response examples, field tables, and error codes:
+The chat route answers `503` when the host has no model service. Full
+request/response examples, field tables, proposal rules, and error codes:
 [docs/api.md](docs/api.md).
 
 ## Verification
 
 ```sh
-pnpm run verify    # node --check on the five source files
+pnpm run verify    # node --check on the six host modules and client.js
 pnpm run static    # lint + typecheck (the commit hook)
 pnpm run test      # vitest (host + jsdom client unit suites)
 pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
@@ -198,13 +220,16 @@ pnpm run check     # the full gate, run by the push hook: static + coverage + e2
 - The page renders as a React component in the `main` slot; it does not serve an
   iframe or append a second application to `document.body`.
 - The pane is the shell's center column, so its width follows the sidebar's
-  collapse and drag. The current stylesheet still uses two viewport media
-  queries instead of container queries — a known gap recorded in
-  [docs/compatibility.md](docs/compatibility.md).
+  collapse and drag; the layout folds with container queries (including the AI
+  sidebar at narrow widths), not viewport breakpoints.
 - Styling uses the `--dsw-alias-*` theme tokens, so light and dark themes and
   host theme changes are inherited.
 - All visible copy is registered through the Client locale service in English
   and Chinese.
+- The AI sidebar is optional: the host reads the harness `llm` and
+  `agentDefaultModel` services through `ctx.get`, answers `503` when either is
+  absent, and never sends tool schemas; a proposal is applied by the normal
+  decompose route.
 - The API is authenticated by the existing `/api` session cookie; it does not
   open a separate listener.
 - The database is local to this DSH home. Multiple DSH processes sharing the same
@@ -219,7 +244,7 @@ into runtime modules (`require('./client.foo.js')`) leaves the entry file
 untouched, so the revision does not change, the chunk URL does not change, and
 the browser keeps serving the old bytes from its cache — HMR stops firing and
 even a plain reload can show stale code. The entry file must stay monolithic,
-with a 3600-line ratchet cap documented in [AGENTS.md](AGENTS.md) and
+with a 4800-line ratchet cap documented in [AGENTS.md](AGENTS.md) and
 [docs/compatibility.md](docs/compatibility.md).
 
 Organize the single file by section instead:
@@ -228,10 +253,12 @@ Organize the single file by section instead:
 | --- | --- |
 | `DICT_EN`, `DICT_ZH`, `DICTS` | locale dictionaries registered with the Client locale service |
 | `CSS_BASE`, `CSS_HEAD`, `CSS_STATS`, `CSS_GRID`, `CSS_EMPTY`, `CSS_DIALOG`, `CSS_MISC` | stylesheet sections, joined once into the rendered `<style>` |
-| `isoToDay`/`dayToIso`/`addDays`/`buildWindow`/`flattenTree`/`visibleRows`/`collapseForLevel` helpers | pure date, tree, and depth-zoom helpers |
+| `isoToDay`/`dayToIso`/`addDays`/`buildWindow`/`flattenTree`/`visibleRows`/`collapseForLevel`/`filterTree`/`briefWindows` helpers | pure date, tree, depth-zoom, perspective-pruning, and brief-window helpers |
+| `CSS_CHAT` | stylesheet section for the AI sidebar, rendered beside `CSS` when the panel opens |
 | `CSS_TODAY` | stylesheet section for the Today page, rendered beside `CSS` when that page mounts |
-| `GanttPage`, `TimelineHeader`, `GridLines`, `GanttRow`, `TaskBar`, `MetaChips`, `BriefStrip` | Gantt page components: the tree, its timeline, the frontier strip, and the row metadata chips |
+| `GanttPage`, `TimelineHeader`, `GridLines`, `GanttRow`, `TaskBar`, `MetaChips`, `BriefStrip` | Gantt page components: the tree, its timeline, the brief strip (frontier/next grid + window cards), and the row metadata chips |
 | `TaskDialog`, `SplitDialog`, `DecomposeDialog`, `ScheduleDialog`, `ApiDialog`, `ContextDialog` | the page's dialogs |
+| `ChatPanel`, `ChatProposal` | the optional right-hand AI decompose sidebar and its proposal card |
 | `TodayPage`, `TodayBlock`, `TodayNode`, `TodayGlyph`, `useTodayData` | Today page components, its sidebar glyph, and its data hook |
 
 If the file ever needs real splitting, bundle it back into a single `client.js`
@@ -243,7 +270,7 @@ There is no build step: `pnpm install`, edit, run the gates.
 
 | Command | What it enforces |
 | --- | --- |
-| `pnpm run verify` | Syntax of `index.js`, `store.js`, `tracker.js`, `tree.js`, `client.js` |
+| `pnpm run verify` | Syntax of the six host modules and `client.js` |
 | `pnpm run lint` | oxlint |
 | `pnpm run typecheck` | TypeScript `checkJs` across host, client, and tests |
 | `pnpm run static` | lint + typecheck; what the commit hook runs (~3s) |
@@ -252,8 +279,8 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run e2e` | Shipped client artifact against real HTTP and a real SQLite file |
 | `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
-Coverage is 100% per-file for `store.js`, `index.js`, `tracker.js`, and
-`tree.js`, with a documented floor for `client.js`. Commits only run the static
+Coverage is 100% per-file for `store.js`, `index.js`, `tracker.js`, `tree.js`,
+`daily.js`, and `chat.js`, with a documented floor for `client.js`. Commits only run the static
 check; `.husky/pre-push` runs the full gate before a push reaches `main`, and
 refuses a tree that is not green.
 There is no pull request step. CI re-runs the same full gate only when a release
@@ -269,7 +296,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
-- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, links, context export
+- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, AI decompose sidebar, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
 - [AGENTS.md](AGENTS.md) — engineering policy (priorities, tests, file size, gate)
 

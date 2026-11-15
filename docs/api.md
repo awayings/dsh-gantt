@@ -13,10 +13,10 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 3: one working tree in `tasks` (track roots, imported
-  nodes, decomposed and manual tasks). The domain model is in
-  [personal-task-system.md](personal-task-system.md); the migration in
-  [compatibility.md](compatibility.md).
+- The schema is version 4: one working tree in `tasks` (track roots, imported
+  nodes, decomposed and manual tasks) plus the persisted daily brief report. The
+  domain model is in [personal-task-system.md](personal-task-system.md); the
+  migration in [compatibility.md](compatibility.md).
 
 Base URL: the origin printed by your own `dsh web` launch, for example
 `http://127.0.0.1:3080`.
@@ -25,7 +25,7 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 
 | Method | Path | Body / Query | Success |
 | --- | --- | --- | --- |
-| `GET` | `/api/gantt/tree` | — | `200` tree, `brief`, numbers, rollups, stats |
+| `GET` | `/api/gantt/tree` | — | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats |
 | `GET` | `/api/gantt/meta` | — | `200` database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `201` created task |
 | `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `200` updated task |
@@ -39,9 +39,14 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/day` | `?date=YYYY-MM-DD` | `200` one day's plan bundle |
 | `POST` | `/api/gantt/plan/status` | `{ id, status, notes? }` | `200 { ok, block }` |
 | `POST` | `/api/gantt/plan/import` | `{ dir?, year? }` | `200 { ok, dir, imported }` |
+| `GET` | `/api/gantt/brief` | `?date=YYYY-MM-DD` | `200 { ok, today, date, brief, cached }` |
+| `POST` | `/api/gantt/brief/compute` | `{ date? }` | `200 { ok, today, date, brief, cached: false }` |
+| `POST` | `/api/gantt/chat` | `{ message, taskId?, history? }` | `200 { ok, reply, proposal, model }` |
 
-Routes that read a body require a JSON object; any other JSON value is
-rejected with `400`. `GET` routes and `seed` do not read a body.
+Seventeen routes are registered. Routes that read a body require a JSON
+object; any other JSON value is rejected with `400`. `GET` routes and `seed` do
+not read a body. The chat route is the only route that calls an upstream model;
+it answers `503` when the host has no model service.
 
 ## Conventions
 
@@ -201,6 +206,7 @@ curl -s http://127.0.0.1:3080/api/gantt/tree
       }
     ]
   },
+  "dailyBrief": { "date": "2026-11-15", "generatedAt": "2026-11-15T00:05:00.000Z", "source": "auto", "slots": ["…"], "items": ["…"], "tracks": ["…"], "unfilled": [], "notes": [] },
   "tasks": [
     {
       "id": "…",
@@ -253,6 +259,87 @@ never stored. Its rules are in
 Entries carry `id`, `ref`, `number`, `title`, and — in `frontier`/`next` — the
 owning `trackId` (track task id) and `trackName`. Ids compare by numeric dot
 segment (`1.10` sorts after `1.9`); manual tasks without a `ref` sort last.
+This `brief` is computed on every read; the separate, persisted daily report is
+`dailyBrief`.
+
+### `dailyBrief`
+
+The tree response also carries today's persisted daily 该动 report as
+`dailyBrief`; the day bundle carries the report for its date as `brief`. The
+object is returned verbatim from the stored report. Its selection rules are in
+[personal-task-system.md](personal-task-system.md#the-daily-brief-report); the
+shape is:
+
+```jsonc
+{
+  "date": "2026-11-16",                    // YYYY-MM-DD
+  "generatedAt": "2026-11-16T00:05:00.000Z",
+  "source": "auto",                        // auto | manual
+  "dayKind": "workday",                    // workday | weekend | unknown
+  "slots": [                               // windows, chronological; '' times last
+    { "slot": "evening", "startTime": "21:00", "endTime": "22:00", "minutes": 60, "kind": "definition", "blockId": "2026-11-16|21:00|0" }
+  ],
+  "items": [                               // one picked task per filled window
+    { "slot": "evening", "startTime": "21:00", "endTime": "22:00", "minutes": 60,
+      "blockId": "2026-11-16|21:00|0", "taskId": "…", "ref": "node:1.8.1",
+      "title": "S2 每日交易仓读数", "trackId": "…", "trackName": "投资系统", "role": "definition" }
+  ],
+  "tracks": [                              // per-track summary, track order
+    { "trackId": "…", "ref": "track:1", "name": "投资系统", "state": "进行",
+      "role": "core", "picks": 1, "frontier": null, "next": null }
+  ],
+  "unfilled": [],                          // slot indexes without a candidate
+  "notes": []                              // short English diagnostics
+}
+```
+
+- `slots` come from the day's plan blocks when it has any; otherwise from a
+  day-kind template: `workday` has one `evening` 21:00-22:00 window, `weekend`
+  has `morning` 09:00-12:00, `daytime` 14:00-18:00, and `evening` 19:00-21:30,
+  and `unknown` with no blocks has no windows.
+- Window `kind`: `core` for at least 120 minutes, `definition` under 90 minutes
+  or with unknown times, `rotation` in between. `blockId` is the source plan
+  block id, or `''` for a template window.
+- `items` is one picked task per filled window; `role` is the role it was picked
+  for. `tracks` reports each track's role (`core`, `rotation`, `blocked`, or
+  `done`), its `picks`, and its frontier/next entries.
+- `unfilled` lists the indexes of windows with no candidate; `notes` holds
+  English diagnostics for the UI to ignore or show.
+
+#### Read the daily brief
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/brief?date=2026-11-16'
+```
+
+```json
+{ "ok": true, "today": "2026-11-16", "date": "2026-11-16", "cached": true, "brief": { "date": "2026-11-16", "…": "…" } }
+```
+
+- `date` defaults to today; a blank value behaves like omitted; an invalid date
+  is a `400`.
+- A stored report is returned as-is with `cached: true`. When the requested
+  date has no stored report, today's report is computed from the tree, the day
+  plan, and the previous stored reports, persisted with `source: 'auto'`, and
+  returned with `cached: false`. A past or future date with no stored report is
+  computed on read and not persisted, so it reports `cached: false` too.
+
+#### Recompute the daily brief
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/brief/compute \
+  -H 'content-type: application/json' -d '{ "date": "2026-11-16" }'
+```
+
+```json
+{ "ok": true, "today": "2026-11-16", "date": "2026-11-16", "cached": false, "brief": { "date": "2026-11-16", "source": "manual", "…": "…" } }
+```
+
+`date` is optional and defaults to today; the body must be a JSON object, so
+send `{}` when there is nothing to override. The route recomputes the report,
+stores it (replacing any earlier report for that date), marks it
+`source: 'manual'`, and returns it. An invalid date or malformed body is a
+`400`.
 
 ## Read metadata
 
@@ -267,7 +354,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "statuses": ["todo", "in_progress", "blocked", "done"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -277,7 +364,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own fourteen-entry route catalog (abbreviated above);
+`endpoints` is the host's own seventeen-entry route catalog (abbreviated above);
 `taskCount` counts every row of the unified tree.
 
 ## Create a task
@@ -294,7 +381,7 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/tasks \
     "progress": 0,
     "description": "覆盖拆分与状态流转",
     "lane": "赚钱",
-    "doneWhen": "验收用例覆盖 v3 的三条新路由",
+    "doneWhen": "验收用例覆盖拆解与排期路由",
     "landing": "tests/host/routes-write.spec.js",
     "links": [{ "type": "file", "ref": "tests/host/routes-write.spec.js" }]
   }'
@@ -529,9 +616,10 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/task/schedule \
 
 ## Export model context
 
-`GET /api/gantt/context` renders the tree and a day's plan as stable markdown for
-model context. The export is read-only and deterministic; the full rationale is
-in [personal-task-system.md](personal-task-system.md#context-export).
+`GET /api/gantt/context` renders the tree, a day's plan, and the day's daily-brief
+windows as stable markdown for model context. The export is read-only and
+deterministic; the full rationale is in
+[personal-task-system.md](personal-task-system.md#context-export).
 
 ```sh
 curl -s 'http://127.0.0.1:3080/api/gantt/context?date=2026-11-15&limit=12000'
@@ -541,7 +629,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/context?date=2026-11-15&limit=12000'
 {
   "ok": true,
   "date": "2026-11-15",
-  "markdown": "# 个人任务树（6 条支线 · 48 个节点 · 3 个任务）\n## 1. 投资系统（赚钱 · 进行 · 卡住：…）\n- 1.1 数据底座… [done 已过] 2026-07-01→2026-09-30 · 落点 … · 完成标准 … · 依赖 1.8.1 · 链接 memory:…\n  - 1.8.1 S2 每日交易仓读数… [in_progress 进行] …\n\n## 今日 2026-11-15（周日 · 周末 · 休市）\n- 核心目标：…\n- [todo] 09:00-17:00 主攻片 · 1.8.1 读数收口 · 落点 invest/… · 预估 4h · 灵感 #21\n## 完整性提示\n- landing-missing: 2026-11-15|09:00|0\n",
+  "markdown": "# 个人任务树（6 条支线 · 48 个节点 · 3 个任务）\n## 1. 投资系统（赚钱 · 进行 · 卡住：…）\n- 1.1 数据底座… [done 已过] 2026-07-01→2026-09-30 · 落点 … · 完成标准 … · 依赖 1.8.1 · 链接 memory:…\n  - 1.8.1 S2 每日交易仓读数… [in_progress 进行] …\n\n## 今日 2026-11-15（周日 · 周末 · 休市）\n- 核心目标：…\n- [todo] 09:00-17:00 主攻片 · 1.8.1 读数收口 · 落点 invest/… · 预估 4h · 灵感 #21\n\n## 完整性提示\n- landing-missing: 2026-11-15|09:00|0\n\n## 今日窗口 · 2026-11-15\n- 09:00-17:00 core：投资系统 1.8.1 读数收口\n- 21:00-22:00 definition：未填\n",
   "chars": 3812,
   "truncated": false,
   "counts": { "tracks": 6, "nodes": 48, "tasks": 3, "blocks": 4 }
@@ -556,6 +644,10 @@ Query parameters:
 | `root` | whole tree | Export only this task's subtree |
 | `limit` | `12000` | Maximum `markdown` length in characters, 1000–60000 |
 
+- The `## 今日窗口 · YYYY-MM-DD` section lists the daily-brief windows for
+  `date`: one line per window as `HH:MM-HH:MM role：trackName ref title`, with
+  `未填` for a window without a candidate. It is appended after the integrity
+  section and is trimmed by the same `limit`.
 - `chars` is the returned markdown length; `counts` counts each kind in the
   exported range plus the day's blocks. The title line omits a segment whose
   count is zero (a tree with no decomposed tasks has no `0 个任务` segment).
@@ -610,8 +702,8 @@ curl -s 'http://127.0.0.1:3080/api/gantt/day?date=2026-11-15'
 `date` is optional and defaults to the host's today; a blank value behaves like
 omitted. One bundle carries everything the Today page renders: the day's plan
 metadata, its time blocks, the unified-tree nodes whose window overlaps the day
-and the following six days, the six tracks, derived integrity warnings, and
-block stats.
+and the following six days, the six tracks, derived integrity warnings, block
+stats, and the daily 该动 report as `brief`.
 
 ```json
 {
@@ -679,7 +771,8 @@ block stats.
     { "id": "<track-task-id>", "ref": "track:1", "name": "投资系统", "lane": "赚钱", "priority": "", "state": "进行", "blocker": "…", "sortOrder": 0 }
   ],
   "integrity": [{ "code": "inspiration-missing", "blockId": "2026-11-15|21:00|1" }],
-  "stats": { "total": 2, "done": 0, "inProgress": 0, "skipped": 0, "remaining": 2 }
+  "stats": { "total": 2, "done": 0, "inProgress": 0, "skipped": 0, "remaining": 2 },
+  "brief": { "date": "2026-11-15", "source": "auto", "slots": ["…"], "items": ["…"], "tracks": ["…"], "unfilled": [], "notes": [] }
 }
 ```
 
@@ -697,6 +790,9 @@ block stats.
   `doneWhen`; `landing`, `estimate`, `category`, `inspiration`, and `links` are
   plugin-side fields and are empty until annotated through an update or a
   decomposition.
+- `brief` is the daily 该动 report for that date (the same object as the
+  `GET /api/gantt/brief` response's `brief`); only today's report is persisted,
+  so a past or future date returns a freshly computed report that is not stored.
 - `day` is `null` when the date has no imported plan row. `blocks` is then `[]`,
   and `integrity` carries `unplanned-day`.
 
@@ -759,6 +855,96 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
   `MM/DD` day headings when the file's window note does not settle it.
 - A missing or unreadable directory is a `400`.
 
+## Chat about a decomposition
+
+`POST /api/gantt/chat` sends one turn to the host's configured model to discuss
+and plan a decomposition. The route is optional infrastructure: when the host
+has no model service it answers `503` instead of failing the plugin. No tool
+schemas are sent to the model — it returns prose and, when it proposes a
+decomposition, exactly one fenced JSON block that the route validates.
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/chat \
+  -H 'content-type: application/json' \
+  -d '{
+    "message": "把 1.8.1 拆成今天能做的两步",
+    "taskId": "<task-id>",
+    "history": [
+      { "role": "user", "content": "先看看这周还差什么" },
+      { "role": "assistant", "content": "还差读数和收口。" }
+    ]
+  }'
+```
+
+Request fields:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `message` | yes | 1–2000 characters |
+| `taskId` | no | Focused task id; must exist in the tree when present |
+| `history` | no | At most 8 prior turns; each turn has `role` `user` or `assistant` and `content` of at most 2000 characters |
+
+Unknown request fields are ignored. The host builds the model request from:
+today's date, the daily 该动 windows, the full tree context markdown (truncated
+to 9000 characters), and — when `taskId` is set — the focused task's ref, title,
+depth, `doneWhen`, and direct children. The system prompt states the Hermes
+decomposition discipline (4-level cap including the track root, a verifiable
+`doneWhen` per child, ≤30-minute A-class steps or a B-class definition task,
+siblings parallel with at most one `dep`, no invented tasks). The call uses
+`maxTokens: 1500` and a 60-second timeout; only `text-delta` stream chunks are
+joined into the reply.
+
+`200 OK`:
+
+```json
+{
+  "ok": true,
+  "reply": "可以拆成两步：先列读数口径，再跑一遍收口。",
+  "proposal": {
+    "planDate": "2026-11-16",
+    "children": [
+      {
+        "title": "列出读数口径",
+        "doneWhen": "口径表能直接贴进日报",
+        "estimate": "30min",
+        "plan": { "date": "2026-11-16", "startTime": "21:00", "endTime": "21:30", "slot": "evening" }
+      },
+      { "title": "跑一遍收口", "doneWhen": "表里没有待填格" }
+    ]
+  },
+  "model": { "provider": "deepseek-official", "model": "fast" }
+}
+```
+
+`proposal` is `null` when the model did not return a valid fenced proposal.
+When it does, the block is removed from `reply` and validated:
+
+- the last fenced ` ```json ` block wins;
+- `children` has 1–8 entries; each `title` and `doneWhen` is required, 1–200
+  characters; `landing`, `estimate`, `category`, and `inspiration` are optional
+  strings of at most 200 characters; `startDate`/`endDate` are valid dates when
+  present; `plan` is `null` or an object whose `date` is a valid date, whose
+  optional `startTime`/`endTime` are `HH:MM`, and whose optional `slot` is
+  `morning`, `daytime`, `evening`, or `other` (derived from `startTime` when
+  omitted); `planDate` is a valid date or `null`;
+- unknown fields are stripped; an invalid proposal becomes `proposal: null` and
+  the reply is kept;
+- when the focused task is already at the 4-level cap, the proposal is dropped
+  and a Chinese note is appended to the reply — the route still answers `200`.
+
+The route does not persist the conversation; the client sends the last eight
+turns back as `history`. Applying a proposal is a client action that calls the
+existing `POST /api/gantt/task/decompose` route with the proposal's `children`
+and `planDate`.
+
+Chat errors:
+
+| Status | Cause | Example `error` |
+| --- | --- | --- |
+| `400` | invalid message/history/taskId/context | `message is required`, `history must be an array`, `task <id> was not found` |
+| `502` | model request failed, timed out, or was aborted | `model request failed`, `model request timed out` |
+| `503` | no model service or no default model selection | `model unavailable` |
+
 ## Errors
 
 All failures are JSON with a `4xx`/`5xx` status:
@@ -775,10 +961,13 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | invalid links | `links must be an array`, `links[0].type must be one of memory, file, url, task, note` |
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |
-| `400` | invalid plan/import/context input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |
+| `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |
+| `400` | invalid chat input | `message is required`, `message must be at most 2000 characters`, `history must be an array`, `task <id> was not found` |
 | `404` | unknown task id | `task <id> was not found` |
 | `404` | unknown plan block id | `plan block <id> was not found` |
 | `409` | duplicate `(kind, ref)` | `task with kind node and ref node:1.8.1 already exists` |
+| `502` | model request failed, timed out, or was aborted | `model request failed`, `model request timed out` |
+| `503` | no model service or default model selection | `model unavailable` |
 | `500` | unexpected host failure | the thrown error's message |
 
 A wrong method or an unknown path is left to the harness's `/api` dispatch (it
