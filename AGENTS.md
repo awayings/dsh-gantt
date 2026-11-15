@@ -77,8 +77,10 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 - Live UI: start `dsh web`, open the printed `http://127.0.0.1:3080/?token=…`
   URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`;
   override with an absolute `DSH_GANTT_DB`.
-- Install a checkout: `dsh plugin --profile web add /abs/path` or the GUI
-  `plugin_manager install_bundle { target: "/abs/path" }`; restart `dsh web`.
+- Install a checkout: `pnpm run deploy` (link + composition check; `--check`,
+  `--uninstall`), or the GUI `plugin_manager install_bundle { target: "/abs/path" }`;
+  restart `dsh web` for host-side changes. The install is a link, so edits need
+  no reinstall.
 - `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
   manual checklist, acceptance pass, API — in `docs/development.md`,
   `docs/api.md`, `docs/compatibility.md`.

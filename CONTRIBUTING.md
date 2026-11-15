@@ -75,5 +75,9 @@ Releases are cut from a clean, synced `main` by a maintainer:
    coverage, and e2e, rejects a tag that does not match the package version, and
    creates the GitHub Release with generated notes.
 
+The profile that serves the UI links the working tree rather than a copy, so a
+release needs no reinstall: `pnpm run deploy --check` confirms the link, then
+smoke-test the Gantt page before announcing the release.
+
 The package is private and not published to npm; installation is by repository
 path.

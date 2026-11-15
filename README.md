@@ -41,6 +41,21 @@ Or with the CLI:
 dsh plugin --profile web add /absolute/path/to/dsh-gantt
 ```
 
+Or from the checkout, which installs the same way and proves the profile still
+composes:
+
+```sh
+pnpm run deploy                 # link this checkout and verify the profile
+pnpm run deploy --check         # verify the existing link; change no dependency
+pnpm run deploy --uninstall     # remove the bundle from the profile
+```
+
+Every form records a pnpm `link:` dependency, so the profile resolves this
+directory rather than a copy: restart `dsh web` after editing `index.js` or
+`store.js`, and reload the page after editing `client.js` — no reinstall step.
+`pnpm run deploy` takes `--profile <name>` and `--home <dir>` when the target is
+not the default `web` profile under `$DSH_HOME` (`~/.dsh`).
+
 Then open the Harness page; the sidebar entry appears immediately after the
 bundle activates and survives restart. The package is private, so installation
 is always by path — it is not published to npm.
@@ -195,7 +210,9 @@ Coverage is 100% per-file for `store.js` and `index.js`, with a documented floor
 for `client.js`. Commits only run the static check; `.husky/pre-push` runs the
 full gate before a push reaches `main`, and refuses a tree that is not green.
 There is no pull request step. CI re-runs the same full gate only when a release
-tag is pushed (`.github/workflows/release.yml`). Setup, test layout,
+tag is pushed (`.github/workflows/release.yml`). `pnpm run deploy` links this
+checkout into a DSH profile and verifies the composed tree (see
+[Install](#install)). Setup, test layout,
 database/API debugging, and the full verification procedure are in
 [docs/development.md](docs/development.md).
 

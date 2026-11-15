@@ -8,7 +8,7 @@ backed by SQLite and an authenticated JSON API. Start with the
 
 | Document | Audience | Contents |
 | --- | --- | --- |
-| [development.md](development.md) | contributors | Prerequisites, setup, toolchain, quality gates, test layout, database, dev loop, verification, troubleshooting |
+| [development.md](development.md) | contributors | Prerequisites, setup, install, toolchain, quality gates, test layout, database, dev loop, verification, troubleshooting |
 | [api.md](api.md) | integrators | Complete JSON API reference: routes, auth, request/response examples, errors |
 | [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence, rules, limitations, verification |
 

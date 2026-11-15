@@ -143,18 +143,51 @@ resolved path, schema version, and row count at runtime.
 ## Local dev loop
 
 1. `pnpm install`.
-2. Edit `index.js` / `store.js`: these run in the `dsh web` server process and
+2. `pnpm run deploy` links this checkout into the target DSH profile and
+   verifies the composed tree (see [Install a checkout](#install-a-checkout)).
+3. Edit `index.js` / `store.js`: these run in the `dsh web` server process and
    are re-read on restart, so restart `dsh web` after host changes.
-3. Edit `client.js`: the file metadata changes, so DSH derives a new client
+4. Edit `client.js`: the file metadata changes, so DSH derives a new client
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
-4. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
+5. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
    commit and push. The commit hook runs the static check; the push hook runs
    the full gate before anything reaches `main`.
-5. Reinstall the bundle when the installed profile does not link to this
-   checkout: `dsh plugin --profile web add /absolute/path/to/dsh-gantt` (or
-   `plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }` in
-   the GUI). Restart `dsh web` afterwards.
+
+### Install a checkout
+
+The package is private, so it is always installed from a directory: the GUI
+`plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }`, the
+CLI `dsh plugin --profile web add /absolute/path/to/dsh-gantt`, or the scripted
+deploy. All three record a pnpm `link:` dependency plus the bundle selection
+that makes the plugin part of the profile — nothing is copied.
+
+| Command | Effect |
+| --- | --- |
+| `pnpm run deploy` | Link this checkout, select it as a bundle, verify the composed tree; safe to repeat |
+| `pnpm run deploy --check` | Verify the recorded link, the `node_modules` symlink, the bundle selection, and the composition; change no dependency |
+| `pnpm run deploy --uninstall` | Remove the bundle from the profile; the database file stays on disk |
+| `--profile <name>` | Profile to manage (default `$DSH_PROFILE`, else `web`) |
+| `--home <dir>` | DSH home holding `profiles/` (default `$DSH_HOME`, else `~/.dsh`) |
+
+`pnpm run deploy` runs `dsh plugin --profile <name> add <repo-directory>` under
+the hood, so it initializes a missing profile with the default bundle set and
+reports the same compatibility warnings. It finishes by running
+`dsh --profile <name> --dump-config` and checking that the composed tree still
+contains this package: a broken bundle patch fails the deploy instead of
+showing up as a missing page later. The profile lives outside the repository,
+so the command needs write access to `$DSH_HOME/profiles/<profile>`; a sandboxed
+agent session must run it with full filesystem access.
+
+Because the dependency is a link, the profile never holds a copy:
+
+- `index.js` and `store.js` are re-read when `dsh web` starts — restart after
+  editing them.
+- `client.js` is served from this directory on every page load and its revision
+  follows the file metadata, so a reload serves the new bytes.
+- No edit requires a reinstall. Run `pnpm run deploy` again only when the
+  profile lost the link (profile reset, DSH reinstall, or another checkout won
+  the dependency); `pnpm run deploy --check` reports which part is missing.
 
 ## Verification procedure
 
@@ -281,12 +314,23 @@ pnpm exec vitest run --coverage --coverage.reportsDirectory=/tmp/gantt-cov-$$
 
 Thresholds still come from `vitest.config.ts`; only the output location moves.
 
+### The profile does not show the plugin
+
+Run `pnpm run deploy --check`: it names the part that is missing or stale — the
+recorded `link:` dependency, the `node_modules` symlink, the bundle selection,
+or the composition itself. `pnpm run deploy` repairs all four. If the profile
+is correct but the page still has no sidebar entry, reload the page once and
+then restart `dsh web`: a running process serves the linked `client.js` on
+reload, but a host-side change (`index.js`, `store.js`, or the bundle patch)
+needs the restart.
+
 ### No build, no dist
 
-If a page shows old client code after an edit, check that you are looking at
-the file DSH serves (the installed profile copy), not a stale checkout, and
-reload the page. Adding a bundler or build directory is out of scope; the
-single-file client is deliberate (`docs/compatibility.md`).
+If a page shows old client code after an edit, confirm the profile still links
+this checkout (`pnpm run deploy --check`) and reload the page; the served
+artifact revision follows the file metadata, so a linked install serves the
+edited bytes without a reinstall. Adding a bundler or build directory is out of
+scope; the single-file client is deliberate (`docs/compatibility.md`).
 
 ### `main` is protected against force-pushes and deletion
 

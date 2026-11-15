@@ -151,4 +151,4 @@ if (watched.status !== 0) {
 
 info(`release ${tag} published: run "gh release view ${tag} --web" to review the notes`)
 info(`polish the notes from .github/release_template.md with "gh release edit ${tag} --notes-file <file>"`)
-info('reinstall the bundle and smoke-test the Gantt page before announcing the release')
+info('run "pnpm run deploy --check" to confirm the served profile still links this checkout, then smoke-test the Gantt page before announcing the release')
