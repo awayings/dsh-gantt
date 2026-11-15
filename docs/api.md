@@ -51,7 +51,10 @@ it answers `503` when the host has no model service.
 ## Conventions
 
 - **Dates** are `YYYY-MM-DD` and must be real calendar days. `endDate` MUST not
-  be before `startDate`.
+  be before `startDate`. They are **task-day dates**: the `today` fields in
+  responses and every date default resolve in the task-day zone
+  (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not in the host process's UTC
+  date.
 - **Kind** is `track`, `node`, or `task`. `track` and `node` are the imported
   tree layers; `task` is a manually created or decomposed row. Create defaults
   to `task`. The create route technically accepts all three, but only a caller
@@ -338,7 +341,8 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/brief/compute \
 `date` is optional and defaults to today; the body must be a JSON object, so
 send `{}` when there is nothing to override. The route recomputes the report,
 stores it (replacing any earlier report for that date), marks it
-`source: 'manual'`, and returns it. An invalid date or malformed body is a
+`source: 'manual'`, and returns it; the host also recomputes automatically at
+the next 08:00 in the task-day zone. An invalid date or malformed body is a
 `400`.
 
 ## Read metadata
@@ -699,11 +703,11 @@ it was seeded.
 curl -s 'http://127.0.0.1:3080/api/gantt/day?date=2026-11-15'
 ```
 
-`date` is optional and defaults to the host's today; a blank value behaves like
-omitted. One bundle carries everything the Today page renders: the day's plan
-metadata, its time blocks, the unified-tree nodes whose window overlaps the day
-and the following six days, the six tracks, derived integrity warnings, block
-stats, and the daily 该动 report as `brief`.
+`date` is optional and defaults to the task-day today; a blank value behaves
+like omitted. One bundle carries everything the Today page renders: the day's
+plan metadata, its time blocks, the unified-tree nodes whose window overlaps the
+day and the following six days, the six tracks, derived integrity warnings,
+block stats, and the daily 该动 report as `brief`.
 
 ```json
 {

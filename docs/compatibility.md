@@ -100,6 +100,16 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    characters, and aborts the call after 60 seconds. This is a read-only model
    call: the proposal it returns is applied by the normal decompose route, not
    by the model.
+9. **Task-day clock.** This deployment's host process runs in UTC
+   (`/etc/timezone` `Etc/UTC`), while the tracker's plan dates and the 08:00
+   recompute are the user's wall clock. `clock.js` resolves "today" and the
+   next 08:00 with `Intl.DateTimeFormat` in an explicit IANA zone:
+   `DSH_GANTT_TZ` when it names a usable zone, else `Asia/Shanghai`. An invalid
+   or blank override falls back to the default instead of failing reads, and
+   the default zone has no DST. The helpers are re-exported through `tree.js`,
+   `daily.js`, and `store.js`, so every `today` field, default task date,
+   `持续` end, and the scheduler agree with the browser rather than with the
+   host clock.
 
 ## 3 · Rules
 
@@ -225,9 +235,9 @@ read.
   window list plus a diagnostic note. Import the day plan or classify the day to
   get picks.
 - **The 08:00 recompute needs the host running.** The scheduler is an in-process
-  `setTimeout` to the next local 08:00, unref'ed and disposed with the plugin.
-  A host that is down at 08:00 misses that run; the manual recompute route is
-  the fallback, and nothing recomputes in the background.
+  `setTimeout` to the next 08:00 in the task-day zone, unref'ed and disposed
+  with the plugin. A host that is down at 08:00 misses that run; the manual
+  recompute route is the fallback, and nothing recomputes in the background.
 - **The daily brief is a heuristic, not a solver.** It can leave windows
   unfilled (reported in `unfilled`, with English diagnostics in `notes`) and it
   cannot reorder the week or score directions. Rotation fairness only looks at
@@ -284,7 +294,7 @@ read.
 
 ## 6 · Verification
 
-- **Check — syntax:** `pnpm run verify` (`node --check` on the seven sources).
+- **Check — syntax:** `pnpm run verify` (`node --check` on the eight sources).
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
@@ -294,6 +304,11 @@ read.
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
   unchanged and only gain `daily_briefs`. Then read `/api/gantt/brief` and
   assert the report is computed and cached for today.
+- **Check — task-day clock:** with the host in UTC, assert the `today` fields in
+  `/tree`, `/day`, and `/brief` match the `Asia/Shanghai` date (not the UTC
+  date late in the UTC evening), then restart with `DSH_GANTT_TZ=UTC` and
+  assert they follow UTC; an invalid override must fall back to
+  `Asia/Shanghai`, not fail.
 - **Check — live registrations:** `cordis_inspect_query` → Client
   `Slots.listSubTree` with `root: "sidebar.panellist"` and `root: "main"`.
 - **Check — install and host API:** the disposable-profile procedure in

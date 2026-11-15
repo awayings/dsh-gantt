@@ -5,16 +5,15 @@ by a local SQLite database and an authenticated JSON API.
 
 ## Shape
 
-- Host half, six modules (run in the `dsh web` process): `index.js` registers
-  the seventeen `/api/gantt/*` routes through the Connection service;
-  `store.js` owns SQLite and the 08:00 brief scheduler; `tracker.js` parses and
-  imports the tracker markdown; `tree.js` holds the pure tree helpers;
-  `daily.js` builds the daily 该动 report; `chat.js` calls the optional model
-  and parses decomposition proposals.
+- Host half, seven modules (run in the `dsh web` process): `index.js` registers
+  the seventeen `/api/gantt/*` routes; `store.js` owns SQLite and the 08:00
+  scheduler; `tracker.js` parses/imports the tracker markdown; `tree.js` holds
+  tree helpers; `clock.js` resolves task-day dates; `daily.js` builds the daily
+  该动 report; `chat.js` calls the optional model and parses proposals.
 - Client half `client.js`: one browser artifact loaded by the DSH module loader;
   registers two sidebar icons and two keyed `main` pages (`gantt`, `today`), with
   the brief strip, perspectives, and an optional AI sidebar on the Gantt page.
-- **No build step**, no bundler, no `dist/`: all seven files ship as source.
+- **No build step**, no bundler, no `dist/`: all eight files ship as source.
   `client.js` must stay one classic script — DSH derives the artifact revision
   from `exports["./client"]` metadata (mtime/ctime/size) only, so splitting the
   entry would serve stale bytes from the immutable cache. Cap: 4800 lines.
@@ -23,10 +22,8 @@ by a local SQLite database and an authenticated JSON API.
   stores the derived daily report as a morning snapshot, refreshed by recompute
   or the 08:00 run. Details in `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
-  `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`, `lib/types/`)
-  before deciding anything. Never guess a seam, lifecycle, or wire shape.
-  `docs/compatibility.md` is the source of truth for supported versions, seams,
-  and known limitations.
+  `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`) before deciding
+  anything; never guess a seam. `docs/compatibility.md` owns the supported set.
 
 ## Gates
 
@@ -39,8 +36,8 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   matches the pushed tree, so commit or stash first. `--full` forces a run.
 - Never `--no-verify`, never push a red or uncommitted tree, no history rewrites.
 - Coverage floors live in `vitest.config.ts` and ratchet up: 100% for `store.js`,
-  `index.js`, `tracker.js`, `tree.js`, `daily.js`, and `chat.js`; `client.js`
-  99/98/99/99.
+  `index.js`, `tracker.js`, `tree.js`, `clock.js`, `daily.js`, and `chat.js`;
+  `client.js` 99/98/99/99.
   Weakening one needs a recorded decision in `docs/development.md`.
 - CI runs the same gate only on `v*` release tags
   (`.github/workflows/release.yml`); branches have no CI.
@@ -55,7 +52,8 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   Parent rollups are a cache: a parent that loses its last child keeps its last
   rolled-up values (known limitation in `docs/compatibility.md`). The daily
   report is a snapshot, not live state; the model only proposes, and no tool
-  schemas are sent.
+  schemas are sent. Dates and the 08:00 recompute resolve in the task-day zone
+  (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host time zone.
 - Multi-row writes use one `BEGIN IMMEDIATE` transaction; validate before
   mutating (dates, status vocabulary, progress bounds, parent existence,
   cycles). The client refetches after every write and shows an error banner
@@ -86,10 +84,11 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 
 ## Runbook
 
-- `pnpm install`; `pnpm run verify` = `node --check` on the seven sources.
+- `pnpm install`; `pnpm run verify` = `node --check` on the eight sources.
 - Live UI: start `dsh web`, open the printed `http://127.0.0.1:3080/?token=…`
-  URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`;
-  override with an absolute `DSH_GANTT_DB`.
+  URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`,
+  override with `DSH_GANTT_DB`; task-day zone `DSH_GANTT_TZ` (default
+  `Asia/Shanghai`).
 - Install a checkout: `pnpm run deploy` (link + composition check; `--check`,
   `--uninstall`), or the GUI `plugin_manager install_bundle { target: "/abs/path" }`;
   restart `dsh web` for host-side changes. The install is a link, so edits need

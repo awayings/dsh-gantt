@@ -25,9 +25,9 @@ tracker import is an explicit, idempotent pull from markdown files — no watche
 no write-back — and it materializes the imported tree into the same working tree
 the Gantt page renders.
 
-No build step, no runtime dependencies, no second server: the host half is plain
-ESM shipped in this repository, and the client half is a single browser artifact
-loaded by DeepSeek Harness. The AI sidebar is optional — it uses the harness's
+No build step, no runtime dependencies, no second server: the host half is
+seven plain-ESM modules shipped in this repository, and the client half is a
+single browser artifact loaded by DeepSeek Harness. The AI sidebar is optional — it uses the harness's
 model service when one is present and reports a clear "no model" state when not.
 
 ## Destination
@@ -115,15 +115,19 @@ $DSH_HOME/gantt/tasks.db
 `DSH_HOME` defaults to `~/.dsh`. Override the file before starting DSH:
 
 ```sh
-DSH_GANTT_DB=/absolute/path/to/tasks.db dsh web
+DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 ```
+
+`DSH_GANTT_TZ` sets the task-day zone used for "today", plan dates, and the
+08:00 brief recompute; it defaults to `Asia/Shanghai` (this deployment's host
+process runs in UTC). An invalid IANA zone falls back to the default.
 
 The schema is created on first activation and upgraded in place; a v2 or v3
 database is migrated to schema version 4 on open (the append-only migration,
 the one-time tree backfill for v2, and the new `daily_briefs` table are in
-[docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD`; task
-status is one of `todo`, `in_progress`, `blocked`, `done`; plan-block status is
-one of `todo`, `in_progress`, `done`, `skipped`.
+[docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
+task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`;
+plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
 Schema version 4 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
@@ -133,8 +137,8 @@ and the plugin's `links`; `(kind, ref)` is unique for imported rows. The
 `tracks`/`nodes` tables remain as import snapshots and idempotency keys, and
 `plan_blocks`/`day_plans` hold the time grid. The `daily_briefs` table stores
 one report per date: a deterministic, persisted snapshot of today's windows and
-picked tasks, recomputed by the host at 08:00, by **Recompute**, or on the first
-read of a day without a stored report. The import reads a task-tracker
+picked tasks, recomputed by the host at 08:00 in the task-day zone, by
+**Recompute**, or on the first read of a day without a stored report. The import reads a task-tracker
 markdown workspace (`SCHEDULE.md`, `TREE.md`, `daily/*.md`) from
 `/data/home/clawd/projects/task-tracker` by default (`DSH_GANTT_TRACKER_DIR`
 overrides it) and never writes to it. See
@@ -199,7 +203,7 @@ request/response examples, field tables, proposal rules, and error codes:
 ## Verification
 
 ```sh
-pnpm run verify    # node --check on the six host modules and client.js
+pnpm run verify    # node --check on the eight sources (seven host modules + client)
 pnpm run static    # lint + typecheck (the commit hook)
 pnpm run test      # vitest (host + jsdom client unit suites)
 pnpm run e2e       # real client artifact -> HTTP -> host routes -> SQLite
@@ -270,7 +274,7 @@ There is no build step: `pnpm install`, edit, run the gates.
 
 | Command | What it enforces |
 | --- | --- |
-| `pnpm run verify` | Syntax of the six host modules and `client.js` |
+| `pnpm run verify` | Syntax of the eight sources (seven host modules + `client.js`) |
 | `pnpm run lint` | oxlint |
 | `pnpm run typecheck` | TypeScript `checkJs` across host, client, and tests |
 | `pnpm run static` | lint + typecheck; what the commit hook runs (~3s) |
@@ -280,9 +284,9 @@ There is no build step: `pnpm install`, edit, run the gates.
 | `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
 Coverage is 100% per-file for `store.js`, `index.js`, `tracker.js`, `tree.js`,
-`daily.js`, and `chat.js`, with a documented floor for `client.js`. Commits only run the static
-check; `.husky/pre-push` runs the full gate before a push reaches `main`, and
-refuses a tree that is not green.
+`clock.js`, `daily.js`, and `chat.js`, with a documented floor for `client.js`.
+Commits only run the static check; `.husky/pre-push` runs the full gate before
+a push reaches `main`, and refuses a tree that is not green.
 There is no pull request step. CI re-runs the same full gate only when a release
 tag is pushed (`.github/workflows/release.yml`). `pnpm run deploy` links this
 checkout into a DSH profile and verifies the composed tree (see

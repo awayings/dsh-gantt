@@ -38,15 +38,27 @@ push to `main`.
 | husky `^9.1.7` | Runs the commit and push gates | `.husky/pre-commit`, `.husky/pre-push` |
 | jsdom `^30.1.3` | Browser environment for `client.js` | `tests/client/setup.js` |
 
-There is **no build step**. All seven source files are shipped as-is: the six
-host modules `index.js`, `store.js`, `tracker.js`, `tree.js`, `daily.js`, and
-`chat.js` as ESM, plus `client.js` as the client artifact loaded by DSH.
+There is **no build step**. All eight source files are shipped as-is: the seven
+host modules `index.js`, `store.js`, `tracker.js`, `tree.js`, `clock.js`,
+`daily.js`, and `chat.js` as ESM, plus `client.js` as the client artifact loaded
+by DSH.
+
+| File | Half | Role |
+| --- | --- | --- |
+| `index.js` | host | Registers the seventeen `/api/gantt/*` routes and wires the optional model services |
+| `store.js` | host | SQLite schema/migrations, task/tree writes, brief persistence, the 08:00 scheduler |
+| `tracker.js` | host | Task-tracker markdown parsers and importer |
+| `tree.js` | host | Pure tree helpers: numbering, rollups, frontier/next, links, context markdown |
+| `clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
+| `daily.js` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
+| `chat.js` | host | AI chat: prompt/context assembly, stream assembly, proposal parsing |
+| `client.js` | client | Single classic-script artifact: both pages, brief strip, perspectives, AI sidebar |
 
 ## Quality gate commands
 
 | Command | What it runs | What it enforces |
 | --- | --- | --- |
-| `pnpm run verify` | `node --check` on the six host modules and `client.js` | Syntax only; the fastest smoke check. |
+| `pnpm run verify` | `node --check` on the eight sources (seven host modules + `client.js`) | Syntax only; the fastest smoke check. |
 | `pnpm run lint` | `oxlint` | Lint rules and unused code. |
 | `pnpm run lint:fix` | `oxlint --fix` | Auto-fixes what it can; review the diff afterwards. |
 | `pnpm run typecheck` | `tsc --noEmit` against all three tsconfigs | Host under `strict`; client and tests under `checkJs` with looser settings. |
@@ -82,8 +94,8 @@ again in CI before a release is published.
 
 Coverage policy:
 
-- `store.js`, `index.js`, `tracker.js`, `tree.js`, `daily.js`, and `chat.js`:
-  **100%** statements, branches, functions, lines.
+- `store.js`, `index.js`, `tracker.js`, `tree.js`, `clock.js`, `daily.js`, and
+  `chat.js`: **100%** statements, branches, functions, lines.
 - `client.js`: ratcheted floor — 99% statements, 98% branches, 99% functions,
   99% lines. The unreachable UI branches are listed in the coverage output and
   must not regress; the measured values are printed by `pnpm run coverage` and
@@ -101,6 +113,11 @@ Recorded decisions:
   functions (numbering, flattening, rollups, stats, frontier/next, context
   markdown), so there is no excuse for a partial branch. Read-time derivation
   bugs would show up as wrong numbers on every page.
+- **2026-11-15 — `clock.js` added at 100%.** The task-day clock decides which
+  date "today" is and when the next 08:00 fires; a wrong zone or an unparsed
+  override would silently shift every date and the scheduler, so every branch
+  (including the invalid-override fallback) is pinned by
+  `tests/store/clock.spec.js`.
 - **2026-11-15 — `daily.js` and `chat.js` added at 100%.** The daily-brief
   engine decides which task goes into which window and the chat module parses
   model output into a tree mutation; both are pure (or stream-shaped) and a
@@ -128,15 +145,15 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `store.js`, `tree.js`, and `daily.js`: schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/store/` | `host` (Node) | `store.js`, `tree.js`, `clock.js`, and `daily.js`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `index.js` and `chat.js`: all seventeen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, `decompose`/`schedule`/`context`, the day/plan routes, chat request validation, model streaming assembly, proposal parsing, and the 400/502/503 mapping |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
 | `tests/client/` | `client` (jsdom) | `client.js`: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the AI sidebar (focus, send, proposal, apply, no-model banner), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, chat answering `503` without a model, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures, a fake host context for the `host` project, and a fake `llm` stream (`tests/helpers/llm.js`) for chat tests |
 
-New in the daily-brief / AI-sidebar round: `tests/store/daily-brief.spec.js` and
-`tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
+New in the daily-brief / AI-sidebar / clock round: `tests/store/clock.spec.js`,
+`tests/store/daily-brief.spec.js`, and `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/host/routes-chat.spec.js`, and `tests/host/chat.spec.js`,
 `tests/e2e/brief.spec.js`, and `tests/client/chat.spec.js`; the existing tree,
 page, today, and fixtures specs gained the brief strip, perspective, and
@@ -178,6 +195,23 @@ $DSH_HOME/gantt/tasks.db
 - One DSH process owns one database. Do not point concurrent DSH processes at
   the same file (see `docs/compatibility.md`).
 
+### Task-day clock
+
+The host process may run in UTC (this deployment does) while the tracker's plan
+dates and the user's morning are wall-clock local. `clock.js` resolves "today"
+and the next 08:00 in an explicit IANA zone:
+
+- `DSH_GANTT_TZ` overrides the zone; unset/blank uses `Asia/Shanghai`.
+- An invalid override falls back to the default instead of failing reads.
+- `todayIso`/`nextEightAm` are re-exported through `tree.js`, `daily.js`, and
+  `store.js`, so response `today` fields, default task dates, `持续` end dates,
+  and the brief scheduler all agree with the browser. The default zone has no
+  DST.
+
+Because UTC is 8 hours behind the default zone, "today" can already be the next
+calendar day while the host's UTC clock still shows the previous one. Set
+`DSH_GANTT_TZ=UTC` only when a test or fixture intentionally expects host dates.
+
 The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
@@ -202,9 +236,9 @@ JSON), the persisted daily 该动 snapshots. The rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
-The host also starts an in-process scheduler: a `setTimeout` to the next local
-08:00 recomputes today's report with `source: 'auto'`; the timer is unref'ed and
-disposed with the plugin, so it only runs while `dsh web` is up.
+The host also starts an in-process scheduler: a `setTimeout` to the next 08:00
+in the task-day zone recomputes today's report with `source: 'auto'`; the timer
+is unref'ed and disposed with the plugin, so it only runs while `dsh web` is up.
 
 #### Migrate a v2 or v3 database
 
@@ -264,10 +298,10 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 1. `pnpm install`.
 2. `pnpm run deploy` links this checkout into the target DSH profile and
    verifies the composed tree (see [Install a checkout](#install-a-checkout)).
-3. Edit `index.js` / `store.js` / `tracker.js` / `tree.js` / `daily.js` /
-   `chat.js`: these run in the `dsh web` server process and are re-read on
-   restart, so restart `dsh web` after host changes. The daily-brief scheduler
-   restarts with the process.
+3. Edit `index.js` / `store.js` / `tracker.js` / `tree.js` / `clock.js` /
+   `daily.js` / `chat.js`: these run in the `dsh web` server process and are
+   re-read on restart, so restart `dsh web` after host changes. The daily-brief
+   scheduler restarts with the process.
 4. Edit `client.js`: the file metadata changes, so DSH derives a new client
    artifact revision and a page reload picks up the new bytes. A page refresh
    is enough; no build is involved.
@@ -302,8 +336,8 @@ agent session must run it with full filesystem access.
 
 Because the dependency is a link, the profile never holds a copy:
 
-- `index.js`, `store.js`, `tracker.js`, `tree.js`, `daily.js`, and `chat.js`
-  are re-read when `dsh web` starts — restart after editing them.
+- `index.js`, `store.js`, `tracker.js`, `tree.js`, `clock.js`, `daily.js`, and
+  `chat.js` are re-read when `dsh web` starts — restart after editing them.
 - `client.js` is served from this directory on every page load and its revision
   follows the file metadata, so a reload serves the new bytes.
 - No edit requires a reinstall. Run `pnpm run deploy` again only when the
@@ -361,10 +395,12 @@ curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   http://127.0.0.1:3080/api/gantt/chat -d '{"message":"拆解这个任务"}'
 ```
 
-Expected: `meta` returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db",
-engine:"node:sqlite", schemaVersion:4, kinds:[…], linkTypes:[…],
-endpoints:[…17 routes…]}`; `seed` on an empty database inserts 13 demo tasks
-and returns `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
+Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
+`DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
+returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
+schemaVersion:4, kinds:[…], linkTypes:[…], endpoints:[…17 routes…]}`; `seed`
+on an empty database inserts 13 demo tasks and returns
+`seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry
 per track, and a `dailyBrief` for today; `plan/import` returns
 `imported:{tracks,nodes,days,blocks}` with non-zero counts for a real tracker
@@ -497,12 +533,21 @@ interleave writes and hit lock errors; there is no cross-process arbitration in
 this plugin. Run one DSH process per database file, or set a distinct
 `DSH_GANTT_DB` for each. The full rule is in `docs/compatibility.md`.
 
+### Dates are off by one day
+
+The host process runs in UTC, but task days and the 08:00 recompute resolve in
+the task-day zone (`DSH_GANTT_TZ`, default `Asia/Shanghai`). Late in the UTC
+evening the task day is already the next calendar day, so "today" can differ
+from `date -u`. That is intended; set `DSH_GANTT_TZ` for a different wall clock
+or `UTC` only for fixtures that expect host dates.
+
 ### The daily brief looks stale or empty
 
 The report is a stored morning snapshot: it reflects the tree when it was
 generated, so status edits made later in the day do not move its picks. Press
 **Recompute** (or `POST /api/gantt/brief/compute`) to refresh it; the host also
-recomputes at the next local 08:00 only while `dsh web` is running. An empty
+recomputes at the next 08:00 in the task-day zone only while `dsh web` is
+running. An empty
 window list usually means an `unknown` day kind with no plan blocks — import the
 day plan or classify the day. See `docs/compatibility.md` §5 for the full list.
 
@@ -535,7 +580,8 @@ or the composition itself. `pnpm run deploy` repairs all four. If the profile
 is correct but the page still has no sidebar entry, reload the page once and
 then restart `dsh web`: a running process serves the linked `client.js` on
 reload, but a host-side change (`index.js`, `store.js`, `tracker.js`,
-`tree.js`, `daily.js`, `chat.js`, or the bundle patch) needs the restart.
+`tree.js`, `clock.js`, `daily.js`, `chat.js`, or the bundle patch) needs the
+restart.
 
 ### No build, no dist
 
