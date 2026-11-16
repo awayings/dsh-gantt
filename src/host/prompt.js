@@ -1,11 +1,13 @@
 // Model-facing task protocol and per-conversation background context.
 //
 // The static protocol section teaches every conversation how a Gantt task is
-// finished: complete it, partially complete it and decompose the rest, or only
-// decompose it. The dynamic context registers the focused task's ancestor chain
-// and its recent trajectory for the calling conversation; DSH materializes a
-// new runtime-context snapshot only when the rendered text changes, so the
-// cache prefix stays stable while the focus moves.
+// finished: close each round with exactly one of gantt_track, gantt_update_task,
+// gantt_decompose, or gantt_create_task — complete the task, advance it, open
+// subtasks, open a sibling, or record the round without a tree write. The
+// dynamic context registers the focused task's ancestor chain and its recent
+// trajectory for the calling conversation; DSH materializes a new
+// runtime-context snapshot only when the rendered text changes, so the cache
+// prefix stays stable while the focus moves.
 
 import { findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from './tree/chain.js'
 
@@ -14,12 +16,15 @@ import { findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from
 /** Static protocol section injected into every system prompt. */
 export const PROTOCOL_SECTION = `## 甘特图任务协议
 
-本部署把会话的工作单元挂在甘特图上：用户在右侧甘特 tab 选中的「聚焦任务」及其全部祖先链路会作为运行时上下文注入本会话；推进任务的过程由插件自动记录为任务轨迹（会话 id + 轮次索引）。本会话就是该聚焦任务的内容专用主会话，是这个任务的工作现场，不是旁路聊天；会话本身就是不断完成甘特图任务的过程。
+本部署把会话的工作单元挂在甘特图上：用户在右侧甘特 tab 或「工作台」tab 聚焦的任务及其全部祖先链路会作为运行时上下文注入本会话；推进任务的过程由插件自动记录为任务轨迹（会话 id + 轮次索引）。工作模式为任务打开的专属会话就是该任务的内容专用主会话，是这个任务的工作现场，不是旁路聊天；会话本身就是不断完成甘特图任务的过程。
 
 工作方式：
 - 开始工作前先阅读注入的聚焦链路；需要子任务、完成标准或最近轨迹时调用 \`gantt_context\`。
 - 任务写入一律通过工具完成，校验在 store 层；插件不会调用模型，也不会替你自动改任务。
 - 每次写入都会自动带上本会话 id 与当前轮次，不要把这些值写进标题、描述或完成标准。
+- 「工作台」tab 按会话与轮次列出这些记录：轨迹、专属对话、可用技能、该会话的编队（子 Agent）。
+
+适用范围：下面的强制收尾只针对有聚焦任务的会话（工作模式打开的专属会话一定有聚焦任务）；\`gantt_context\` 显示没有聚焦任务、也没有任务映射的会话不适用，不要为了满足格式去编造任务关联。
 
 收尾硬性要求（memory-evolve 式）：每一轮都必须以下面四个工具调用之一收尾，且只能有一个——先做事，再用一个工具调用落账；只回复文字、不以这四个工具之一收尾是不允许的。
 1. 本轮没有写任务树：调用 \`gantt_track\`，用 \`summary\` 写清本轮做了什么，把这一轮与聚焦任务关联起来。
