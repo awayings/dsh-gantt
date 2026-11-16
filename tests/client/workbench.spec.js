@@ -1,7 +1,8 @@
-// Workbench tab body: the focused-task header, four sub-tabs, the trajectory /
-// conversation / skills / team panels, every empty/unavailable/error state, and
-// the refetch rules (visible, window focus, refresh, after a conversation action).
-import { afterEach, describe, expect, it } from 'vitest'
+// Workbench tab body: the task view (bound conversation plus trajectory), the
+// execute entry point for an unbound task (new browser window), the skills and
+// agent-team panels, and the refetch rules (visible, window focus, refresh,
+// focus revision, after a conversation action).
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement } from 'react'
 import {
   click,
@@ -17,6 +18,8 @@ import {
 } from './harness.js'
 import { GanttWorkbench } from '../../src/client/pages/workbench.js'
 import { DICTS } from '../../src/client/i18n/index.js'
+import { noteWorkFocus } from '../../src/client/work-nav.js'
+import { HANDOFF_KEY } from '../../src/client/session-window.js'
 
 const WORK = 'api/gantt/work'
 const WORK_SESSION = 'api/gantt/work/session'
@@ -57,6 +60,7 @@ const TRAJECTORY_EVENTS = [
     taskId: 'task-1',
     action: 'track',
     sessionId: 'session-work',
+    sessionTitle: 'Bench work',
     turn: 4,
     detail: 'wired the panels',
     at: '2026-11-16T06:30:00.000Z',
@@ -83,7 +87,7 @@ const TRAJECTORY_EVENTS = [
     id: 'e0',
     taskId: 'task-1',
     action: 'update',
-    sessionId: 'session-work',
+    sessionId: '',
     turn: 'ignored',
     detail: '',
     at: '',
@@ -103,6 +107,7 @@ const AGENTS = [
 
 const SESSION_LIST = {
   ids: ['session-work'],
+  phase: 'ready',
   byId: {
     'session-work': {
       id: 'session-work',
@@ -115,6 +120,24 @@ const SESSION_LIST = {
 
 function dictionary(locale) {
   return String(locale).toLowerCase().startsWith('zh') ? DICTS.zh : DICTS.en
+}
+
+function fakeUiSession(entries = {}) {
+  let snapshot = new Map(Object.entries(entries))
+  const listeners = new Set()
+  return {
+    sessionStatus: {
+      getSnapshot: () => snapshot,
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+    },
+    refresh(next) {
+      snapshot = new Map(Object.entries(next))
+      for (const listener of [...listeners]) listener()
+    },
+  }
 }
 
 function buildCtx(options = {}) {
@@ -148,7 +171,7 @@ function fakeServices(options = {}) {
     },
     list: { getSnapshot: () => options.sessionsList ?? SESSION_LIST },
   }
-  return {
+  const services = {
     sessions,
     uiWorkspace: { opened, openSession: sessionId => opened.push(sessionId) },
     workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: '/data/home/ws-plugin' }] }) } },
@@ -157,6 +180,8 @@ function fakeServices(options = {}) {
     created,
     opens,
   }
+  if (options.uiSession !== undefined) services.uiSession = options.uiSession
+  return services
 }
 
 function defaultRoutes(overrides = {}) {
@@ -194,10 +219,42 @@ function tab(container, name) {
   return q(container, `[data-work-tab="${name}"]`)
 }
 
-afterEach(unmountAll)
+function fakeWindow() {
+  return {
+    closed: false,
+    close() {
+      this.closed = true
+    },
+    location: {
+      replaced: '',
+      replace(target) {
+        this.replaced = target
+      },
+    },
+  }
+}
 
-describe('default trajectory tab', () => {
-  it('renders the focused task, tab list, and trajectory rows', async () => {
+function stubOpen(result) {
+  const calls = []
+  vi.stubGlobal('open', (...args) => {
+    calls.push(args)
+    return result
+  })
+  return calls
+}
+
+function handoff() {
+  const raw = localStorage.getItem(HANDOFF_KEY)
+  return raw === null ? null : JSON.parse(raw)
+}
+
+afterEach(() => {
+  unmountAll()
+  localStorage.clear()
+})
+
+describe('task view', () => {
+  it('renders the focused task, the conversation, and the trajectory in one view', async () => {
     const { calls } = installFetch(defaultRoutes())
     const { view, services } = renderWorkbench()
     await flush()
@@ -213,16 +270,21 @@ describe('default trajectory tab', () => {
     expect(q(view.container, '.gantt-workbench-chip').getAttribute('title')).toBe('Ship work mode')
     expect(text(view.container, '.gantt-workbench-chip-ref')).toBe('1.8.1')
     expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
-    expect(q(view.container, '.gantt-workbench-none')).toBeNull()
 
     const tabs = qa(view.container, 'nav[role="tablist"] button.gantt-workbench-tab')
-    expect(tabs.map(element => element.dataset.workTab)).toEqual(['trajectory', 'chat', 'skills', 'team'])
-    expect(tabs.map(element => element.textContent)).toEqual(['Trajectory', 'Conversation', 'Skills', 'Team'])
-    expect(tab(view.container, 'trajectory').getAttribute('data-active')).toBe('true')
-    expect(tab(view.container, 'chat').hasAttribute('data-active')).toBe(false)
+    expect(tabs.map(element => element.dataset.workTab)).toEqual(['task', 'skills', 'team'])
+    expect(tabs.map(element => element.textContent)).toEqual(['Task', 'Skills', 'Team'])
+    expect(tab(view.container, 'task').getAttribute('data-active')).toBe('true')
 
-    expect(q(view.container, 'section[data-panel="trajectory"]')).not.toBeNull()
-    expect(q(view.container, 'section[data-panel="chat"]')).toBeNull()
+    expect(q(view.container, 'section[data-panel="task"]')).not.toBeNull()
+    expect(text(view.container, '[data-block="conversation"] .gantt-workbench-chat-title')).toBe('Work conversation')
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
+    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Running')
+    expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('true')
+    expect(text(view.container, '.gantt-workbench-chat-updated')).toMatch(/^Last active \d{2}:\d{2}$/)
+    expect(q(view.container, '[data-action="open-conversation"]')).not.toBeNull()
+    expect(q(view.container, '[data-action="open-window"]')).not.toBeNull()
+    expect(q(view.container, '[data-action="execute"]')).toBeNull()
 
     const rows = rowElements(view.container)
     expect(rows).toHaveLength(4)
@@ -231,35 +293,252 @@ describe('default trajectory tab', () => {
     expect(text(rows[0], '.gantt-workbench-row-action')).toBe('Tracked')
     expect(text(rows[0], '.gantt-workbench-row-turn')).toBe('Turn 4')
     expect(text(rows[0], '.gantt-workbench-row-time')).toMatch(/^\d{2}:\d{2}$/)
+    expect(text(rows[0], '.gantt-workbench-row-session')).toBe('Bench work（work）')
     expect(text(rows[0], '.gantt-workbench-row-detail')).toBe('wired the panels')
     expect(text(rows[1], '.gantt-workbench-row-action')).toBe('Completed')
     expect(q(rows[1], '.gantt-workbench-row-turn')).toBeNull()
     expect(q(rows[1], '.gantt-workbench-row-time').textContent).toBe('')
     expect(q(rows[1], '.gantt-workbench-row-detail')).toBeNull()
     expect(q(rows[2], '.gantt-workbench-row-time').textContent).toBe('')
-    expect(q(rows[3], '.gantt-workbench-row-time').textContent).toBe('')
+    expect(q(rows[3], '.gantt-workbench-row-session')).toBeNull()
     expect(q(rows[3], '.gantt-workbench-row-turn')).toBeNull()
+  })
+
+  it('localizes the tab labels and the task view through the host dictionary', async () => {
+    installFetch(defaultRoutes())
+    const { view } = renderWorkbench({ locale: 'zh' })
+    await flush()
+    const tabs = qa(view.container, 'nav[role="tablist"] button.gantt-workbench-tab')
+    expect(tabs.map(element => element.textContent)).toEqual(['任务', '技能', '编队'])
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
+    expect(text(view.container, '[data-block="conversation"] .gantt-workbench-chat-title')).toBe('关联对话')
+  })
+
+  it('opens the bound conversation from the task view', async () => {
+    installFetch(defaultRoutes())
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="open-conversation"]'))
+    expect(services.opened).toEqual(['session-work'])
+    expect(services.opens).toEqual([])
+  })
+
+  it('opens a trajectory session row in place', async () => {
+    installFetch(defaultRoutes())
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(rowElements(view.container)[2].querySelector('.gantt-workbench-row-session'))
+    expect(services.opened).toEqual(['session-work'])
   })
 })
 
-describe('sub-tabs', () => {
-  it('switches to the conversation, skills, and team panels', async () => {
+describe('conversation state', () => {
+  it('shows the waiting state for a pending interaction', async () => {
+    const uiSession = fakeUiSession({ 'session-work': { pendingInteraction: 'approval', running: true } })
+    installFetch(defaultRoutes())
+    const { view } = renderWorkbench({ serviceOptions: { uiSession } })
+    await flush()
+
+    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Waiting for your choice')
+    expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-waiting')).toBe('true')
+  })
+
+  it('shows the running state from the live snapshot and the idle fallback', async () => {
+    const uiSession = fakeUiSession({ 'session-work': { running: true } })
+    installFetch(defaultRoutes())
+    const first = renderWorkbench({ serviceOptions: { uiSession } })
+    await flush()
+    expect(text(first.view.container, '.gantt-workbench-chat-state')).toBe('Running')
+    first.view.unmount()
+
+    const idle = fakeUiSession({ 'session-work': { running: false } })
+    const services = fakeServices({ uiSession: idle })
+    services.sessions.list = {
+      getSnapshot: () => ({
+        ids: ['session-work'],
+        byId: { 'session-work': { id: 'session-work', displayTitle: 'Bench', running: false } },
+      }),
+    }
+    installFetch(defaultRoutes())
+    const second = renderWorkbench({ services })
+    await flush()
+    expect(text(second.view.container, '.gantt-workbench-chat-state')).toBe('Idle')
+    expect(q(second.view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('false')
+    expect(text(second.view.container, '.gantt-workbench-chat-updated')).toBe('Last active ')
+  })
+
+  it('reacts to a live status update', async () => {
+    const uiSession = fakeUiSession({ 'session-work': { running: true } })
+    installFetch(defaultRoutes())
+    const { view } = renderWorkbench({ serviceOptions: { uiSession } })
+    await flush()
+    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Running')
+
+    act(() => uiSession.refresh({ 'session-work': { pendingInteraction: 'question' } }))
+    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Waiting for your choice')
+  })
+})
+
+describe('execute entry', () => {
+  it('creates the conversation and opens it in a new browser window', async () => {
+    const win = fakeWindow()
+    const opens = stubOpen(win)
+    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    expect(text(view.container, '[data-action="execute"]')).toBe('Execute')
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+
+    expect(opens).toHaveLength(1)
+    expect(services.created).toEqual([{ workspaceId: 'ws-1' }])
+    expect(services.opened).toEqual([])
+    expect(handoff()).toMatchObject({ sessionId: 'session-created' })
+    expect(win.location.replaced).toBe(globalThis.location.href)
+    expect(win.opener).toBeNull()
+  })
+
+  it('falls back to the current window when the browser blocks the popup', async () => {
+    stubOpen(null)
+    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+
+    expect(services.created).toEqual([{ workspaceId: 'ws-1' }])
+    expect(services.opened).toEqual(['session-created'])
+  })
+
+  it('shows the busy state while the conversation is being created', async () => {
+    const pending = deferred()
+    stubOpen(fakeWindow())
+    installFetch({
+      ...defaultRoutes({ work: WORK_WITHOUT_SESSION }),
+      [WORK_SESSION]: () => pending.promise,
+    })
+    const { view } = renderWorkbench()
+    await flush()
+
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+    expect(text(view.container, '[data-action="execute"]')).toBe('Creating…')
+    expect(q(view.container, '[data-action="execute"]').disabled).toBe(true)
+
+    pending.resolve(jsonResponse({ ok: true, taskId: 'task-1', sessionId: 'session-created' }))
+    await flush()
+    expect(text(view.container, '[data-action="execute"]')).toBe('Execute')
+  })
+
+  it('reports a failed execute and closes the blank window', async () => {
+    const win = fakeWindow()
+    stubOpen(win)
+    installFetch(defaultRoutes({
+      work: WORK_WITHOUT_SESSION,
+      routes: { [WORK_SESSION]: () => jsonResponse({ ok: false, error: 'bind failed' }, 500) },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+
+    expect(text(view.container, '.gantt-workbench-error')).toBe('Could not open the work conversation. bind failed')
+    expect(win.closed).toBe(true)
+    expect(handoff()).toBeNull()
+  })
+
+  it('falls back in place when the handoff cannot be stored', async () => {
+    const win = fakeWindow()
+    stubOpen(win)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+
+    expect(win.closed).toBe(true)
+    expect(services.opened).toEqual(['session-created'])
+  })
+
+  it('reports the missing navigation service when no window can be opened', async () => {
+    stubOpen(null)
+    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
+    const services = fakeServices()
+    delete services.uiWorkspace
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="execute"]'))
+    await flush()
+
+    expect(text(view.container, '.gantt-workbench-error')).toBe('Could not open the work conversation. This host cannot open the conversation in a new window.')
+  })
+})
+
+describe('open in a new window', () => {
+  it('hands the bound conversation to a new window', async () => {
+    const win = fakeWindow()
+    const opens = stubOpen(win)
+    installFetch(defaultRoutes())
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="open-window"]'))
+    expect(opens).toHaveLength(1)
+    expect(handoff()).toMatchObject({ sessionId: 'session-work' })
+    expect(win.location.replaced).toBe(globalThis.location.href)
+    expect(services.opened).toEqual([])
+  })
+
+  it('opens in place when the handoff cannot be stored', async () => {
+    const win = fakeWindow()
+    stubOpen(win)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    installFetch(defaultRoutes())
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="open-window"]'))
+    expect(win.closed).toBe(true)
+    expect(services.opened).toEqual(['session-work'])
+  })
+
+  it('opens in place when the window is refused', async () => {
+    stubOpen(null)
+    installFetch(defaultRoutes())
+    const services = fakeServices()
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    click(q(view.container, '[data-action="open-window"]'))
+    expect(services.opened).toEqual(['session-work'])
+    expect(handoff()).toBeNull()
+  })
+})
+
+describe('skills and team panels', () => {
+  it('switches to the skills and team panels', async () => {
     installFetch(defaultRoutes())
     const { view, services } = renderWorkbench()
     await flush()
-
-    click(tab(view.container, 'chat'))
-    expect(tab(view.container, 'chat').getAttribute('data-active')).toBe('true')
-    expect(tab(view.container, 'trajectory').hasAttribute('data-active')).toBe(false)
-    expect(q(view.container, 'section[data-panel="chat"]')).not.toBeNull()
-    expect(q(view.container, 'section[data-panel="trajectory"]')).toBeNull()
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode')
-    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Running')
-    expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('true')
-    expect(text(view.container, '.gantt-workbench-chat-updated')).toMatch(/^Last active \d{2}:\d{2}$/)
-    expect(q(view.container, '.gantt-workbench-chat-title')).not.toBeNull()
-    expect(q(view.container, '[data-action="open-conversation"]')).not.toBeNull()
-    expect(q(view.container, '[data-action="create-conversation"]')).toBeNull()
 
     click(tab(view.container, 'skills'))
     expect(q(view.container, 'section[data-panel="skills"]')).not.toBeNull()
@@ -287,84 +566,20 @@ describe('sub-tabs', () => {
     expect(services.opened).toEqual(['agent-2'])
   })
 
-  it('localizes the tab labels through the host dictionary', async () => {
+  it('hides the agent open action when the host has no workspace service', async () => {
     installFetch(defaultRoutes())
-    const { view } = renderWorkbench({ locale: 'zh' })
-    await flush()
-    const tabs = qa(view.container, 'nav[role="tablist"] button.gantt-workbench-tab')
-    expect(tabs.map(element => element.textContent)).toEqual(['轨迹', '对话', '技能', '编队'])
-  })
-})
-
-describe('conversation panel', () => {
-  it('opens the bound conversation and refreshes the workbench', async () => {
-    const sessionsList = {
-      ids: ['session-work'],
-      byId: { 'session-work': { id: 'session-work', title: 'Legacy title', running: false, updatedAt: undefined } },
-    }
-    const { calls } = installFetch(defaultRoutes())
-    const services = fakeServices({ sessionsList })
-    const { view } = renderWorkbench({ services })
-    await flush()
-
-    click(tab(view.container, 'chat'))
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Legacy title')
-    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Idle')
-    expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('false')
-
-    const before = calls.length
-    click(q(view.container, '[data-action="open-conversation"]'))
-    await flush()
-
-    expect(services.opened).toEqual(['session-work'])
-    expect(services.opens).toEqual([{ seed: { type: 'gantt-work' }, scope: { sessionId: 'session-work' } }])
-    const openedCalls = calls.slice(before).map(call => call.path)
-    expect(openedCalls).toContain(`${WORK}?taskId=task-1`)
-    expect(openedCalls).toContain(FOCUS_SET)
-    expect(calls.filter(call => call.path === `${WORK}?sessionId=s1`).length).toBe(2)
-  })
-
-  it('creates the conversation when the task has none bound', async () => {
-    const { calls } = installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
     const services = fakeServices()
+    delete services.uiWorkspace
     const { view } = renderWorkbench({ services })
     await flush()
-
-    click(tab(view.container, 'chat'))
-    expect(q(view.container, '[data-action="create-conversation"]')).not.toBeNull()
-    expect(q(view.container, '[data-action="open-conversation"]')).toBeNull()
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('')
-    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Idle')
-
-    click(q(view.container, '[data-action="create-conversation"]'))
-    await flush()
-
-    expect(services.created).toEqual([{ workspaceId: 'ws-1' }])
-    expect(services.opened).toEqual(['session-created'])
-    const bind = calls.filter(call => call.path === WORK_SESSION)[0]
-    expect(JSON.parse(bind.options.body)).toEqual({ taskId: 'task-1', sessionId: 'session-created' })
-  })
-
-  it('surfaces a failed conversation action inside the chat panel', async () => {
-    const { calls } = installFetch(defaultRoutes({
-      routes: { [FOCUS_SET]: () => jsonResponse({ ok: false, error: 'focus write failed' }, 500) },
-    }))
-    const { view } = renderWorkbench()
-    await flush()
-
-    click(tab(view.container, 'chat'))
-    click(q(view.container, '[data-action="open-conversation"]'))
-    await flush()
-
-    expect(text(view.container, '.gantt-workbench-error'))
-      .toBe('Could not open the work conversation. focus write failed')
-    expect(calls.filter(call => call.path === `${WORK}?sessionId=s1`).length).toBe(1)
-    expect(q(view.container, '[data-action="open-conversation"]')).not.toBeNull()
+    click(tab(view.container, 'team'))
+    expect(qa(view.container, 'li[data-agent-id]')).toHaveLength(3)
+    expect(qa(view.container, 'button[data-action="open-agent"]')).toHaveLength(0)
   })
 })
 
 describe('empty, unavailable, and error states', () => {
-  it('shows the focus-none header and the empty panels', async () => {
+  it('shows the focus-none header and the empty task/skills/team panels', async () => {
     const { calls } = installFetch(defaultRoutes({
       work: WORK_FOCUS_NONE,
       routes: {
@@ -377,14 +592,9 @@ describe('empty, unavailable, and error states', () => {
 
     expect(text(view.container, '.gantt-workbench-none')).toBe('No focused task')
     expect(q(view.container, '.gantt-workbench-chip')).toBeNull()
-    expect(text(view.container, 'section[data-panel="trajectory"]')).toBe('No trajectory yet.')
+    expect(text(view.container, 'section[data-panel="task"]')).toBe('No focused task')
     expect(calls.some(call => call.path.startsWith(TRAJECTORY))).toBe(false)
     expect(calls).toContainEqual(expect.objectContaining({ path: `${TEAM}?sessionId=s1` }))
-
-    click(tab(view.container, 'chat'))
-    expect(text(view.container, 'section[data-panel="chat"]')).toBe('No work conversation yet.')
-    expect(q(view.container, '[data-action="open-conversation"]')).toBeNull()
-    expect(q(view.container, '[data-action="create-conversation"]')).toBeNull()
 
     click(tab(view.container, 'skills'))
     expect(text(view.container, 'section[data-panel="skills"]')).toBe('No skills available.')
@@ -423,13 +633,11 @@ describe('empty, unavailable, and error states', () => {
 
   it('reports trajectory, skills, and team fetch failures', async () => {
     installFetch(defaultRoutes({
-      routes: {
-        [TRAJECTORY]: () => jsonResponse({ ok: false, error: 'no trajectory' }, 500),
-      },
+      routes: { [TRAJECTORY]: () => jsonResponse({ ok: false, error: 'no trajectory' }, 500) },
     }))
     const first = renderWorkbench()
     await flush()
-    expect(text(first.view.container, 'section[data-panel="trajectory"]')).toBe('Could not load the trajectory.')
+    expect(text(first.view.container, '[data-block="trajectory"] .gantt-workbench-error')).toBe('Could not load the trajectory.')
     first.view.unmount()
 
     installFetch(defaultRoutes({
@@ -449,21 +657,10 @@ describe('empty, unavailable, and error states', () => {
     click(tab(third.view.container, 'team'))
     expect(text(third.view.container, 'section[data-panel="team"]')).toBe('Could not load the agent team.')
   })
-
-  it('hides the agent open action when the host has no workspace service', async () => {
-    installFetch(defaultRoutes())
-    const services = fakeServices()
-    delete services.uiWorkspace
-    const { view } = renderWorkbench({ services })
-    await flush()
-    click(tab(view.container, 'team'))
-    expect(qa(view.container, 'li[data-agent-id]')).toHaveLength(3)
-    expect(qa(view.container, 'button[data-action="open-agent"]')).toHaveLength(0)
-  })
 })
 
 describe('refetching', () => {
-  it('refetches on the refresh button and on window focus', async () => {
+  it('refetches on the refresh button, on window focus, and on a focus revision', async () => {
     const { calls } = installFetch(defaultRoutes())
     const { view } = renderWorkbench()
     await flush()
@@ -482,6 +679,10 @@ describe('refetching', () => {
     })
     await flush()
     expect(workCalls()).toBe(3)
+
+    act(() => noteWorkFocus())
+    await flush()
+    expect(workCalls()).toBe(4)
   })
 
   it('pauses while hidden and refetches when it becomes visible', async () => {
@@ -576,32 +777,37 @@ describe('stale async results', () => {
     expect(view.container.isConnected).toBe(false)
   })
 
-  it('ignores a failed conversation action that rejects after unmount', async () => {
+  it('ignores a successful execute that finishes after unmount', async () => {
     const pending = deferred()
-    installFetch({ ...defaultRoutes(), [FOCUS_SET]: () => pending.promise })
-    const services = fakeServices()
-    const { view } = renderWorkbench({ services })
+    stubOpen(fakeWindow())
+    const { calls } = installFetch({
+      ...defaultRoutes({ work: WORK_WITHOUT_SESSION }),
+      [WORK_SESSION]: () => pending.promise,
+    })
+    const { view } = renderWorkbench()
     await flush()
-    click(tab(view.container, 'chat'))
-    click(q(view.container, '[data-action="open-conversation"]'))
+    click(q(view.container, '[data-action="execute"]'))
     view.unmount()
-    pending.reject(new Error('late focus failure'))
+    pending.resolve(jsonResponse({ ok: true, taskId: 'task-1', sessionId: 'session-created' }))
     await flush()
-    expect(services.opened).toEqual([])
+    expect(handoff()).toMatchObject({ sessionId: 'session-created' })
+    expect(calls.filter(call => call.path.startsWith(`${WORK}?sessionId`))).toHaveLength(1)
   })
 
-  it('ignores a conversation action that finishes after unmount', async () => {
+  it('ignores an execute that finishes after unmount', async () => {
     const pending = deferred()
-    installFetch({ ...defaultRoutes(), [FOCUS_SET]: () => pending.promise })
-    const services = fakeServices()
-    const { view } = renderWorkbench({ services })
+    stubOpen(fakeWindow())
+    installFetch({
+      ...defaultRoutes({ work: WORK_WITHOUT_SESSION }),
+      [WORK_SESSION]: () => pending.promise,
+    })
+    const { view } = renderWorkbench()
     await flush()
-    click(tab(view.container, 'chat'))
-    click(q(view.container, '[data-action="open-conversation"]'))
+    click(q(view.container, '[data-action="execute"]'))
     view.unmount()
-    pending.resolve(jsonResponse({ ok: true, taskId: 'task-1' }))
+    pending.reject(new Error('late bind failure'))
     await flush()
-    expect(services.opened).toEqual(['session-work'])
+    expect(handoff()).toBeNull()
   })
 })
 
@@ -610,12 +816,11 @@ describe('host context', () => {
     installFetch(defaultRoutes())
     const { view } = renderWorkbench({ ctx: null })
     await flush()
-    expect(text(view.container, 'nav[role="tablist"] button[data-work-tab="trajectory"]'))
-      .toBe('workbench.tab.trajectory')
+    expect(text(view.container, 'nav[role="tablist"] button[data-work-tab="task"]'))
+      .toBe('workbench.tab.task')
     expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
-    click(tab(view.container, 'chat'))
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('')
-    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('workbench.chat.idle')
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('work')
+    expect(text(view.container, '.gantt-workbench-chat-state')).toBe('workbench.task.state.idle')
     expect(q(view.container, 'button[data-action="open-agent"]')).toBeNull()
   })
 
@@ -628,8 +833,7 @@ describe('host context', () => {
       ctx: buildCtx({ withoutGet: true, sessions: services.sessions }),
     })
     await flush()
-    click(tab(view.container, 'chat'))
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('')
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('work')
     expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Idle')
     click(tab(view.container, 'team'))
     expect(qa(view.container, 'button[data-action="open-agent"]')).toHaveLength(0)
@@ -651,18 +855,16 @@ describe('robustness', () => {
     const { view } = renderWorkbench()
     await flush()
     expect(calls).toContainEqual(expect.objectContaining({ path: `${TEAM}?sessionId=` }))
-    click(tab(view.container, 'chat'))
     expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('')
     expect(q(view.container, '[data-action="open-conversation"]')).not.toBeNull()
   })
 
-  it('renders an empty identity when the session row is missing', async () => {
+  it('renders the short id when the session row is missing', async () => {
     const services = fakeServices({ sessionsList: { ids: [], byId: {} } })
     installFetch(defaultRoutes())
     const { view } = renderWorkbench({ services })
     await flush()
-    click(tab(view.container, 'chat'))
-    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('')
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('work')
     expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Idle')
     expect(text(view.container, '.gantt-workbench-chat-updated')).toBe('Last active ')
   })
@@ -690,7 +892,7 @@ describe('robustness', () => {
     }))
     const first = renderWorkbench()
     await flush()
-    expect(text(first.view.container, 'section[data-panel="trajectory"]')).toBe('No trajectory yet.')
+    expect(text(first.view.container, '[data-block="trajectory"] .gantt-workbench-empty')).toBe('No trajectory yet.')
     first.view.unmount()
 
     installFetch(defaultRoutes({

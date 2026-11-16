@@ -144,6 +144,72 @@ describe('work-mode toggle', () => {
   })
 })
 
+describe('work-mode sidebar interaction', () => {
+  /** Sidebar-aware host services: clicking a task focuses it instead of navigating. */
+  function sidebarServices() {
+    const opened = []
+    const created = []
+    const sidebar = fakeSidebarService()
+    const services = {
+      sessions: { create: async (options) => { created.push(options); return 'session-created' } },
+      uiWorkspace: { openSession: (sessionId) => { opened.push(sessionId) } },
+      workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: WORK_CWD }] }) } },
+      betterSidebar: { ...sidebar, getSnapshot: () => ({ sessionId: 'session-main' }) },
+    }
+    return { services, opened, created, sidebar }
+  }
+
+  it('focuses the task and reveals the workbench instead of navigating away', async () => {
+    const { services, created, opened, sidebar } = sidebarServices()
+    const { view, calls } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: { [FOCUS]: () => jsonResponse({ ok: true, taskId: 'c1', sessionId: 'session-main' }) },
+    })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+
+    expect(dialog(view.container)).toBeNull()
+    expect(row(view.container, '1.1 Write spec').getAttribute('data-selected')).toBe('true')
+    expect(created).toEqual([])
+    expect(opened).toEqual([])
+    expect(sidebar.opens).toEqual([{ seed: { type: 'gantt-work' }, scope: { sessionId: 'session-main' } }])
+    const focusCall = calls.find(call => call.path === FOCUS)
+    expect(requestBody(focusCall)).toEqual({ sessionId: 'session-main', taskId: 'c1' })
+  })
+
+  it('reports a failed focus write and leaves the sidebar alone', async () => {
+    const { services, sidebar } = sidebarServices()
+    const { view } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: { [FOCUS]: () => jsonResponse({ ok: false, error: 'focus write failed' }, 500) },
+    })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+
+    expect(sidebar.opens).toEqual([])
+    expect(text(view.container, '.gantt-toast')).toBe('Could not open the work conversation. focus write failed')
+    expect(toast(view.container).getAttribute('data-error')).toBe('true')
+  })
+
+  it('treats a task-bar click as the same focus-only interaction', async () => {
+    const { services, sidebar } = sidebarServices()
+    const { view } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
+    })
+
+    click(q(row(view.container, '1.1 Write spec'), '.gantt-bar'))
+    await flush()
+    expect(sidebar.opens).toHaveLength(1)
+    expect(dialog(view.container)).toBeNull()
+  })
+})
+
 describe('work-mode activation', () => {
   it('creates, binds, and opens the dedicated conversation on a row click', async () => {
     const { services, created, opened, sidebar } = workServices('session-created')

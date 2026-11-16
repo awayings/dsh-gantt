@@ -1,7 +1,19 @@
 // Work-mode navigation: service resolution, workspace lookup, and the
 // reuse-or-create flow that binds a task to its dedicated conversation.
 import { describe, expect, it } from 'vitest'
-import { canOpenWorkTask, loadWork, openWorkTask, openWorkbenchTab, workServices, workspaceIdFor, WORK_TAB_ID } from '../../src/client/work-nav.js'
+import {
+  activeSessionId,
+  canOpenWorkTask,
+  loadWork,
+  noteWorkFocus,
+  openWorkTask,
+  openWorkbenchTab,
+  subscribeWorkFocus,
+  workFocusRevisionSnapshot,
+  workServices,
+  workspaceIdFor,
+  WORK_TAB_ID,
+} from '../../src/client/work-nav.js'
 import { callsTo, installFetch, jsonResponse, requestBody } from './harness.js'
 
 function fakeCtx(services = {}) {
@@ -63,6 +75,34 @@ describe('workServices', () => {
       sessions: { create: async () => 's1' },
       uiWorkspace: { openSession: () => {} },
     }))).toBe(true)
+  })
+})
+
+describe('activeSessionId', () => {
+  it('reads the session on screen from the sidebar snapshot', () => {
+    const betterSidebar = { getSnapshot: () => ({ sessionId: 'session-main' }) }
+    expect(activeSessionId(fakeCtx({ betterSidebar }))).toBe('session-main')
+  })
+
+  it('returns null without a usable sidebar snapshot', () => {
+    expect(activeSessionId(undefined)).toBeNull()
+    expect(activeSessionId(fakeCtx({ betterSidebar: { getSnapshot: () => ({}) } }))).toBeNull()
+    expect(activeSessionId(fakeCtx({ betterSidebar: { getSnapshot: () => ({ sessionId: '' }) } }))).toBeNull()
+    expect(activeSessionId(fakeCtx({ betterSidebar: {} }))).toBeNull()
+  })
+})
+
+describe('work focus revisions', () => {
+  it('notifies subscribers once per focus change', () => {
+    const seen = []
+    const dispose = subscribeWorkFocus(() => seen.push(workFocusRevisionSnapshot()))
+    const before = workFocusRevisionSnapshot()
+    noteWorkFocus()
+    expect(seen).toEqual([before + 1])
+    dispose()
+    noteWorkFocus()
+    expect(seen).toHaveLength(1)
+    expect(workFocusRevisionSnapshot()).toBe(before + 2)
   })
 })
 
@@ -159,6 +199,38 @@ describe('openWorkTask', () => {
     expect(sessions.created).toEqual([{ workspaceId: 'ws-1' }])
     expect(opened).toEqual(['session-created'])
     expect(requestBody(callsTo(calls, 'api/gantt/work/session')[0])).toEqual({ taskId: 'task-1', sessionId: 'session-created' })
+  })
+
+  it('binds without navigating when the caller opens the window itself', async () => {
+    const sessions = fakeSessions()
+    const opened = []
+    const seeds = []
+    const ctx = fakeCtx({
+      sessions,
+      uiWorkspace: fakeWorkspaceService(opened),
+      betterSidebar: { openTab: seed => seeds.push(seed) },
+    })
+    installFetch({
+      'api/gantt/work': () => jsonResponse({ ok: true, cwd: '/work', task: null, sessionId: 'session-bound' }),
+      'api/gantt/focus/set': () => jsonResponse({ ok: true }),
+    })
+    await expect(openWorkTask(ctx, task, { open: false }))
+      .resolves.toEqual({ sessionId: 'session-bound', created: false })
+    expect(opened).toEqual([])
+    expect(seeds).toEqual([])
+    expect(sessions.created).toEqual([])
+  })
+
+  it('creates and binds without a workspace navigation service', async () => {
+    const sessions = fakeSessions('session-created')
+    const ctx = fakeCtx({ sessions, workspaces: workspacesWith('/work') })
+    installFetch({
+      'api/gantt/work': () => jsonResponse({ ok: true, cwd: '/work', task: null, sessionId: null }),
+      'api/gantt/work/session': () => jsonResponse({ ok: true }),
+    })
+    await expect(openWorkTask(ctx, task, { open: false }))
+      .resolves.toEqual({ sessionId: 'session-created', created: true })
+    expect(sessions.created).toEqual([{ workspaceId: 'ws-1' }])
   })
 
   it('creates the conversation from the directory when no workspace is registered', async () => {

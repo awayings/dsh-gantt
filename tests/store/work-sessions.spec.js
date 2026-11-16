@@ -60,6 +60,16 @@ describe('work sessions', () => {
     expect(store.workSessionOf(task.id)).toBeNull()
   })
 
+  it('exposes the bound conversation on tree rows', () => {
+    const parent = store.create({ title: 'Parent' })
+    const child = store.create({ title: 'Child', parentId: parent.id })
+    store.bindWorkSession(child.id, 'session-a')
+    const tree = store.snapshot().tasks
+    expect(tree[0].workSessionId).toBeNull()
+    expect(tree[0].children[0].workSessionId).toBe('session-a')
+    expect(store.getRow(child.id).workSessionId).toBe('session-a')
+  })
+
   it('joins the caller transaction through upsertWorkSession', () => {
     const task = store.create({ title: 'Task' })
     expect(() => store.transaction(() => {

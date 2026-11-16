@@ -14,7 +14,8 @@ import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
 import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, taskPath, visibleRows } from '../view.js'
-import { canOpenWorkTask, openWorkTask } from '../work-nav.js'
+import { activeSessionId, canOpenWorkTask, noteWorkFocus, openWorkTask, openWorkbenchTab, workServices } from '../work-nav.js'
+import { taskActivity, useSessionStatuses } from '../session-status.js'
 import { h } from '../dom.js'
 
 const WORK_MODE_KEY = 'gantt.workMode'
@@ -65,6 +66,7 @@ export function GanttPage({ ctx }) {
   const [dialog, setDialog] = useState(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [toast, setToast] = useState(null)
+  const statuses = useSessionStatuses(ctx)
   const initialized = useRef(false)
   const pageRef = useRef(null)
   useEffect(() => {
@@ -119,11 +121,20 @@ export function GanttPage({ ctx }) {
     () => new Set(allTasks.filter(task => task.status === 'done').map(task => task.id)),
     [allTasks],
   )
+  const activityByTask = useMemo(() => {
+    const activities = new Map()
+    for (const task of allTasks) {
+      const activity = taskActivity(statuses, task)
+      if (activity !== null) activities.set(task.id, activity)
+    }
+    return activities
+  }, [allTasks, statuses])
   const filterIds = useMemo(() => {
+    if (filter === 'active') return new Set(activityByTask.keys())
     if (filter === 'todo') return focusIds
     if (filter === 'done') return doneIds
     return null
-  }, [filter, focusIds, doneIds])
+  }, [filter, focusIds, doneIds, activityByTask])
   const filterCount = filterIds === null ? 0 : [...filterIds].filter(id => byId.has(id)).length
   const filteredTasks = useMemo(
     () => (filterIds === null ? tasks : filterTree(tasks, filterIds)),
@@ -246,9 +257,27 @@ export function GanttPage({ ctx }) {
   }, [workMode])
   const openWork = useCallback(async (task) => {
     setSelectedId(task.id)
+    const services = workServices(ctx)
+    const sessionId = activeSessionId(ctx)
+    // Without a right sidebar there is nowhere to show the task, so keep the
+    // old direct-open behavior as the fallback.
+    if (services.betterSidebar === null || sessionId === null) {
+      try {
+        const { created } = await openWorkTask(ctx, task)
+        setToast({ text: created ? t('work.notice.created') : t('work.notice.opened'), kind: 'ok' })
+      } catch (failure) {
+        const message = failure instanceof Error ? failure.message : String(failure)
+        setToast({ text: `${t('work.error')} ${message}`, kind: 'error' })
+      }
+      return
+    }
     try {
-      const { created } = await openWorkTask(ctx, task)
-      setToast({ text: created ? t('work.notice.created') : t('work.notice.opened'), kind: 'ok' })
+      await requestJson('api/gantt/focus/set', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, taskId: task.id }),
+      })
+      noteWorkFocus()
+      openWorkbenchTab(services.betterSidebar, sessionId)
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure)
       setToast({ text: `${t('work.error')} ${message}`, kind: 'error' })
@@ -376,6 +405,7 @@ export function GanttPage({ ctx }) {
             collapsed: collapsed.has(task.id),
             t,
             work: workOn,
+            activity: activityByTask.get(task.id) ?? null,
             onSelect: workOn ? openWork : openEdit,
             onEdit: openEdit,
             onToggle: toggleCollapse,
@@ -512,7 +542,7 @@ export function GanttPage({ ctx }) {
       ? h('section', { className: 'gantt-filter' },
         h('span', { className: 'gantt-filter-label' }, t('filter.label')),
         h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
-          [['all', 'filter.all'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
+          [['all', 'filter.all'], ['active', 'filter.active'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
             key: value,
             className: 'gantt-seg-btn',
             type: 'button',

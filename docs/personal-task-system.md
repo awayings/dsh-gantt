@@ -500,16 +500,24 @@ results straight into the tree.
   mapping below.
 - **Work mode.** A task owns one dedicated main conversation (a real DSH
   session, never a subagent) recorded in the `work_sessions` table. The Gantt
-  page's work-mode toggle turns a row click into "open that task's work
-  conversation": `GET api/gantt/work` reports the task, its bound conversation,
-  and the work directory (`DSH_GANTT_WORK_CWD`, default `/data/home/ws-plugin`),
+  page's work-mode toggle turns a row click into a workbench interaction: the
+  row focuses that task in the conversation that owns the sidebar and reveals
+  the right-rail **Workbench** tab, which shows the bound conversation and the
+  task trajectory without leaving the Gantt page. A task without a conversation
+  offers **Execute**, which creates the conversation and opens it in a new
+  browser window (falling back to the current window when the browser blocks the
+  popup); an existing conversation can be opened in place or in a new window.
+  The **Active** view filter keeps tasks whose bound conversation is running or
+  waiting for a user choice, and waiting tasks carry a warning badge. `GET
+  api/gantt/work` reports the task, its bound conversation, and the work
+  directory (`DSH_GANTT_WORK_CWD`, default `/data/home/ws-plugin`);
   `POST api/gantt/work/session` binds a newly created session and focuses it in
   one transaction. Because the mapping is durable, reopening a task after a host
   restart reuses the same conversation instead of creating another one. The
-  conversation's right-rail **Workbench** tab reads the task trajectory, the
-  conversation identity, the host skills (`GET api/gantt/work/skills`), and the
-  conversation's agent team (`GET api/gantt/work/team?sessionId=`); both service
-  reads degrade to `available: false` when the host has no such service.
+  conversation's right-rail **Workbench** tab also reads the host skills (`GET
+  api/gantt/work/skills`) and the conversation's agent team (`GET
+  api/gantt/work/team?sessionId=`); both service reads degrade to `available:
+  false` when the host has no such service.
 - **Context for the model.** `gantt_context` resolves the conversation id from
   the tool execution context and renders the chain from the track root to the
   focused task (kind, status, `doneWhen` per row), the task's dotted id,

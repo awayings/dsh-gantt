@@ -188,6 +188,37 @@ export const CSS_GRID = `
   .gantt-status[data-interactive="true"]:hover { background: color-mix(in srgb, var(--st, var(--gantt-muted)) 20%, transparent); }
   .gantt-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
   .gantt-status-label { overflow: hidden; text-overflow: ellipsis; }
+  .gantt-row-activity {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    line-height: 1;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+  .gantt-row-activity[data-state="waiting"] {
+    color: #9a5b00;
+    border-color: color-mix(in srgb, #d98300 45%, transparent);
+    background: color-mix(in srgb, #d98300 16%, transparent);
+  }
+  .gantt-row-activity[data-state="running"] {
+    color: var(--gantt-accent);
+    border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--gantt-accent) 14%, transparent);
+    animation: gantt-activity-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes gantt-activity-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gantt-row-activity[data-state="running"] { animation: none; }
+  }
   .gantt-add-child {
     flex: 0 0 20px;
     width: 20px; height: 20px;

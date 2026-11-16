@@ -95,7 +95,13 @@ export class GanttStore {
   /** @returns {TaskRow[]} */
   listRows() {
     const rows = /** @type {any[]} */ (this.db.prepare(TASK_SELECT).all())
-    return rows.map(row => ({ ...row, links: parseLinksJson(row.links) }))
+    const bindings = /** @type {any[]} */ (this.db.prepare('SELECT task_id AS taskId, session_id AS sessionId FROM work_sessions').all())
+    const workSessions = new Map(bindings.map(row => [row.taskId, row.sessionId]))
+    return rows.map(row => ({
+      ...row,
+      links: parseLinksJson(row.links),
+      workSessionId: workSessions.get(row.id) ?? null,
+    }))
   }
 
   /** @returns {number} */

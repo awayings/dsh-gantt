@@ -11,17 +11,19 @@ sidebar:
   Decompose a node into subtasks, schedule a node into a day plan, and export
   the whole tree as markdown model context. The **daily 该动 brief** above the
   tree shows each track's frontier/next and today's windows with the task picked
-  for each role (core / rotation / definition); **全部 / 待做 / 已完成**
-  perspectives prune the tree to the paths that matter. A **甘特** tab in the
+  for each role (core / rotation / definition); **全部 / 进行中 / 待做 /
+  已完成** perspectives prune the tree to the paths that matter (进行中 keeps
+  tasks whose work conversation is running or waiting for a choice). A **甘特** tab in the
   native conversation sidebar focuses one task per conversation, and the host
   assistant tools let that conversation read the focused chain and write
   decompositions straight into the tree. Every tool write records the DSH
   session and turn in a task trajectory that the tab, the tools, and
   `GET /api/gantt/trajectory` can read back. **Work mode** turns a row click
-  into "open this task's dedicated main conversation" (one conversation per
-  task, created in the work workspace and reused afterwards); a **工作台** tab
-  in the same right rail shows that task's trajectory, work conversation,
-  available skills, and subagent team, and each round is required to close with
+  into a focused workbench: the **工作台** tab in the right rail opens with the
+  task's work conversation and trajectory, and a task without a conversation
+  shows **执行**, which creates it in the work workspace and opens it in a new
+  browser window (one conversation per task, reused afterwards); waiting tasks
+  carry a warning badge. Each round is required to close with
   `gantt_track` / `gantt_update_task` / `gantt_decompose` /
   `gantt_create_task` so the trajectory stays exact.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with

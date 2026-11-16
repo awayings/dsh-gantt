@@ -24,6 +24,7 @@ function task(fields) {
     inspiration: '',
     links: [],
     source: 'manual',
+    workSessionId: null,
     children: [],
     createdAt: '2026-11-01T00:00:00.000Z',
     updatedAt: '2026-11-01T00:00:00.000Z',

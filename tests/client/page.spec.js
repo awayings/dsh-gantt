@@ -31,6 +31,25 @@ const SEED = 'api/gantt/seed'
 
 afterEach(unmountAll)
 
+/** Fake uiSession service exposing one mutable activity snapshot. */
+function fakeUiSession(entries = {}) {
+  let snapshot = new Map(Object.entries(entries))
+  const listeners = new Set()
+  return {
+    sessionStatus: {
+      getSnapshot: () => snapshot,
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+    },
+    update(next) {
+      snapshot = new Map(Object.entries(next))
+      for (const listener of [...listeners]) listener()
+    },
+  }
+}
+
 /** Mount the registered main page against a stubbed fetch table and settle it. */
 async function renderPage(routes) {
   const fetchState = installFetch({
@@ -564,12 +583,12 @@ describe('task filter', () => {
     return q(view.container, `.gantt-filter [data-filter="${value}"]`)
   }
 
-  it('shows the three perspectives and prunes to focus paths in To do', async () => {
+  it('shows the perspectives and prunes to focus paths in To do', async () => {
     const { view } = await renderFiltered()
 
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.getAttribute('data-filter')))
-      .toEqual(['all', 'todo', 'done'])
+      .toEqual(['all', 'active', 'todo', 'done'])
     expect(filterButton(view, 'all').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
 
@@ -587,6 +606,47 @@ describe('task filter', () => {
     expect(text(view.container, '.gantt-filter-count')).toBe('3 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('6 tasks')
     expect(filterButton(view, 'todo').getAttribute('data-active')).toBe('true')
+  })
+
+  it('filters to tasks whose work conversation is running or waiting', async () => {
+    const tasks = makeFilterTree()
+    tasks[0].children[0].workSessionId = 'session-run'
+    tasks[1].children[0].workSessionId = 'session-wait'
+    tasks[2].children[0].workSessionId = 'session-idle'
+    const uiSession = fakeUiSession({
+      'session-run': { running: true },
+      'session-wait': { running: true, pendingInteraction: 'approval' },
+      'session-idle': { running: false },
+    })
+    const { view } = await renderFiltered(filterTreePayload({ tasks }), { services: { uiSession } })
+
+    expect(q(view.container, '.gantt-row[data-task-id="n1"] .gantt-row-activity').getAttribute('data-state')).toBe('running')
+    expect(q(view.container, '.gantt-row[data-task-id="n31"] .gantt-row-activity').getAttribute('data-state')).toBe('waiting')
+    expect(q(view.container, '.gantt-row[data-task-id="n31"] .gantt-row-activity').getAttribute('title'))
+      .toBe('The work conversation is waiting for your choice')
+
+    click(filterButton(view, 'active'))
+    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+      '1 投资系统',
+      '1.1 数据底座',
+      '2 生活系统',
+      '2.1 生活实验',
+    ])
+    expect(row(view.container, '3 元能力')).toBeNull()
+    expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
+
+    act(() => uiSession.update({ 'session-run': { pendingInteraction: 'question' } }))
+    expect(q(view.container, '.gantt-row[data-task-id="n1"] .gantt-row-activity').getAttribute('data-state')).toBe('waiting')
+  })
+
+  it('shows a mode-specific hint when no conversation is active', async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'active'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title'))
+      .toBe('No work conversation is running or waiting.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All to see the whole tree.')
   })
 
   it('keeps only done nodes and their ancestors in Done', async () => {
@@ -658,7 +718,7 @@ describe('task filter', () => {
 
     const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.textContent))
-      .toEqual(['全部', '待做', '已完成'])
+      .toEqual(['全部', '进行中', '待做', '已完成'])
     click(filterButton(view, 'todo'))
     expect(text(view.container, '.gantt-filter-count')).toBe('3 条路径')
     expect(text(view.container, '.gantt-corner-sub')).toBe('6 个任务')

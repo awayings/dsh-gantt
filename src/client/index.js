@@ -6,6 +6,7 @@ import { GanttPage } from './pages/gantt.js'
 import { GanttPanel } from './pages/panel.js'
 import { TodayPage } from './pages/today.js'
 import { GanttWorkbench } from './pages/workbench.js'
+import { resumeHandedSession } from './session-window.js'
 
 // The browser half of the plugin: registers the two sidebar entries, the two
 // keyed main pages, and (when dsh-better-sidebar is installed) the compact tree
@@ -18,6 +19,9 @@ export const plugin = {
   apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTS), 'gantt: locale dictionaries')
     const t = ctx.locale.bind(NS)
+    // A window opened by the workbench's execute button carries its target
+    // conversation in a short-lived handoff; select it once the catalog is ready.
+    resumeHandedSession(ctx)
     // Contribute the compact tree and the workbench as tabs of the native
     // conversation sidebar. A host without dsh-better-sidebar simply never
     // resolves this injection.

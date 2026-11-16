@@ -169,7 +169,7 @@ describe('better-sidebar registration', () => {
 
     expect(q(view.container, '.gantt-workbench')).not.toBeNull()
     expect(text(view.container, '.gantt-workbench-none')).toBe('No focused task')
-    expect(qa(view.container, '.gantt-workbench-tab')).toHaveLength(4)
+    expect(qa(view.container, '.gantt-workbench-tab')).toHaveLength(3)
   })
 
   it('localizes the tab title and description', () => {

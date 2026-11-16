@@ -9,6 +9,35 @@ import { requestJson } from './hooks.js'
 /** The better-sidebar tab that hosts the workbench. */
 export const WORK_TAB_ID = 'gantt-work'
 
+let workFocusRevision = 0
+/** @type {Set<() => void>} */
+const workFocusListeners = new Set()
+
+/**
+ * Tell mounted workbenches that the conversation's focused task changed, so an
+ * already-open tab refetches even when opening it does not remount anything.
+ * @returns {void}
+ */
+export function noteWorkFocus() {
+  workFocusRevision += 1
+  for (const listener of [...workFocusListeners]) listener()
+}
+
+/**
+ * Subscribe to focus revisions for `useSyncExternalStore`.
+ * @param {() => void} listener
+ * @returns {() => void}
+ */
+export function subscribeWorkFocus(listener) {
+  workFocusListeners.add(listener)
+  return () => workFocusListeners.delete(listener)
+}
+
+/** @returns {number} */
+export function workFocusRevisionSnapshot() {
+  return workFocusRevision
+}
+
 /**
  * Resolve the optional client services work mode needs. Absent services stay
  * null so callers can test availability without catching.
@@ -35,6 +64,17 @@ export function workServices(ctx) {
 export function canOpenWorkTask(ctx) {
   const services = workServices(ctx)
   return services.sessions !== null && services.uiWorkspace !== null
+}
+
+/**
+ * The Session on screen, whose right sidebar hosts the workbench tab.
+ * @param {any} ctx
+ * @returns {string | null}
+ */
+export function activeSessionId(ctx) {
+  const snapshot = workServices(ctx).betterSidebar?.getSnapshot?.()
+  const sessionId = snapshot?.sessionId
+  return typeof sessionId === 'string' && sessionId !== '' ? sessionId : null
 }
 
 /**
@@ -84,11 +124,14 @@ export function openWorkbenchTab(betterSidebar, sessionId) {
  * refresh its focus, or create a session in the work workspace and bind it.
  * @param {any} ctx
  * @param {{ id: string }} task
+ * @param {{ open?: boolean }} [options] `open: false` only resolves and binds
+ *   the conversation, leaving navigation to the caller (the new-window path).
  * @returns {Promise<{ sessionId: string, created: boolean }>}
  */
-export async function openWorkTask(ctx, task) {
+export async function openWorkTask(ctx, task, options = {}) {
+  const open = options.open !== false
   const services = workServices(ctx)
-  if (services.sessions === null || services.uiWorkspace === null) {
+  if (services.sessions === null || (open && services.uiWorkspace === null)) {
     throw new Error('work mode needs the session and workspace services')
   }
   const work = await loadWork({ taskId: task.id })
@@ -98,8 +141,10 @@ export async function openWorkTask(ctx, task) {
       method: 'POST',
       body: JSON.stringify({ sessionId: bound, taskId: task.id }),
     })
-    services.uiWorkspace.openSession(bound)
-    openWorkbenchTab(services.betterSidebar, bound)
+    if (open) {
+      services.uiWorkspace.openSession(bound)
+      openWorkbenchTab(services.betterSidebar, bound)
+    }
     return { sessionId: bound, created: false }
   }
   const cwd = typeof work.cwd === 'string' ? work.cwd : ''
@@ -110,7 +155,9 @@ export async function openWorkTask(ctx, task) {
     method: 'POST',
     body: JSON.stringify({ taskId: task.id, sessionId }),
   })
-  services.uiWorkspace.openSession(sessionId)
-  openWorkbenchTab(services.betterSidebar, sessionId)
+  if (open) {
+    services.uiWorkspace.openSession(sessionId)
+    openWorkbenchTab(services.betterSidebar, sessionId)
+  }
   return { sessionId, created: true }
 }

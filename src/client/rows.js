@@ -79,6 +79,7 @@ export function GanttRow({
   onSchedule,
   work = false,
   onEdit,
+  activity = null,
 }) {
   const hasChildren = task.hasChildren
   const number = rowNumber(task)
@@ -90,6 +91,7 @@ export function GanttRow({
     'data-kind': task.kind,
     'data-task-id': task.id,
     'data-work': work ? 'true' : undefined,
+    'data-activity': activity ?? undefined,
     onClick: () => onSelect(task),
     onKeyDown: (event) => {
       if (event.target !== event.currentTarget) return
@@ -118,6 +120,14 @@ export function GanttRow({
         : h('span', { className: 'gantt-chevron gantt-chevron-empty', 'aria-hidden': 'true' }),
       h('span', { className: 'gantt-number', title: task.ref || number }, number),
       h('span', { className: 'gantt-task-title', title: task.title }, task.title),
+      activity === null
+        ? null
+        : h('span', {
+          className: 'gantt-row-activity',
+          'data-state': activity,
+          title: activity === 'waiting' ? t('work.waitingHint') : t('work.runningHint'),
+          'aria-label': activity === 'waiting' ? t('work.waitingHint') : t('work.runningHint'),
+        }, activity === 'waiting' ? '!' : '●'),
       h(StatusPill, {
         status: task.status,
         label: t(`status.${task.status}`),

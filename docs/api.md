@@ -147,6 +147,7 @@ on read.
   "inspiration": "",
   "links": [],
   "source": "tracker",
+  "workSessionId": null,
   "title": "投资系统",
   "description": "主线数据底座还没收口。",
   "status": "in_progress",
@@ -178,6 +179,7 @@ on read.
 | `inspiration` | string | idea-store id; writable |
 | `links` | array | `{ type, ref, label? }`; writable, replaced as a whole |
 | `source` | string | `tracker` \| `manual`; read-only |
+| `workSessionId` | string \| null | the task's dedicated work conversation from `work_sessions`, or `null` |
 | `title` | string | 1–200 characters |
 | `description` | string | may be empty |
 | `status` | string | status vocabulary |
@@ -456,9 +458,18 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
 
 ## Work mode
 
-Work mode turns a task-row click into "open this task's dedicated main
-conversation": one task owns one real DSH session in the work workspace, stored
-durably in `work_sessions` (`task_id` primary key, unique `session_id`,
+Work mode turns a task-row click into a workbench interaction instead of
+navigation: the row focuses that task in the current conversation and reveals
+the right-rail **Workbench** tab, which shows the task's dedicated main
+conversation and its trajectory side by side. A task without a conversation
+shows an **Execute** button that creates the dedicated conversation and opens it
+in a new browser window; an existing conversation can be opened in place or in a
+new window. The **Active** view filter keeps only tasks whose dedicated
+conversation is running or waiting for a user choice, and those waiting rows
+carry a visual warning badge.
+
+One task owns one real DSH session in the work workspace, stored durably in
+`work_sessions` (`task_id` primary key, unique `session_id`,
 `created_at`/`updated_at` stamps). The mapping is separate from the
 per-conversation focus: a conversation keeps its focus, while a task keeps its
 dedicated conversation across host restarts. The work directory is

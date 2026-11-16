@@ -160,13 +160,34 @@ export const CSS_WORKBENCH = `
     white-space: nowrap;
   }
   .gantt-workbench-row-detail { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-  .gantt-workbench-chat { display: flex; flex-direction: column; gap: 6px; }
+  .gantt-workbench-row-session {
+    flex: 0 0 auto;
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--gantt-accent);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  button.gantt-workbench-row-session { cursor: pointer; }
+  button.gantt-workbench-row-session:hover { text-decoration: underline; }
+  .gantt-workbench-task { display: flex; flex-direction: column; gap: 10px; }
+  .gantt-workbench-conversation { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .gantt-workbench-chat-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .gantt-workbench-chat-title { font-size: 11.5px; font-weight: 600; }
   .gantt-workbench-chat-state { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--gantt-line); color: var(--gantt-muted); }
   .gantt-workbench-chat-state[data-running="true"] {
     color: var(--dsw-alias-state-success-primary);
     border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent);
+  }
+  .gantt-workbench-chat-state[data-waiting="true"] {
+    color: #9a5b00;
+    border-color: color-mix(in srgb, #d98300 45%, transparent);
+    background: color-mix(in srgb, #d98300 14%, transparent);
   }
   .gantt-workbench-chat-updated { font-size: 10.5px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
   .gantt-workbench-chat-block {

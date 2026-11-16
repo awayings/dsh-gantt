@@ -8,6 +8,7 @@ import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 import { startServer } from './server.js'
 
 const TASKS = '/api/gantt/tasks'
+const TREE = '/api/gantt/tree'
 const WORK = '/api/gantt/work'
 const WORK_SESSION = '/api/gantt/work/session'
 const FOCUS_SET = '/api/gantt/focus/set'
@@ -78,6 +79,9 @@ describe('work mode over HTTP', () => {
     const bound = await post(server.origin, WORK_SESSION, { taskId: task.id, sessionId: 'session-e2e' })
     expect(bound.status).toBe(200)
     expect(bound.payload).toEqual({ ok: true, taskId: task.id, sessionId: 'session-e2e' })
+    const tree = await get(server.origin, TREE)
+    expect(tree.payload.tasks[0].id).toBe(task.id)
+    expect(tree.payload.tasks[0].workSessionId).toBe('session-e2e')
 
     await restart()
     const rebuilt = await get(server.origin, `${WORK}?taskId=${task.id}`)

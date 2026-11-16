@@ -51,6 +51,7 @@ export function makeRow(overrides = {}) {
     inspiration: '',
     links: [],
     source: 'manual',
+    workSessionId: null,
     ...overrides,
   }
 }
