@@ -1,8 +1,9 @@
 // Host-side assistant tools. A DSH conversation gets gantt_context,
-// gantt_decompose, and gantt_update_task on the host tools service, so the
-// model can read the chain the user focused in the sidebar panel and write
-// decomposition results straight into the task tree. The tools write through
-// the store (no sandboxed file or shell work), so they need no approval.
+// gantt_decompose, gantt_update_task, gantt_track, and gantt_create_task on the
+// host tools service, so the model can read the chain the user focused in the
+// sidebar panel and write track associations, siblings, and decomposition
+// results straight into the task tree. The tools write through the store (no
+// sandboxed file or shell work), so they need no approval.
 
 import { GanttError } from './errors.js'
 import { flattenTree } from './tree.js'
@@ -18,6 +19,8 @@ export const TOOL_NAMES = {
   context: 'gantt_context',
   decompose: 'gantt_decompose',
   update: 'gantt_update_task',
+  track: 'gantt_track',
+  createTask: 'gantt_create_task',
 }
 
 const MAX_CONTEXT_CHARS = 6000
@@ -49,7 +52,7 @@ function currentTurn(exec) {
  * the model-supplied summary. Undefined when there is no conversation, so the
  * manual routes never fabricate a session.
  * @param {any} exec
- * @param {unknown} summary
+ * @param {unknown} [summary]
  * @returns {{ sessionId: string, turn: number | null, summary: string } | undefined}
  */
 function originOf(exec, summary) {
@@ -143,6 +146,74 @@ function updateTask(store, args, exec) {
   if (task === null) throw new GanttError(`task ${id} was not found`, 404)
   const recorded = origin === undefined ? '' : ' 已自动记录会话与轮次索引。'
   return { ok: true, message: `已更新 ${task.ref === '' ? task.number : task.ref} ${task.title}：状态 ${STATUS_LABELS[task.status] ?? task.status}，进度 ${task.progress}%。${recorded}` }
+}
+
+/**
+ * Resolve the task a round-closing tool acts on: the explicit reference when
+ * given, else the task the calling conversation is focused on.
+ * @param {GanttStore} store
+ * @param {any} args
+ * @param {any} exec
+ * @returns {string}
+ */
+function resolveTarget(store, args, exec) {
+  if (typeof args.id === 'string' && args.id.trim() !== '') return resolveTaskId(store, args.id)
+  const sessionId = sessionIdOf(exec)
+  const focus = sessionId === '' ? null : store.focusOf(sessionId)
+  if (focus === null) throw new GanttError('id is required when this conversation has no focused task')
+  return focus
+}
+
+/**
+ * Rendered label of one task: its external ref, else its point number.
+ * @param {any} node
+ * @returns {string}
+ */
+function taskLabel(node) {
+  return node.ref === '' ? node.number : node.ref
+}
+
+/**
+ * Record the current round against a task without writing the task tree.
+ * @param {GanttStore} store
+ * @param {any} args
+ * @param {any} exec
+ * @returns {{ ok: boolean, message: string }}
+ */
+function track(store, args, exec) {
+  const taskId = resolveTarget(store, args, exec)
+  const summary = typeof args.summary === 'string' ? args.summary.trim() : ''
+  if (summary === '') throw new GanttError('summary is required')
+  const event = store.recordTrack({ taskId, sessionId: sessionIdOf(exec), turn: currentTurn(exec), detail: summary })
+  const task = /** @type {any} */ (store.getNode(event.taskId))
+  const recorded = event.turn === null ? '轮次未知' : `第 ${event.turn} 轮`
+  return { ok: true, message: `已记录本轮与 ${taskLabel(task)} ${task.title} 的关联（${recorded}）。` }
+}
+
+/**
+ * Create a task right after the reference/focused task as its next sibling.
+ * @param {GanttStore} store
+ * @param {any} args
+ * @param {any} exec
+ * @returns {{ ok: boolean, message: string }}
+ */
+function createTask(store, args, exec) {
+  const referenceId = resolveTarget(store, args, exec)
+  const origin = originOf(exec)
+  const created = store.createSibling(referenceId, {
+    title: args.title,
+    doneWhen: args.doneWhen,
+    description: args.description,
+    status: args.status,
+    startDate: args.startDate,
+    endDate: args.endDate,
+  }, origin)
+  const reference = /** @type {any} */ (store.getNode(referenceId))
+  const recorded = origin === undefined ? '' : '\n已自动记录会话与轮次索引。'
+  return {
+    ok: true,
+    message: `已在 ${taskLabel(reference)} ${reference.title} 之后创建同级任务 ${taskLabel(created)} ${created.title}。${recorded}`,
+  }
 }
 
 /**
@@ -241,6 +312,61 @@ export function toolDefinitions(store) {
       },
       async execute(args, exec) {
         return updateTask(store, args, exec)
+      },
+    },
+    {
+      name: TOOL_NAMES.track,
+      description: '记录本轮到甘特图任务的轨迹关联：本轮没有任务树写入时用它收尾。不传 id 时默认使用本会话的聚焦任务；summary 写清本轮做了什么。写入会自动记录本会话 id 与轮次索引。',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: '任务：内部 id、点号 id 或编号（如 1.1.1）；省略时使用本会话的聚焦任务。' },
+          summary: { type: 'string', description: '本轮做了什么（写入任务轨迹）。' },
+        },
+        required: ['summary'],
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { ok: { type: 'boolean' }, message: { type: 'string' } },
+          required: ['ok', 'message'],
+        },
+        render: (_args, value) => [{ type: 'text', text: value.message }],
+      },
+      async execute(args, exec) {
+        return track(store, args, exec)
+      },
+    },
+    {
+      name: TOOL_NAMES.createTask,
+      description: '在当前聚焦任务之后创建一个同级任务并写入任务树。不传 id 时默认使用本会话的聚焦任务；至少给出 title，建议同时给出可验证的 doneWhen。写入会自动记录本会话 id 与轮次索引。',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: '参照任务：内部 id、点号 id 或编号（如 1.1.1）；省略时使用本会话的聚焦任务。' },
+          title: { type: 'string', description: '新同级任务的标题。' },
+          doneWhen: { type: 'string', description: '可选，可验证的完成标准：做完了吗？怎么证明？' },
+          description: { type: 'string', description: '可选，说明或备注。' },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'], description: '可选，默认 todo。' },
+          startDate: { type: 'string', description: '可选，YYYY-MM-DD。' },
+          endDate: { type: 'string', description: '可选，YYYY-MM-DD。' },
+        },
+        required: ['title'],
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { ok: { type: 'boolean' }, message: { type: 'string' } },
+          required: ['ok', 'message'],
+        },
+        render: (_args, value) => [{ type: 'text', text: value.message }],
+      },
+      async execute(args, exec) {
+        return createTask(store, args, exec)
       },
     },
   ]

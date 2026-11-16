@@ -94,4 +94,8 @@ export const ROUTES = {
   focus: '/api/gantt/focus',
   focusSet: '/api/gantt/focus/set',
   trajectory: '/api/gantt/trajectory',
+  work: '/api/gantt/work',
+  workSession: '/api/gantt/work/session',
+  workSkills: '/api/gantt/work/skills',
+  workTeam: '/api/gantt/work/team',
 }

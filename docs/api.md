@@ -13,9 +13,10 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 5: one working tree in `tasks` (track roots, imported
+- The schema is version 6: one working tree in `tasks` (track roots, imported
   nodes, decomposed and manual tasks), the persisted daily brief report,
-  per-conversation `focus` rows, and the append-only `task_events` trajectory.
+  per-conversation `focus` rows, the append-only `task_events` trajectory, and
+  the `work_sessions` mapping from a task to its dedicated main conversation.
   The domain model is in [personal-task-system.md](personal-task-system.md);
   the migration in [compatibility.md](compatibility.md).
 
@@ -30,6 +31,10 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/focus` | `?sessionId=<id>` | `200 { ok, taskId }` |
 | `POST` | `/api/gantt/focus/set` | `{ sessionId, taskId? }` | `200 { ok, taskId }` |
 | `GET` | `/api/gantt/trajectory` | `?taskId=&sessionId=&limit=` | `200 { ok, events }` |
+| `GET` | `/api/gantt/work` | `?taskId=<id>` or `?sessionId=<id>` | `200 { ok, cwd, task, sessionId }` |
+| `POST` | `/api/gantt/work/session` | `{ taskId, sessionId }` | `200 { ok, taskId, sessionId }` |
+| `GET` | `/api/gantt/work/skills` | — | `200 { ok, available, skills }` |
+| `GET` | `/api/gantt/work/team` | `?sessionId=<id>` | `200 { ok, available, agents }` |
 | `GET` | `/api/gantt/meta` | — | `200` database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `201` created task |
 | `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `200` updated task |
@@ -46,10 +51,11 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/brief` | `?date=YYYY-MM-DD` | `200 { ok, today, date, brief, cached }` |
 | `POST` | `/api/gantt/brief/compute` | `{ date? }` | `200 { ok, today, date, brief, cached: false }` |
 
-Nineteen routes are registered. Routes that read a body require a JSON object;
-any other JSON value is rejected with `400`. `GET` routes and `seed` do not read
-a body. The focus routes and the assistant tools share one per-conversation
-focus; the plugin itself never calls a model.
+Twenty-three routes are registered. Routes that read a body require a JSON
+object; any other JSON value is rejected with `400`. `GET` routes and `seed` do
+not read a body. The focus routes and the assistant tools share one
+per-conversation focus; the work routes and `gantt_track` share one
+task ⇄ dedicated-conversation mapping; the plugin itself never calls a model.
 
 ## Conventions
 
@@ -428,7 +434,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
 - Events are newest first.
 - With no filter the route returns the most recent events across all tasks;
   filters may be combined to narrow the result.
-- `action` is `create`, `update`, `complete`, or `decompose`; `detail` carries
+- `action` is `create`, `update`, `complete`, `decompose`, or `track`; `detail` carries
   the tool's optional `summary` when supplied, otherwise a short generated
   description of the write.
 - `sessionId` and `turn` identify the DSH conversation and the tool-call turn
@@ -437,6 +443,92 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
   only by assistant-tool writes; they are not editable and are deleted with
   their task (`ON DELETE CASCADE`).
 - An invalid `limit` is a `400`; an unknown `taskId` is a `404`.
+
+## Work mode
+
+Work mode turns a task-row click into "open this task's dedicated main
+conversation": one task owns one real DSH session in the work workspace, stored
+durably in `work_sessions` (`task_id` primary key, unique `session_id`,
+`created_at`/`updated_at` stamps). The mapping is separate from the
+per-conversation focus: a conversation keeps its focus, while a task keeps its
+dedicated conversation across host restarts. The work directory is
+`DSH_GANTT_WORK_CWD` (default `/data/home/ws-plugin`), trimmed; a blank value
+falls back to the default.
+
+### Read the work context
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/work?taskId=<task-id>'
+curl -s 'http://127.0.0.1:3080/api/gantt/work?sessionId=<session-id>'
+```
+
+```json
+{
+  "ok": true,
+  "cwd": "/data/home/ws-plugin",
+  "task": {
+    "id": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
+    "number": "1.8.1",
+    "ref": "",
+    "title": "写验收用例",
+    "status": "in_progress",
+    "progress": 40,
+    "doneWhen": "HTTP 与 e2e 全绿"
+  },
+  "sessionId": "session-abc"
+}
+```
+
+- `taskId` wins when both parameters are given; an unknown task id is a `404`
+  (`task <id> was not found`).
+- With only `sessionId`, the route resolves the conversation's focused task
+  (`GET /api/gantt/focus`) and then the task whose dedicated conversation it is
+  (`work_sessions`); an unbound conversation returns `task: null`.
+- Neither parameter, or two blank values, is a `400`
+  (`taskId or sessionId is required`); an over-long conversation id is a `400`
+  (`sessionId must be at most 200 characters`).
+- `task` is `null` or `{ id, number, ref, title, status, progress, doneWhen }`,
+  where `number` is the rendered dotted number; `sessionId` is that task's
+  dedicated conversation, or `null` when it has none.
+
+### Bind a task to its conversation
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/work/session \
+  -H 'content-type: application/json' \
+  -d '{ "taskId": "<task-id>", "sessionId": "<session-id>" }'
+```
+
+```json
+{ "ok": true, "taskId": "0f0c…", "sessionId": "session-abc" }
+```
+
+The route writes the mapping and sets that conversation's focus to the task in
+one transaction. Rebinding a task replaces its conversation; binding a
+conversation that already belongs to another task moves it (the old row is
+deleted). `taskId` is required (`400 taskId is required`), the conversation id
+follows the focus rules (`400 sessionId is required`, at most 200 characters),
+and an unknown task is a `404`. The row is deleted with its task
+(`ON DELETE CASCADE`).
+
+### Workbench services
+
+`GET /api/gantt/work/skills` reads the optional host `skills` service and calls
+`skills.list()`; it answers `{ ok: true, available, skills: [{ name,
+description, source }] }`, with `available: false` and `skills: []` when the
+service is absent. A service rejection is a `500` carrying the service's
+message.
+
+`GET /api/gantt/work/team?sessionId=<dedicated-conversation-id>` reads the
+optional host `subagents` service and calls `listChildren(sessionId)`; it
+answers `{ ok: true, available, agents: [{ id, label, mode, createdAt }] }`.
+`label` defaults to `''` and `mode` is `continuable`, `one-shot`, `external`, or
+`unknown` (an unrecognized mode reads `unknown`). A missing or blank
+`sessionId` is a `400`; an absent service answers `available: false` and
+`agents: []`; a service rejection answers `200` with `available: true`,
+`agents: []`, and an `error` message. Both routes degrade to
+`available: false` when the host has no service seam, so a headless profile
+keeps working; the workbench tab renders the unavailable state.
 
 ## Read metadata
 
@@ -451,7 +543,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "statuses": ["todo", "in_progress", "blocked", "done"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -461,7 +553,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own nineteen-entry route catalog (abbreviated above);
+`endpoints` is the host's own twenty-three-entry route catalog (abbreviated above);
 `taskCount` counts every row of the unified tree.
 
 ## Create a task
@@ -954,7 +1046,7 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 
 ## Assistant tools
 
-The host registers three tools on the DSH **tools service** so a native
+The host registers five tools on the DSH **tools service** so a native
 conversation can read the task tree and write task changes directly. The plugin
 does not call an LLM itself: the model is the normal DSH conversation, the tool
 schemas are the ones below, and every write goes through the store's validation
@@ -1030,6 +1122,41 @@ title, status label, and progress. At least one of `status`/`progress`/`title`/
 Status/progress follow the same pairing rules as the HTTP update route. The call
 records an `update` event, or a `complete` event when the task is marked done.
 
+### `gantt_track`
+
+Record the current round against one task without writing the task tree.
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `id` | no | Task: internal id, `ref`, or dotted number; omitted -> the conversation's focused task |
+| `summary` | yes | What the round did; stored as the `track` event detail |
+
+Returns `{ ok: true, message: string }` naming the task and the recorded turn.
+With no `id` and no focused task the call is a `400` (`id is required when this
+conversation has no focused task`); a blank `summary` is a `400` (`summary is
+required`). The event carries the calling conversation id and turn, so a round
+that only reviewed, analyzed, or answered still shows up in the trajectory.
+
+### `gantt_create_task`
+
+Create a task as the immediate next sibling of the reference task.
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `id` | no | Reference task: internal id, `ref`, or dotted number; omitted -> the focused task |
+| `title` | yes | 1–200 characters |
+| `doneWhen` | no | Verifiable completion standard |
+| `description` | no | Optional note |
+| `status` | no | `todo` (default), `in_progress`, `blocked`, or `done` |
+| `startDate`, `endDate` | no | `YYYY-MM-DD`; default today and today + 3 days |
+
+Returns `{ ok: true, message: string }` naming the reference and the new
+sibling's dotted number. The new row is inserted right after the reference,
+later siblings shift down one position, and ancestor rollups are recomputed in
+one transaction. The call records a `create` event on the new task, and — when
+it comes from a conversation — a `track` event on the reference with detail
+`sibling task <reference> <title>`.
+
 The tools are registered globally on the host, but the context they read is
 per conversation: the focus row keyed by the conversation id is what
 `gantt_context` resolves, and it is what the right-rail tab writes when a row is
@@ -1041,9 +1168,13 @@ calls over SQLite, not shell or filesystem work.
 When the host has the optional `systemPrompt` service, the plugin contributes two
 prompt pieces so a conversation knows how to advance tasks without being asked:
 
-- a **static section** named `gantt:protocol` at order `700`, describing
-  the completion / partial-decompose / decompose-only protocol and stating that
-  provenance is recorded automatically;
+- a **static section** named `gantt:protocol` at order `700`, describing the
+  work mode protocol: the conversation is the focused task's content-dedicated
+  main conversation, and every round must close with exactly one of
+  `gantt_track` (no task write), `gantt_update_task` (advanced/completed/
+  blocked), `gantt_decompose` (new subtasks), or `gantt_create_task` (a new
+  sibling); a text-only round ending is not allowed. Provenance is recorded
+  automatically;
 - a **dynamic runtime context** named `gantt:focus` at order `530`, emitted only
   when the conversation has a focused task. It carries the focused task's
   ancestor chain (ref, title, kind, status, `doneWhen`), the focus detail, and
@@ -1074,9 +1205,11 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |
 | `400` | invalid focus input | `sessionId is required`, `sessionId must be at most 200 characters` |
 | `400` | invalid trajectory input | `limit must be an integer from 1 to 100`, `sessionId must be at most 200 characters` |
+| `400` | invalid work input | `taskId or sessionId is required`, `taskId is required`, `sessionId is required` |
 | `404` | unknown task id | `task <id> was not found` |
 | `404` | unknown plan block id | `plan block <id> was not found` |
 | `409` | duplicate `(kind, ref)` | `task with kind node and ref node:1.8.1 already exists` |
+| `500` | the optional skills service rejected | the service's message |
 | `500` | unexpected host failure | the thrown error's message |
 
 A wrong method or an unknown path is left to the harness's `/api` dispatch (it

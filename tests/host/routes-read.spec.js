@@ -17,9 +17,9 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the nineteen documented endpoints with their methods', () => {
+  it('registers the twenty-three documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(19)
+    expect(routes.size).toBe(23)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
@@ -85,7 +85,7 @@ describe('route registration', () => {
         connection: { fetch: { register: definition => routes.set(definition.path, definition) } },
       }
       apply(ctx)
-      expect(routes.size).toBe(19)
+      expect(routes.size).toBe(23)
       disposeAll(disposers)
     } finally {
       if (saved === undefined) delete process.env.DSH_GANTT_DB
@@ -176,10 +176,11 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.engine).toBe('node:sqlite')
     expect(payload.kinds).toEqual(['track', 'node', 'task'])
     expect(payload.linkTypes).toEqual(['memory', 'file', 'url', 'task', 'note'])
-    expect(payload.endpoints).toHaveLength(19)
+    expect(payload.endpoints).toHaveLength(23)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST',
+      'GET', 'GET', 'POST', 'GET', 'GET', 'POST', 'GET', 'GET', 'GET', 'POST', 'POST', 'POST',
+      'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

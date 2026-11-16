@@ -8,6 +8,7 @@ import { focusRoute, setFocusRoute, trajectoryRoute } from './focus.js'
 import { contextRoute, metaRoute, seedRoute } from './meta.js'
 import { dayRoute, planImportRoute, planStatusRoute } from './plan.js'
 import { createTaskRoute, decomposeRoute, deleteTaskRoute, scheduleTaskRoute, splitTaskRoute, statusRoute, treeRoute, updateTaskRoute } from './tasks.js'
+import { workRoute, workSessionRoute, workSkillsRoute, workTeamRoute } from './work.js'
 
 /** @typedef {import('./http.js').GanttContext} GanttContext */
 /** @typedef {import('./http.js').GanttEndpoint} GanttEndpoint */
@@ -19,6 +20,10 @@ const ROUTES = [
   focusRoute,
   setFocusRoute,
   trajectoryRoute,
+  workRoute,
+  workSessionRoute,
+  workSkillsRoute,
+  workTeamRoute,
   metaRoute,
   createTaskRoute,
   updateTaskRoute,
@@ -47,6 +52,6 @@ export const ENDPOINTS = ROUTES.map(({ method, path, description }) => ({ method
  */
 export function registerRoutes(ctx, store) {
   /** @type {import('./http.js').RouteDeps} */
-  const deps = { store, endpoints: ENDPOINTS }
+  const deps = { store, endpoints: ENDPOINTS, get: name => ctx.get?.(name) }
   for (const spec of ROUTES) registerRoute(ctx, spec, deps)
 }

@@ -42,7 +42,7 @@ describe('task trajectory events', () => {
 
   it('rejects an unknown action, task, session, or turn', () => {
     const { task } = seed()
-    expectGanttError(() => store.recordEvent({ taskId: task.id, action: 'nope' }), 'action must be one of create, update, complete, decompose', 400)
+    expectGanttError(() => store.recordEvent({ taskId: task.id, action: 'nope' }), 'action must be one of create, update, complete, decompose, track', 400)
     expectGanttError(() => store.recordEvent({ taskId: 'missing', action: 'update' }), 'task missing was not found', 404)
     expectGanttError(() => store.recordEvent({ taskId: task.id, action: 'update', turn: -1 }), 'turn must be a non-negative integer', 400)
     expectGanttError(() => store.recordEvent({ taskId: task.id, action: 'update', turn: 1.5 }), 'turn must be a non-negative integer', 400)

@@ -36,6 +36,7 @@ import { todayIso } from '../tree.js'
  * @typedef {object} RouteDeps
  * @property {GanttStore} store
  * @property {GanttEndpoint[]} endpoints
+ * @property {(name: string) => unknown} get
  */
 
 /**
