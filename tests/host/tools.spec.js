@@ -205,6 +205,23 @@ describe('gantt assistant tools', () => {
     expect(dispose).toHaveBeenCalledTimes(3)
   })
 
+  it('keeps the tools service as the receiver of register', () => {
+    /** @type {GanttTool[]} */
+    const registered = []
+    const service = {
+      seen: 0,
+      /** @param {GanttTool} definition */
+      register(definition) {
+        this.seen += 1
+        registered.push(definition)
+        return () => {}
+      },
+    }
+    registerTools({ get: name => (name === 'tools' ? service : undefined) }, store)
+    expect(service.seen).toBe(3)
+    expect(registered).toHaveLength(3)
+  })
+
   it('registers without an effect seam and no-ops without a usable tools service', () => {
     /** @type {GanttTool[]} */
     const registered = []

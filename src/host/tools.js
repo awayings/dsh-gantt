@@ -259,7 +259,9 @@ export function registerTools(ctx, store) {
     typeof ctx.get === 'function' ? ctx.get('tools') : undefined
   )
   if (tools === undefined || tools === null || typeof tools.register !== 'function') return
-  const register = tools.register
+  // ToolsService.register reads its own registry (`this.layers`), so keep the
+  // service as the receiver instead of detaching the method.
+  const register = tools.register.bind(tools)
   /** @type {Array<() => void>} */
   const disposers = toolDefinitions(store).map(definition => register(definition))
   if (typeof ctx.effect === 'function') {
