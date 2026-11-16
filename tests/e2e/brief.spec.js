@@ -56,8 +56,11 @@ describe('daily brief end-to-end', () => {
     expect(read.payload.brief.tracks.length).toBe(3)
     expect(read.payload.brief.tracks.map(track => track.role)).toContain('core')
 
-    const again = await request('/api/gantt/brief?date=2026-11-15')
-    expect(again.payload.cached).toBe(true)
+    // Only today's report is cached by a read; a past date is rebuilt each time.
+    const todayRead = await request('/api/gantt/brief')
+    expect(todayRead.payload.cached).toBe(false)
+    const todayAgain = await request('/api/gantt/brief')
+    expect(todayAgain.payload.cached).toBe(true)
 
     const computed = await request('/api/gantt/brief/compute', { date: '2026-11-15' })
     expect(computed.status).toBe(200)

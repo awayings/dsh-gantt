@@ -109,7 +109,7 @@ describe('contextDocument markdown', () => {
     const walk = (node) => { flat.push(node); node.children.forEach(walk) }
     store.snapshot().tasks.forEach(walk)
     const node = flat.find(task => task.ref === 'node:1.8.1')
-    const nodeDocument = store.contextDocument({ root: node?.id })
+    const nodeDocument = store.contextDocument({ date: '2026-11-15', root: node?.id })
     expect(nodeDocument.counts).toEqual({ tracks: 0, nodes: 1, tasks: 0, blocks: 2 })
     expect(nodeDocument.markdown).toContain('S2 读数')
   })
