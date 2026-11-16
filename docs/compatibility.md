@@ -5,16 +5,17 @@ evidence for each. Paths marked `dsh:` are read from the installed harness under
 `/data/app/node_modules/@deepseek-ai/`; unmarked paths are in this repository.
 Source wins over this page.
 
-Last verified: **2026-11-15** (`dsh-gantt` `1.5.0`; installed dsh
+Last verified: **2026-11-16** (`dsh-gantt` `1.5.0`; installed dsh
 `0.2.2-rc.1`, Node `v24.22.2`). The `1.2.0` Today page and tracker import were
 verified by the automated gate and the disposable-profile host acceptance pass;
 the `1.3.0` unified task tree added the schema-v3 migration and was verified by
 the automated gate plus the real-database migration check; the `1.4.0` daily
-brief, perspectives, and AI sidebar add the schema-v4 migration and the optional
-LLM seam; the `1.5.0` source-layout refactor (`src/host/`, `src/client/`,
-rolldown bundle into `lib/client.js`) keeps every route and response identical
-and was verified by the same gate. The manual GUI checklist is in
-`docs/development.md` and had not been run at that date.
+brief and perspectives add the schema-v4 migration; the `1.5.0` round refactors
+the source into `src/host/` + `src/client/` (rolldown bundle into `lib/client.js`)
+and moves the AI workflow to native conversations (right-rail tab + host
+assistant tools with per-conversation focus); it was verified by the same gate.
+The manual GUI checklist is in `docs/development.md` and had not been run at
+that date.
 
 ## 1 · Supported set
 
@@ -55,7 +56,7 @@ and was verified by the same gate. The manual GUI checklist is in
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `src/host/routes/` registers seventeen exact paths this
+   returns a `Response`. `src/host/routes/` registers eighteen exact paths this
    way via `src/host/routes/http.js`.
 3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
    `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
@@ -72,8 +73,10 @@ and was verified by the same gate. The manual GUI checklist is in
    layout (`dsh: dsh-client-ui-layout/lib/client.js:127`). The locale service
    provides `register`/`bind`/`getSnapshot`/`subscribe` (`dsh:
    dsh-client-locale/lib/types/client/index.d.ts:136-219`). The client half
-   injects exactly these two services, and `package.json` `dsh.client.inject`
-   names the three packages that must arrive first.
+   injects these two services, and `package.json` `dsh.client.inject` names the
+   three platform packages that must arrive first. It also injects the optional
+   `betterSidebar` service at runtime (item 9); that package is not required for
+   the full pages.
 5. **`node:sqlite`.** `src/host/store/db.js` opens `DatabaseSync` from
    `node:sqlite`; the
    module is a Node built-in, so no dependency is declared. WAL and
@@ -91,28 +94,30 @@ and was verified by the same gate. The manual GUI checklist is in
    harness's existing `/api` cookie authentication; the plugin never binds a
    port or reads a credential. Treating the cookie as a credential is
    documented in `docs/api.md`.
-8. **The optional LLM service.** `POST /api/gantt/chat` reads two services
-   through `ctx.get`: the model registry `llm` (registered as `"llm"` in `dsh:
-   dsh-llm/lib/index.js:1816`, streaming call `stream(options)` at `dsh:
-   dsh-llm/lib/types/index.d.ts:113-115`) and the default-model selection
-   registry `agentDefaultModel` (`dsh:
-   dsh-agent-default-model/lib/types/index.d.ts:42`). Either being absent — or
-   the host not exposing `ctx.get` at all — is a `503 model unavailable`, never
-   a crash. `src/host/chat/service.js` only joins `text-delta` chunks from the
-   stream (`dsh:
-   dsh-llm/lib/types/types.d.ts:458`, join semantics at `dsh:
-   dsh-llm/lib/types/assistant-stream.d.ts:150`); it sends no `tools` (the
-   harness `GenerateOptions.tools` is optional, `dsh:
-   dsh-llm/lib/types/types.d.ts:556-557`), sends the focused task's chain from
-   the track root (the full tree markdown, clamped to 9000 characters, is the
-   no-focus fallback), and aborts the call after 60 seconds. The reply budget is
-   8000 tokens because the configured thinking model bills reasoning to the
-   same budget; an empty reply is retried once with `reasoningEffort: "off"`
-   and otherwise answered `502 model stopped at max-tokens before writing a
-   reply` / `model returned an empty reply` instead of an empty bubble. This is
-   a read-only model call: the proposal it returns is applied by the normal
-   decompose route, not by the model.
-9. **Task-day clock.** This deployment's host process runs in UTC
+8. **Assistant tools (host).** `src/host/tools.js` registers three tools on the
+   host **tools service** through `ctx.get('tools')`: `gantt_context`,
+   `gantt_decompose`, and `gantt_update_task`. The service is optional — when
+   it is absent (unit harnesses, headless profiles) registration is a no-op and
+   the rest of the plugin keeps working. The plugin never calls an LLM itself;
+   the model is the normal DSH conversation, and the tools are how it reads and
+   writes the tree. Writes go through the store's normal validation and
+   `BEGIN IMMEDIATE` transactions, so they need no shell/filesystem approval;
+   tool references accept the internal id, the external `ref`, or the rendered
+   dotted number. Tools are registered globally but their context is per
+   conversation: each execution reads the session id from the execution context
+   and looks up the `focus` row. Focus rows live in SQLite, so they survive a
+   host restart and are removed by the foreign-key cascade when the task is
+   deleted.
+9. **Right-rail tab (client).** The conversation sidebar is provided by the
+   optional `dsh-better-sidebar` plugin. `src/client/index.js` injects
+   `betterSidebar` with `ctx.inject(['betterSidebar'], …)` and calls
+   `ctx.betterSidebar.registerTab({ id: 'gantt', title, description, order: 22,
+   single: true, component })`; `single: true` keeps one tab per conversation,
+   and the returned disposer is wrapped in `ctx.effect`. When the injection
+   never resolves (host without the sidebar plugin) the tab is simply absent and
+   the full `/gantt` page still works; nothing in the host depends on it. The
+   tab's task clicks write the conversation focus through the focus routes.
+10. **Task-day clock.** This deployment's host process runs in UTC
    (`/etc/timezone` `Etc/UTC`), while the tracker's plan dates and the 08:00
    recompute are the user's wall clock. `src/host/clock.js` resolves "today" and the
    next 08:00 with `Intl.DateTimeFormat` in an explicit IANA zone:
@@ -180,11 +185,12 @@ and was verified by the same gate. The manual GUI checklist is in
    `tests/store/crud.spec.js` ("retains the last rolled-up values when the final
    child moves away"). A fix needs a schema/design change and is not scheduled;
    do not rely on authored parent values surviving their first child.
-9. **The model is optional and never writes.** The host reads `llm` and
-   `agentDefaultModel` through `ctx.get`; either missing answers `503`. The
-   model call is read-only: it returns prose and an optional proposal, and the
-   user applies that proposal through the normal `task/decompose` route. No tool
-   schemas are sent, so the model cannot call back into the plugin.
+9. **Assistant tools write, and the store is the guard.** The conversation
+   model can create children (`gantt_decompose`) and change a task
+   (`gantt_update_task`) directly. The guard is not an approval prompt but the
+   store: depth cap, status vocabulary, date ranges, hierarchy rules, and one
+   transaction per write all still apply, and tools return the resulting message
+   to the model. The plugin itself calls no model and ships no prompt.
 
 ## 4 · Data model layering and migration
 
@@ -199,7 +205,11 @@ unified the plugin's two previous datasets into one working tree. `tracks`/
 migration only bumps `PRAGMA user_version` to 4. It does **not** re-materialise
 the snapshot tables or touch `tasks`: a v3 database keeps its tree byte for
 byte, and no report backfill is needed because an absent report is computed on
-read.
+read. The `focus` table (`session_id` primary key, `task_id` foreign key with
+`ON DELETE CASCADE`, `updated_at`) is also created by the base schema's
+`CREATE TABLE IF NOT EXISTS`, so existing v4 databases gain it on the next open
+without a schema-version bump. Focus rows survive restarts and disappear with
+the task they point at.
 
 **v2 → v4 upgrade (append-only, run once when the host opens the database):**
 
@@ -232,6 +242,7 @@ read.
 | Import snapshot | `tracks`, `nodes` | Importer only (idempotency and provenance) |
 | Time grid | `plan_blocks`, `day_plans` | Today page (`/day`) |
 | Daily brief reports | `daily_briefs` | `/brief`, `/tree` `dailyBrief`, `/day` `brief`, context `## 今日窗口` |
+| Conversation focus | `focus` | Right-rail tab (`/focus` routes), assistant `gantt_context` |
 
 ## 5 · Limitations
 
@@ -291,11 +302,18 @@ read.
   and the `MM/DD 周X` day-heading convention are the contract; a format change
   in the tracker degrades to fewer parsed blocks rather than an error. The
   markdown itself is never modified.
-- **The AI sidebar needs a model service.** `POST /api/gantt/chat` answers
-  `503` when the host exposes no `llm`/`agentDefaultModel`; the panel then shows
-  the no-model copy. The model only proposes children — the user applies them
-  through the normal decompose route — and the conversation is not persisted
-  (the client sends the last eight turns back).
+- **The right-rail tab needs `dsh-better-sidebar`.** A host without that plugin
+  never resolves the `betterSidebar` injection, so the compact tree tab does
+  not appear; the full `/gantt` page and every route still work. The tab is not
+  a second application: it is a registered sidebar tab component.
+- **Assistant tools need a host tools service.** A host without the `tools`
+  service simply gets no assistant tools; the HTTP API and pages still work.
+  Tool registration is global, but the context is per conversation via the
+  `focus` row, so a conversation without focus gets the whole-tree fallback.
+- **Assistant tool writes are not separately approved.** They are normal store
+  calls over SQLite (no shell or filesystem access), and the store's validation
+  and transactions are the guard. A model with tool access can modify tasks;
+  treat the model's tool permissions as the real control surface.
 - **Stale parent rollups** when a parent loses its last child (§3.8).
 - **Concurrent DSH processes must not share one SQLite file** (§3.2).
 - **i18n is `en` + `zh` only.** The harness may offer more UI languages; plugin
@@ -320,8 +338,10 @@ read.
   current build and assert `GET /api/gantt/meta` returns `schemaVersion: 4`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
-  unchanged and only gain `daily_briefs`. Then read `/api/gantt/brief` and
-  assert the report is computed and cached for today.
+  unchanged and only gain `daily_briefs`; both also gain the additive `focus`
+  table. Then read `/api/gantt/brief` and assert the report is computed and
+  cached for today, and `/api/gantt/focus?sessionId=…` returns `taskId: null`
+  on a fresh database.
 - **Check — task-day clock:** with the host in UTC, assert the `today` fields in
   `/tree`, `/day`, and `/brief` match the `Asia/Shanghai` date (not the UTC
   date late in the UTC evening), then restart with `DSH_GANTT_TZ=UTC` and
@@ -332,13 +352,19 @@ read.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 4, seventeen endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 4, eighteen endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,
   `/api/gantt/context` (including `## 今日窗口`), `/api/gantt/brief`,
-  `/api/gantt/brief/compute`, and `/api/gantt/chat` with the session cookie —
-  the last one must answer `503 model unavailable` on a host without a model).
+  `/api/gantt/brief/compute`, plus a focus round trip: `POST /api/gantt/focus/set`
+  with a task id, then `GET /api/gantt/focus` for the same `sessionId` returns
+  it and clearing returns `taskId: null`).
+- **Check — assistant tools:** `tests/host/tools.spec.js` covers the three
+  definitions, reference resolution, per-session context, and registration
+  no-op; the live check is a native conversation: focus a task in the right-rail
+  tab, ask the model to decompose it, and confirm the children appear in the
+  tree.
 - **Check — rendering:** the manual GUI checklist in `docs/development.md`.
 - **Procedure — add a supported DSH line:** install that release in a
   disposable profile, run the automated gate, run the install/host acceptance

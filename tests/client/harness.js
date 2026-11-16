@@ -30,10 +30,11 @@ export function applyPlugin(plugin, options = {}) {
   const registrations = new Map()
   const effects = []
   const listeners = new Set()
+  const services = { ...(options.services ?? {}) }
   const locale = String(options.locale ?? 'en')
   const snapshot = { revision: 1, locale }
+  /** @type {any} */
   const ctx = {
-    inject: ['slots', 'locale'],
     effect(fn) {
       const disposer = fn()
       effects.push(disposer)
@@ -66,12 +67,24 @@ export function applyPlugin(plugin, options = {}) {
       },
     },
   }
+  if (!options.withoutInject) {
+    // Minimal cordis `ctx.inject`: the callback runs only when every declared
+    // service is available, mirroring how an absent optional service is a
+    // silent no-op on the real host.
+    ctx.inject = (names, callback) => {
+      const dependencies = Array.isArray(names) ? names : [names]
+      if (!dependencies.every(name => services[name] !== undefined)) return () => {}
+      const result = callback({ ...ctx, ...services })
+      return typeof result === 'function' ? result : () => {}
+    }
+  }
   plugin.apply(ctx)
   return {
     ctx,
     dicts,
     registrations,
     listeners,
+    services,
     sidebar() {
       return registrations.get('sidebar.panellist:gantt')
     },
@@ -84,6 +97,9 @@ export function applyPlugin(plugin, options = {}) {
     todayPage() {
       return registrations.get('main:today')
     },
+    sidebarTabs() {
+      return services.betterSidebar?.tabs ?? []
+    },
     dispose() {
       for (const disposer of effects) if (typeof disposer === 'function') disposer()
     },
@@ -93,6 +109,21 @@ export function applyPlugin(plugin, options = {}) {
 /** One-call setup: fresh plugin + stub ctx. */
 export function setupApp(options = {}) {
   return applyPlugin(createPlugin(), options)
+}
+
+/** Minimal `ctx.betterSidebar` fake: records tabs and returns disposers. */
+export function fakeSidebarService() {
+  const tabs = []
+  return {
+    tabs,
+    registerTab(descriptor) {
+      tabs.push(descriptor)
+      return () => {
+        const index = tabs.indexOf(descriptor)
+        if (index >= 0) tabs.splice(index, 1)
+      }
+    },
+  }
 }
 
 /** Response-like object matching what requestJson() reads. */

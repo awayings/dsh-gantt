@@ -506,6 +506,34 @@ export class GanttStore {
     return { task: this.getNode(id), block: this.getPlanBlock(blockId) }
   }
 
+  /** Persist which task one conversation is focused on (null clears the focus).
+   * Focus is per conversation, so the host-side assistant tools can read the
+   * chain the user is looking at without asking.
+   * @param {string} sessionId @param {string | null} taskId @returns {string | null} */
+  setFocus(sessionId, taskId) {
+    const session = normalizeSessionId(sessionId)
+    if (taskId === null || taskId === '') {
+      this.db.prepare('DELETE FROM focus WHERE session_id = ?').run(session)
+      return null
+    }
+    const row = this.requireRow(taskId)
+    this.db.prepare(
+      `INSERT INTO focus (session_id, task_id, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET task_id = excluded.task_id, updated_at = excluded.updated_at`,
+    ).run(session, row.id, new Date().toISOString())
+    return row.id
+  }
+
+  /** The task one conversation is focused on, or null when it has none.
+   * @param {string} sessionId @returns {string | null} */
+  focusOf(sessionId) {
+    const session = normalizeSessionId(sessionId)
+    const row = /** @type {{ taskId?: string } | undefined} */ (
+      this.db.prepare('SELECT task_id AS taskId FROM focus WHERE session_id = ?').get(session)
+    )
+    return row?.taskId ?? null
+  }
+
   /** Export the unified tree plus one day plan as a stable markdown context document.
    * @param {ContextOptions} [input]
    * @returns {{ ok: boolean, date: string, markdown: string, chars: number, truncated: boolean,
@@ -513,4 +541,16 @@ export class GanttStore {
   contextDocument(input = {}) {
     return contextDocument(this, input)
   }
+}
+
+/** Validate a conversation id arriving from the client or a tool call.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function normalizeSessionId(value) {
+  if (typeof value !== 'string') throw new GanttError('sessionId is required')
+  const session = value.trim()
+  if (session === '') throw new GanttError('sessionId is required')
+  if (session.length > 200) throw new GanttError('sessionId must be at most 200 characters')
+  return session
 }

@@ -3,8 +3,8 @@
 // service.
 
 import { briefComputeRoute, briefRoute } from './brief.js'
-import { chatRoute } from './chat.js'
 import { registerRoute } from './http.js'
+import { focusRoute, setFocusRoute } from './focus.js'
 import { contextRoute, metaRoute, seedRoute } from './meta.js'
 import { dayRoute, planImportRoute, planStatusRoute } from './plan.js'
 import { createTaskRoute, decomposeRoute, deleteTaskRoute, scheduleTaskRoute, splitTaskRoute, statusRoute, treeRoute, updateTaskRoute } from './tasks.js'
@@ -16,6 +16,8 @@ import { createTaskRoute, decomposeRoute, deleteTaskRoute, scheduleTaskRoute, sp
 /** @type {RouteSpec[]} */
 const ROUTES = [
   treeRoute,
+  focusRoute,
+  setFocusRoute,
   metaRoute,
   createTaskRoute,
   updateTaskRoute,
@@ -31,7 +33,6 @@ const ROUTES = [
   contextRoute,
   briefRoute,
   briefComputeRoute,
-  chatRoute,
 ]
 
 /** The endpoint catalog served by `GET /meta`. @type {GanttEndpoint[]} */
@@ -41,11 +42,10 @@ export const ENDPOINTS = ROUTES.map(({ method, path, description }) => ({ method
  * Register every host route on the connection service.
  * @param {GanttContext} ctx
  * @param {GanttStore} store
- * @param {(name: string) => unknown} service
  * @returns {void}
  */
-export function registerRoutes(ctx, store, service) {
+export function registerRoutes(ctx, store) {
   /** @type {import('./http.js').RouteDeps} */
-  const deps = { store, endpoints: ENDPOINTS, service }
+  const deps = { store, endpoints: ENDPOINTS }
   for (const spec of ROUTES) registerRoute(ctx, spec, deps)
 }

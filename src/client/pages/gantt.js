@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BriefStrip } from '../brief.js'
-import { ChatPanel } from '../chat.js'
 import { STATUS_COLOR } from '../constants.js'
 import { addDays, addMonths, todayIso } from '../dates.js'
 import { ApiDialog } from '../dialogs/api.js'
@@ -14,10 +13,10 @@ import { GanttGlyph, InfoGlyph } from '../icons.js'
 import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
-import { collapseForLevel, collectSubtree, filterTree, flattenTree, rowNumber, taskOptions, taskPath, visibleRows } from '../view.js'
+import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, taskPath, visibleRows } from '../view.js'
 import { h } from '../dom.js'
 
-/** The Gantt tree page: brief strip, filter, timeline and AI sidebar. */
+/** The Gantt tree page: brief strip, filter and timeline. */
 export function GanttPage({ ctx }) {
   const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData()
@@ -32,12 +31,6 @@ export function GanttPage({ ctx }) {
   const [dialog, setDialog] = useState(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [toast, setToast] = useState(null)
-  const [chatOpen, setChatOpen] = useState(false)
-  const [chatFocusId, setChatFocusId] = useState(null)
-  const [messages, setMessages] = useState(/** @type {any[]} */ ([]))
-  const [chatBusy, setChatBusy] = useState(false)
-  const [chatError, setChatError] = useState(null)
-  const [appliedProposalKey, setAppliedProposalKey] = useState(null)
   const initialized = useRef(false)
   const pageRef = useRef(null)
   useEffect(() => {
@@ -79,8 +72,6 @@ export function GanttPage({ ctx }) {
   const allTasks = useMemo(() => flattenTree(tasks), [tasks])
   const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
   const options = useMemo(() => taskOptions(tasks), [tasks])
-  const chatFocusTask = chatFocusId ? byId.get(chatFocusId) ?? null : null
-  const chatFocusDepth = chatFocusTask ? rowNumber(chatFocusTask).split('.').length : 0
   const focusIds = useMemo(() => {
     const ids = new Set()
     for (const lane of data?.brief?.lanes ?? []) {
@@ -199,11 +190,6 @@ export function GanttPage({ ctx }) {
     setSelectedId(id)
     setFocusId(id)
   }, [tasks])
-  const openChatFor = useCallback((task) => {
-    revealTask(task.id)
-    setChatFocusId(task.id)
-    setChatOpen(true)
-  }, [revealTask])
   const openCreate = useCallback((parentTask) => {
     setDialog({ type: 'create', parentId: parentTask?.id ?? null })
   }, [])
@@ -218,52 +204,6 @@ export function GanttPage({ ctx }) {
   const openSchedule = useCallback((task) => {
     setSelectedId(task.id)
     setDialog({ type: 'schedule', id: task.id })
-  }, [])
-  const sendChat = useCallback(async (message) => {
-    const history = messages.slice(-8).map(({ role, content }) => ({ role, content }))
-    const body = chatFocusId ? { message, history, taskId: chatFocusId } : { message, history }
-    setChatBusy(true)
-    setChatError(null)
-    setMessages(current => [...current, { role: 'user', content: message }])
-    try {
-      const payload = await requestJson('api/gantt/chat', { method: 'POST', body: JSON.stringify(body) })
-      const reply = typeof payload.reply === 'string' ? payload.reply : ''
-      const proposal = payload.proposal ?? null
-      if (reply === '' && proposal === null) {
-        setChatError(t('chat.error'))
-        return
-      }
-      setMessages(current => [...current, { role: 'assistant', content: reply, proposal }])
-    } catch (failure) {
-      const detail = failure instanceof Error ? failure.message : String(failure)
-      setChatError(failure.status === 503 ? `${t('chat.noModel')} ${detail}` : `${t('chat.error')} ${detail}`)
-    } finally {
-      setChatBusy(false)
-    }
-  }, [messages, chatFocusId, t])
-  const applyChatProposal = useCallback(async (message, index) => {
-    const proposal = message.proposal
-    const body = proposal.planDate
-      ? { id: chatFocusId, planDate: proposal.planDate, children: proposal.children }
-      : { id: chatFocusId, children: proposal.children }
-    setChatBusy(true)
-    setChatError(null)
-    try {
-      await requestJson('api/gantt/task/decompose', { method: 'POST', body: JSON.stringify(body) })
-      setAppliedProposalKey(index)
-      refresh()
-      setToast({ text: t('chat.applied'), kind: 'ok' })
-    } catch (failure) {
-      const detail = failure instanceof Error ? failure.message : String(failure)
-      setChatError(`${t('chat.error')} ${detail}`)
-    } finally {
-      setChatBusy(false)
-    }
-  }, [chatFocusId, refresh, t])
-  const clearChat = useCallback(() => {
-    setMessages([])
-    setChatError(null)
-    setAppliedProposalKey(null)
   }, [])
   const shift = useCallback((direction) => {
     setAnchor(current => (scale === 'week'
@@ -392,7 +332,6 @@ export function GanttPage({ ctx }) {
             onCycleStatus: cycleStatus,
             onDecompose: openDecompose,
             onSchedule: openSchedule,
-            onAiDecompose: openChatFor,
           })),
         ),
         ),
@@ -450,13 +389,6 @@ export function GanttPage({ ctx }) {
         h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.prev'), 'aria-label': t('actions.prev'), onClick: () => shift(-1) }, '‹'),
         h('button', { className: 'gantt-btn', type: 'button', onClick: goToday }, t('actions.today')),
         h('button', { className: 'gantt-btn gantt-icon-btn', type: 'button', title: t('actions.next'), 'aria-label': t('actions.next'), onClick: () => shift(1) }, '›'),
-        h('button', {
-          className: 'gantt-btn',
-          type: 'button',
-          'data-action': 'chat-toggle',
-          'data-active': chatOpen ? 'true' : undefined,
-          onClick: () => setChatOpen(current => !current),
-        }, t('actions.ai')),
         h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'context' }) }, t('actions.context')),
         h('button', { className: 'gantt-btn', type: 'button', onClick: () => setDialog({ type: 'api' }) }, t('actions.api')),
         h('button', {
@@ -496,59 +428,38 @@ export function GanttPage({ ctx }) {
         h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } })),
       ),
     ),
-    h('div', { className: 'gantt-work' },
-      h('div', { className: 'gantt-work-main' },
-        error && data ? h('div', { className: 'gantt-banner' },
-          h('span', null, error),
-          h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
-        ) : null,
-        h(BriefStrip, {
-          dailyBrief,
-          pending: data?.brief?.pending,
-          t,
-          locale,
-          onReveal: revealTask,
-          onRecompute: recomputeBrief,
-          recomputing,
-        }),
-        tasks.length > 0
-          ? h('section', { className: 'gantt-filter' },
-            h('span', { className: 'gantt-filter-label' }, t('filter.label')),
-            h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
-              [['all', 'filter.all'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
-                key: value,
-                className: 'gantt-seg-btn',
-                type: 'button',
-                'data-filter': value,
-                'data-active': filter === value ? 'true' : undefined,
-                onClick: () => changeFilter(value),
-              }, t(key))),
-            ),
-            filterCount > 0
-              ? h('span', { className: 'gantt-filter-count' }, `${filterCount} ${t('filter.paths')}`)
-              : null,
-          )
+    error && data ? h('div', { className: 'gantt-banner' },
+      h('span', null, error),
+      h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
+    ) : null,
+    h(BriefStrip, {
+      dailyBrief,
+      pending: data?.brief?.pending,
+      t,
+      locale,
+      onReveal: revealTask,
+      onRecompute: recomputeBrief,
+      recomputing,
+    }),
+    tasks.length > 0
+      ? h('section', { className: 'gantt-filter' },
+        h('span', { className: 'gantt-filter-label' }, t('filter.label')),
+        h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
+          [['all', 'filter.all'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
+            key: value,
+            className: 'gantt-seg-btn',
+            type: 'button',
+            'data-filter': value,
+            'data-active': filter === value ? 'true' : undefined,
+            onClick: () => changeFilter(value),
+          }, t(key))),
+        ),
+        filterCount > 0
+          ? h('span', { className: 'gantt-filter-count' }, `${filterCount} ${t('filter.paths')}`)
           : null,
-        content,
-      ),
-      chatOpen
-        ? h(ChatPanel, {
-          t,
-          focusTask: chatFocusTask,
-          focusRef: chatFocusTask ? rowNumber(chatFocusTask) : '',
-          focusDepth: chatFocusDepth,
-          messages,
-          busy: chatBusy,
-          error: chatError,
-          appliedKey: appliedProposalKey,
-          onClose: () => setChatOpen(false),
-          onClearFocus: () => setChatFocusId(null),
-          onClear: clearChat,
-          onSend: sendChat,
-          onApply: applyChatProposal,
-        })
-        : null,
-    ),
+      )
+      : null,
+    content,
     dialogNode,
     toast ? h('div', {
       className: 'gantt-toast',

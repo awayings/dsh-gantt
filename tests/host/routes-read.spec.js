@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SCHEMA_VERSION, STATUSES, todayIso } from '../../src/host/store.js'
+import { apply } from '../../src/host/index.js'
 import { ROUTES, bootPlugin, disposeAll, invoke } from '../helpers/host.js'
 
 let boot
@@ -16,9 +17,9 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the seventeen documented endpoints with their methods', () => {
+  it('registers the eighteen documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(17)
+    expect(routes.size).toBe(18)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
@@ -29,10 +30,65 @@ describe('route registration', () => {
     expect(routes.get(ROUTES.day).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.context).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.brief).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.focus).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.briefCompute).methods).toEqual(['POST'])
     for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed,
-      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule, ROUTES.briefCompute, ROUTES.chat]) {
+      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule, ROUTES.briefCompute, ROUTES.focusSet]) {
       expect(routes.get(writePath).methods).toEqual(['POST'])
+    }
+  })
+
+  it('waits for the tools service when the host exposes an inject seam', () => {
+    const saved = process.env.DSH_GANTT_DB
+    process.env.DSH_GANTT_DB = ':memory:'
+    try {
+      /** @type {string[][]} */
+      const injected = []
+      const disposers = []
+      const ctx = {
+        effect(fn) {
+          const dispose = fn()
+          disposers.push(dispose)
+          return dispose
+        },
+        inject(deps, callback) {
+          injected.push(deps)
+          callback(ctx)
+        },
+        get(name) {
+          return name === 'tools' ? { register: () => () => {} } : undefined
+        },
+        connection: { fetch: { register: () => {} } },
+      }
+      apply(ctx)
+      expect(injected).toEqual([['tools']])
+      disposeAll(disposers)
+    } finally {
+      if (saved === undefined) delete process.env.DSH_GANTT_DB
+      else process.env.DSH_GANTT_DB = saved
+    }
+  })
+
+  it('registers the routes when the host exposes no ctx.get seam', () => {
+    const saved = process.env.DSH_GANTT_DB
+    process.env.DSH_GANTT_DB = ':memory:'
+    try {
+      const routes = new Map()
+      const disposers = []
+      const ctx = {
+        effect(fn) {
+          const dispose = fn()
+          disposers.push(dispose)
+          return dispose
+        },
+        connection: { fetch: { register: definition => routes.set(definition.path, definition) } },
+      }
+      apply(ctx)
+      expect(routes.size).toBe(18)
+      disposeAll(disposers)
+    } finally {
+      if (saved === undefined) delete process.env.DSH_GANTT_DB
+      else process.env.DSH_GANTT_DB = saved
     }
   })
 
@@ -119,10 +175,10 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.engine).toBe('node:sqlite')
     expect(payload.kinds).toEqual(['track', 'node', 'task'])
     expect(payload.linkTypes).toEqual(['memory', 'file', 'url', 'task', 'note'])
-    expect(payload.endpoints).toHaveLength(17)
+    expect(payload.endpoints).toHaveLength(18)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST', 'POST',
+      'GET', 'GET', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

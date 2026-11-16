@@ -192,9 +192,9 @@ Decomposition in this system is not an algorithm. There is no auto-scheduler
 solver and no ranking model (M1/M2 stay frozen; the daily brief is a
 deterministic heuristic, see [Not adopted](#not-adopted--deferred)); the
 human-facing agent and the user do the thinking, and the plugin provides the
-mechanics. The AI sidebar can draft a decomposition with a model, but the user
-applies it through the normal decompose route. The discipline the plugin
-reflects:
+mechanics. A native DSH conversation can draft a decomposition with a model
+through the assistant tools, and the model writes it through the normal store
+path. The discipline the plugin reflects:
 
 ### Two questions before a node
 
@@ -456,46 +456,54 @@ detail, and sets `truncated: true`; only a document whose headers alone exceed
 the limit is hard-cut.
 
 The export is a read-only seam: the page offers it as a dialog with a copy
-button, and the host reuses the same markdown for the AI decompose sidebar (the
-chat route puts the context, clamped to 9000 characters, plus today's windows
-into the model prompt). Automatic memory injection — feeding the tree into a
-model prompt without a user action — is still deferred; see
-[Not adopted](#not-adopted--deferred).
+button, and the host assistant tools reuse the same markdown for their
+whole-tree fallback (capped at 6000 characters there). Automatic memory
+injection — feeding the tree into a model prompt without a user action — is
+still deferred; see [Not adopted](#not-adopted--deferred).
 
-## AI decompose sidebar
+## Native conversation and the right-rail tab
 
-The Gantt page has an optional AI decompose sidebar that turns a conversation
-into a decomposition proposal. It is additive: when the host has no model
-service the feature reports that instead of breaking the page.
+The AI workflow lives in the native DSH conversation, not in the Gantt page.
+The plugin contributes a compact **甘特** tab to the conversation sidebar and
+three assistant tools to the host; a conversation model reads the focused task
+through the tools and writes decomposition results straight into the tree.
 
-- **Entry points.** The header button **AI 拆解** toggles the right-hand panel;
-  a row action (✦) focuses that task and opens the panel. The panel is 360 px
-  wide with its own scroll on desktop and becomes a full-width overlay/stacked
-  panel when the page is narrow (container query, no horizontal crush).
-- **Context.** The host builds the model request from the focused task (its ref,
-  title, depth, `doneWhen`, and direct children), the full tree context markdown
-  clamped to 9000 characters, and today's 该动 windows. The system prompt states
-  the Hermes decomposition discipline: four levels including the track root, a
-  verifiable `done_when` per child, ≤30-minute A-class steps or a B-class
-  definition/decomposition task that occupies a window, parallel siblings with
-  at most one `dep`, and no invented tasks.
-- **Conversation.** The client posts `{ message, taskId, history }` to
-  `POST /api/gantt/chat` and keeps the last eight turns in `history`. The reply
-  is rendered as prose; when it contains a valid fenced JSON proposal (the last
-  fenced block wins), the panel shows a proposal card with each child's title,
-  `doneWhen`, estimate, and plan time.
-- **Apply.** **应用拆解** calls the existing `POST /api/gantt/task/decompose`
-  with the focused task id, the proposal's `planDate`, and its `children`; on
-  success the tree refreshes, a toast reports it, and the card collapses. Apply
-  is disabled while no task is focused. The proposal is only a request: the
-  normal decompose validation, depth cap, and transaction still apply.
-- **Failure modes.** A host without a model (or without a default model
-  selection) returns `503` and the panel shows the no-model copy; upstream
-  failures (`502`) and invalid input (`400`) show the error banner. No tool
-  schemas are sent to the model, and the request times out after 60 seconds.
+- **Right-rail tab.** With the optional `dsh-better-sidebar` plugin installed,
+  the conversation sidebar shows one `gantt` tab per conversation (`single:
+  true`, order 22). The tab renders the compact tree with refs, status dots, and
+  kind labels; clicking a row writes the conversation focus
+  (`POST /api/gantt/focus/set`), the focused row is highlighted, and the header
+  shows the focus chip with a clear button. Refreshing reloads the tree, loading
+  and error states are explicit, and auto-refresh pauses while the tab is not
+  visible. Without the sidebar plugin the injection never resolves, so there is
+  no tab, but the full `/gantt` page and every route keep working.
+- **Full page.** `/gantt` remains the full-screen Gantt page (tree, timeline,
+  brief, perspectives, dialogs). It no longer contains an AI button or an
+  in-page chat panel.
+- **Focus.** A conversation can focus one task; the focus is stored per session
+  in the `focus` table, survives a host restart, and is cleared automatically
+  when the task is deleted. It is the context handshake between the tab and the
+  tools.
+- **Context for the model.** `gantt_context` resolves the conversation id from
+  the tool execution context and renders the chain from the track root to the
+  focused task (kind, status, `doneWhen` per row), the task's dotted id,
+  internal id, title, depth, status, `doneWhen`, and direct children. With no
+  focus it falls back to the whole-tree context document capped at 6000
+  characters.
+- **Writes.** `gantt_decompose` creates children (`id`, `children`, optional
+  `planDate`) and `gantt_update_task` changes `status`/`progress`/`title`/
+  `doneWhen`. There is no proposal card and no apply button: the model calls the
+  tool in the conversation, the tool calls the store, and the normal validation
+  (depth cap, status vocabulary, dates, one transaction) applies. Tool writes
+  are ordinary SQLite store calls, so they need no shell/filesystem approval;
+  the store is the guard.
+- **Optional services.** The host `tools` service is optional — without it the
+  plugin registers no tools and everything else works. The plugin never calls an
+  LLM itself and ships no prompt; model availability and tool permissions belong
+  to the harness and the conversation.
 
-The route contract, proposal rules, and errors are in
-[api.md](api.md#chat-about-a-decomposition).
+The route contracts are in [api.md](api.md#focus-one-task) and
+[api.md](api.md#assistant-tools).
 
 ## Day plans and the Today page
 
@@ -582,17 +590,18 @@ half-built.
 The frozen scheduler decision still holds: the daily brief productises the M3
 *direction* for today as a deterministic heuristic (windows, role budgets,
 rotation fairness), with no priority ranking (M1), no direction scoring (M2),
-and no week-level optimiser. The AI sidebar also does not schedule anything by
-itself: the model proposes children and the user applies them through the normal
-decompose route.
+and no week-level optimiser. The native conversation's assistant tools also do
+not schedule anything by themselves: the model calls `gantt_decompose` /
+`gantt_update_task`, and the store applies the same validation and transactions
+as the HTTP routes.
 
 The work-vs-personal dependency rules and habit logging remain out of scope for
 the same reason: they need a field or a scheduled job the plugin does not have.
 
 ## See also
 
-- [api.md](api.md) — the tree, daily brief, chat, decompose, schedule,
-  context, and day routes.
+- [api.md](api.md) — the tree, daily brief, focus, assistant tools, decompose,
+  schedule, context, and day routes.
 - [development.md](development.md) — schema, migration runbook, test layout.
-- [compatibility.md](compatibility.md) — v2→v4 migration, the optional LLM
-  seam, and known limitations.
+- [compatibility.md](compatibility.md) — v2→v4 migration, the optional
+  assistant-tools and right-rail sidebar seams, and known limitations.

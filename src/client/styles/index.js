@@ -1,6 +1,5 @@
 import { CSS_BASE } from './base.js'
 import { CSS_BRIEF } from './brief.js'
-import { CSS_CHAT } from './chat.js'
 import { CSS_DIALOG } from './dialog.js'
 import { CSS_EMPTY } from './empty.js'
 import { CSS_GRID } from './grid.js'
@@ -13,6 +12,8 @@ import { CSS_STATS } from './stats.js'
 // renders its compact `CSS_TODAY` block.
 /** Compact stylesheet for the Today page. */
 export { CSS_TODAY } from './today.js'
+/** Compact task-tree stylesheet for the native conversation sidebar tab. */
+export { CSS_PANEL } from './panel.js'
 /** Full stylesheet for the Gantt page (and shared base classes for Today). */
 export const CSS = [
   CSS_BASE,
@@ -24,5 +25,4 @@ export const CSS = [
   CSS_MISC,
   CSS_BRIEF,
   CSS_RESPONSIVE,
-  CSS_CHAT,
 ].join('\n')

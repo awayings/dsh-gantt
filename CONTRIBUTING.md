@@ -57,9 +57,10 @@ squash-merged under the same gate.
   `docs/compatibility.md` in the same commit. Keep one working tree: new read
   surfaces use `tasks` (tracks/nodes are import snapshots), and a schema change
   needs an append-only migration plus the one-time backfill rule. The daily
-  report is a stored snapshot refreshed by recompute, the AI path is an optional
-  read-only model call that never writes the tree, and "today"/08:00 resolve in
-  the task-day zone (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host zone.
+  report is a stored snapshot refreshed by recompute, a native conversation's
+  assistant tools write through the store where validation is the guard, and
+  "today"/08:00 resolve in the task-day zone (`DSH_GANTT_TZ`, default
+  `Asia/Shanghai`), not the host zone.
 - **i18n.** `src/client/i18n/en.js` and `src/client/i18n/zh.js` must contain the
   same keys with no unused entries.
 - **File size.** Every source and test file stays under 1000 lines; split by

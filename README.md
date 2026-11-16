@@ -12,8 +12,10 @@ sidebar:
   the whole tree as markdown model context. The **daily 该动 brief** above the
   tree shows each track's frontier/next and today's windows with the task picked
   for each role (core / rotation / definition); **全部 / 待做 / 已完成**
-  perspectives prune the tree to the paths that matter; an optional **AI 拆解**
-  sidebar turns a conversation about a task into a decomposition proposal.
+  perspectives prune the tree to the paths that matter. A **甘特** tab in the
+  native conversation sidebar focuses one task per conversation, and the host
+  assistant tools let that conversation read the focused chain and write
+  decompositions straight into the tree.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
   one-click status, the tree nodes in play, the day's core goal, and integrity
   warnings for missing landing targets or a missing evening slot. Blocks created
@@ -26,11 +28,11 @@ no write-back — and it materializes the imported tree into the same working tr
 the Gantt page renders.
 
 No runtime dependencies beyond Node built-ins and the harness-provided React,
-and no second server: the host half is plain ESM under `src/host/`, and the
-browser half is built from `src/client/` into a single classic-script artifact
-(`lib/client.js`) that DeepSeek Harness loads. The AI sidebar is optional — it
-uses the harness's model service when one is present and reports a clear
-"no model" state when not.
+and no second server: the host half is seven plain-ESM modules under `src/host/`,
+and the browser half is built from `src/client/` into a single classic-script
+artifact (`lib/client.js`) that DeepSeek Harness loads. The right-rail tab is
+optional (it needs `dsh-better-sidebar`) and the assistant tools are optional
+(they need the host tools service); the plugin itself never calls an LLM.
 
 ## Destination
 
@@ -40,6 +42,7 @@ uses the harness's model service when one is present and reports a clear
 | Central page | `main` | key `gantt` |
 | Left sidebar icon | `sidebar.panellist` | id `today` |
 | Central page | `main` | key `today` |
+| Conversation sidebar tab | `dsh-better-sidebar` | `registerTab` id `gantt`, `single: true` |
 
 Clicking a sidebar icon selects its page exactly like the built-in Plugins or
 Schedules pages: the sidebar entry id is the keyed `main` page selection.
@@ -101,10 +104,11 @@ is always by path — it is not published to npm.
    track and today's windows with their picked tasks. **Recompute** refreshes
    it; **待做** / **已完成** switch the tree to the focus paths or the finished
    work only.
-8. On a row, ✦ opens the optional **AI 拆解** sidebar, where a conversation
-   proposes child tasks; **应用拆解** applies the proposal through the normal
-   decompose route. Without a configured model the panel explains that instead
-   of failing.
+8. With `dsh-better-sidebar`, open the **甘特** tab in a native conversation
+   and click a task to focus it. Ask the conversation model to decompose it:
+   the assistant tools read the focused chain (`gantt_context`) and write the
+   children (`gantt_decompose`) or a task update (`gantt_update_task`) directly
+   into the tree. The full `/gantt` page has no in-page AI panel.
 
 ## Data source
 
@@ -169,7 +173,7 @@ axis changes.
 
 ## JSON API
 
-All seventeen routes are mounted on the harness's existing authenticated `/api` channel.
+All eighteen routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
@@ -177,6 +181,8 @@ status.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief` |
+| `GET` | `/api/gantt/focus` | The task a conversation is focused on (`?sessionId=`) |
+| `POST` | `/api/gantt/focus/set` | Focus one task for a conversation, or clear it |
 | `GET` | `/api/gantt/meta` | Database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | Create a task (including the tracker metadata fields) |
 | `POST` | `/api/gantt/task/update` | Update any writable task fields |
@@ -192,15 +198,17 @@ status.
 | `POST` | `/api/gantt/plan/import` | Import the task-tracker markdown into the unified tree |
 | `GET` | `/api/gantt/brief` | The daily 该动 report for a date, cached when stored |
 | `POST` | `/api/gantt/brief/compute` | Recompute and persist the daily report |
-| `POST` | `/api/gantt/chat` | Chat with the optional model about a decomposition (proposes, never applies) |
+
 
 A terminal `curl` needs the page's session cookie — open the tokenized URL
 printed by `dsh web` once, then copy the `Cookie` request header from an
 authenticated request in DevTools. Treat that cookie as a credential.
 
-The chat route answers `503` when the host has no model service. Full
-request/response examples, field tables, proposal rules, and error codes:
-[docs/api.md](docs/api.md).
+The plugin does not call an LLM itself: a native conversation model reads and
+writes tasks through the host assistant tools (`gantt_context`,
+`gantt_decompose`, `gantt_update_task`) described in [docs/api.md](docs/api.md).
+Full request/response examples, field tables, focus, tool parameters, and error
+codes: [docs/api.md](docs/api.md).
 
 ## Verification
 
@@ -227,16 +235,17 @@ pnpm run check     # the full gate, run by the push hook: static + coverage + e2
 - The page renders as a React component in the `main` slot; it does not serve an
   iframe or append a second application to `document.body`.
 - The pane is the shell's center column, so its width follows the sidebar's
-  collapse and drag; the layout folds with container queries (including the AI
-  sidebar at narrow widths), not viewport breakpoints.
+  collapse and drag; the layout folds with container queries (including the
+  right-rail conversation tab at narrow widths), not viewport breakpoints.
 - Styling uses the `--dsw-alias-*` theme tokens, so light and dark themes and
   host theme changes are inherited.
 - All visible copy is registered through the Client locale service in English
   and Chinese.
-- The AI sidebar is optional: the host reads the harness `llm` and
-  `agentDefaultModel` services through `ctx.get`, answers `503` when either is
-  absent, and never sends tool schemas; a proposal is applied by the normal
-  decompose route.
+- The right-rail tab is optional: the client injects the `betterSidebar`
+  service and registers a per-conversation tab; without that plugin the tab is
+  absent and the full page still works. The assistant tools are registered on
+  the optional host `tools` service and write through the store with its normal
+  validation; the plugin itself calls no model.
 - The API is authenticated by the existing `/api` session cookie; it does not
   open a separate listener.
 - The database is local to this DSH home. Multiple DSH processes sharing the same
@@ -249,15 +258,15 @@ one concern per file, and every source file stays under 1000 lines.
 
 | Path | Role |
 | --- | --- |
-| `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, model service seam |
-| `src/host/routes/` | the seventeen `/api/gantt/*` route specs split by resource; `http.js` holds shared plumbing |
+| `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, route and assistant-tool registration |
+| `src/host/routes/` | the eighteen `/api/gantt/*` route specs split by resource (including `focus.js`); `http.js` holds shared plumbing |
 | `src/host/store/` | SQLite schema and migrations, task/tree writes, daily-brief persistence, context document |
 | `src/host/tracker/` | tracker markdown parsers and importer |
-| `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
+| `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown, `chain.js` focus rendering |
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/chat/` | AI chat: prompt/context assembly, stream assembly, proposal parsing |
-| `src/client/` | browser ESM modules: plugin entry, the two pages, brief strip, dialogs, styles |
+| `src/host/tools.js` | assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`) and task-reference resolution |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`), brief strip, dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 
@@ -289,7 +298,7 @@ rules; `pnpm run build` also runs from the `prepare` hook.
 | `pnpm run check` | The full gate, run by the push hook: static + coverage + e2e in parallel, with a cached stamp |
 
 Coverage is 100% per-file for `src/host/**` and `src/shared/**`, with a
-documented floor (99/98/99/99) for `src/client/**`. The five host facades are
+documented floor (99/98/99/99) for `src/client/**`. The four host facades are
 pure re-export modules, so the report prints them as `0/0` (no statements) while
 the thresholds still pass.
 Commits only run the static check; `.husky/pre-push` runs the full gate before
@@ -307,7 +316,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
-- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, AI decompose sidebar, links, context export
+- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, native-conversation assistant tools, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
 - [AGENTS.md](AGENTS.md) — engineering policy (priorities, tests, file size, gate)
 

@@ -49,7 +49,7 @@ describe('unified tree rendering', () => {
     expect(track.getAttribute('data-kind')).toBe('track')
     expect(track.getAttribute('data-task-id')).toBe('t1')
     expect(chipTexts(track)).toEqual(['赚钱', '进行'])
-    expect(qa(track, '.gantt-row-action').map(button => button.getAttribute('data-action'))).toEqual(['ai'])
+    expect(qa(track, '.gantt-row-action')).toHaveLength(0)
 
     const leafTrack = row(view.container, '2 生活系统')
     expect(chipTexts(leafTrack)).toEqual(['生活', '卡住'])
@@ -81,7 +81,7 @@ describe('unified tree rendering', () => {
     expect(chips[7].getAttribute('title')).toBe('Links: file:invest/data.md')
 
     expect(qa(node, '.gantt-row-action').map(button => button.getAttribute('data-action')))
-      .toEqual(['ai', 'decompose', 'schedule'])
+      .toEqual(['decompose', 'schedule'])
     expect(q(node, '.gantt-row-action[data-action="decompose"]').getAttribute('title'))
       .toBe('Decompose into subtasks')
     expect(qa(view.container, '.gantt-bar').length).toBeGreaterThan(0)

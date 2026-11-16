@@ -52,11 +52,13 @@ export function useLocale(ctx) {
 }
 
 /** Load the task tree snapshot, keeping the last payload on refresh failure. */
-export function useGanttData() {
+export function useGanttData(options = {}) {
+  const enabled = options.enabled !== false
   const [state, setState] = useState({ status: 'loading', data: null, error: null })
   const [revision, setRevision] = useState(0)
   const refresh = useCallback(() => setRevision(value => value + 1), [])
   useEffect(() => {
+    if (!enabled) return undefined
     const controller = new AbortController()
     let active = true
     setState(previous => ({
@@ -80,7 +82,7 @@ export function useGanttData() {
       active = false
       controller.abort()
     }
-  }, [revision])
+  }, [revision, enabled])
   return { ...state, refresh }
 }
 

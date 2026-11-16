@@ -46,21 +46,23 @@ script because the DSH client loader fetches a single artifact per package.
 
 | Path | Half | Role |
 | --- | --- | --- |
-| `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, optional model service seam |
-| `src/host/routes/` | host | The seventeen `/api/gantt/*` route specs split by resource; `http.js` is shared plumbing |
+| `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, route/tool registration |
+| `src/host/routes/` | host | The eighteen `/api/gantt/*` route specs split by resource (including `focus.js`); `http.js` is shared plumbing |
+| `src/host/routes/focus.js` | host | `GET /focus` and `POST /focus/set`: per-conversation task focus |
 | `src/host/store/` | host | SQLite schema/migrations, task/tree writes, brief persistence, context document, 08:00 scheduler |
 | `src/host/tracker/` | host | Task-tracker markdown parsers and importer |
 | `src/host/tree/` | host | Pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
+| `src/host/tree/chain.js` | host | Focus-chain rendering for the assistant tools (track root → focus, task detail) |
 | `src/host/clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/chat/` | host | AI chat: prompt/context assembly, stream assembly, proposal parsing |
-| `src/client/` | client | Plugin entry, the two pages, brief strip, dialogs, and stylesheet modules (ESM) |
+| `src/host/tools.js` | host | Assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`) and their task-reference resolution |
+| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab, brief strip, dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
 
-The five `src/host/` facades (`store.js`, `tree.js`, `tracker.js`, `daily.js`,
-`chat.js`) only re-export, so tests and the entry keep a stable import surface
-while the implementation stays split by concern.
+The four `src/host/` facades (`store.js`, `tree.js`, `tracker.js`, `daily.js`)
+only re-export, so tests and the entry keep a stable import surface while the
+implementation stays split by concern.
 
 ### Build
 
@@ -116,7 +118,7 @@ again in CI before a release is published.
 Coverage policy:
 
 - `src/host/**` and `src/shared/**`: **100%** statements, branches, functions,
-  lines, enforced per file. The five re-export facades count as `0/0`
+  lines, enforced per file. The four re-export facades count as `0/0`
   statements in the report, so they print as `0%` rows while the threshold run
   still passes.
 - `src/client/**`: ratcheted floor per file — 99% statements, 98% branches, 99%
@@ -140,10 +142,11 @@ Recorded decisions:
   override would silently shift every date and the scheduler, so every branch
   (including the invalid-override fallback) is pinned by
   `tests/store/clock.spec.js`.
-- **2026-11-15 — `daily.js` and `chat.js` added at 100%.** The daily-brief
-  engine decides which task goes into which window and the chat module parses
-  model output into a tree mutation; both are pure (or stream-shaped) and a
-  partial branch would silently mis-plan a day or accept a malformed proposal.
+- **2026-11-15 — `daily.js` added at 100%.** The daily-brief engine decides
+  which task goes into which window; a partial branch would silently mis-plan a
+  day. The later `tools.js` / `tree/chain.js` split keeps the same per-file 100%
+  floor: the assistant tools write tasks, so their reference resolution and
+  error mapping are covered like routes.
 - **2026-11-15 — `client.js` line cap raised 2300 → 2700.** The Today page is a
   second registered `main` page in the same single-file artifact (the artifact
   cannot be split, see `docs/compatibility.md` §3.1); the addition is additive
@@ -155,13 +158,13 @@ Recorded decisions:
   the file becoming a bundle.
 - **2026-11-15 — `client.js` line cap raised 3600 → 4800.** The daily-brief
   strip (three aligned blocks, lanes grid, window cards), the three
-  perspectives with path pruning, and the right-hand AI sidebar add a second
-  feature layer to the same single classic script. The artifact still cannot be
-  split (see `docs/compatibility.md` §3.1), so the ratchet moves with the
-  features. Revisit before a fourth raise: the right answer is a bundled single
-  artifact (bundler output into `client.js`, so the entry metadata still
-  changes) or moving one surface (the Today page or the AI sidebar) out of the
-  page, not an ever-growing monolith.
+  perspectives with path pruning, and the right-hand AI surface (now the
+  conversation tab) add a second feature layer to the same single classic
+  script. The artifact still cannot be split (see `docs/compatibility.md` §3.1),
+  so the ratchet moves with the features. Revisit before a fourth raise: the
+  right answer is a bundled single artifact (bundler output into `client.js`, so
+  the entry metadata still changes) or moving one surface (the Today page or the
+  conversation tab) out of the page, not an ever-growing monolith.
 - **2026-11-15 — the file-size rule wins over the single-file client; the
   ratchet cap is retired.** Root modules were 348–996 lines and the client
   artifact 4140, which made every small change read a whole file. The plugin now
@@ -178,19 +181,21 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration (v1/v2→v4 with the one-time tree backfill, v3→v4 without re-materializing snapshots, idempotent), tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
-| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, and `src/host/chat/`: all seventeen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, `decompose`/`schedule`/`context`, the day/plan routes, chat request validation, model streaming assembly, proposal parsing, and the 400/502/503 mapping |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration and the additive `focus` table, conversation focus persistence/cascade, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all eighteen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, `decompose`/`schedule`/`context`, the day/plan routes, assistant tool definitions/reference resolution/execution, per-session context, and registration no-op without a tools service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the AI sidebar (focus, send, proposal, apply, no-model banner), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, chat answering `503` without a model, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
-| `tests/helpers/` | — | Shared fixtures, a fake host context for the `host` project, and a fake `llm` stream (`tests/helpers/llm.js`) for chat tests |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, loading/error/empty), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
+| `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
-New in the daily-brief / AI-sidebar / clock round: `tests/store/clock.spec.js`,
-`tests/store/daily-brief.spec.js`, and `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
-`tests/host/routes-chat.spec.js`, and `tests/host/chat.spec.js`,
-`tests/e2e/brief.spec.js`, and `tests/client/chat.spec.js`; the existing tree,
-page, today, and fixtures specs gained the brief strip, perspective, and
-Today-section cases.
+New in the native-conversation round: `tests/store/focus.spec.js`,
+`tests/host/routes-focus.spec.js`, `tests/host/chain.spec.js`, and
+`tests/host/tools.spec.js`, plus `tests/client/panel.spec.js`; the e2e chat
+`503` case became a focus HTTP round trip, and the old `chat.spec.js` files and
+the fake `llm` helper were removed. Earlier daily-brief / clock tests
+(`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
+`tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
+`tests/e2e/brief.spec.js`) remain.
 
 `tests/client/setup.js` boots jsdom and resets the document between specs; the
 harness imports the plugin from `src/client/index.js` directly. The client
@@ -267,7 +272,11 @@ Each row also carries the tracker metadata (`state`, `lane`, `dep`, `done_when`,
 the import's upsert key. `tracks` and `nodes` stay as import snapshots;
 `plan_blocks` and `day_plans` remain the time grid. Schema version 4 adds
 `daily_briefs` (`plan_date` primary key, `generated_at`, `source`, `report`
-JSON), the persisted daily 该动 snapshots. The rationale is in
+JSON), the persisted daily 该动 snapshots, plus `focus` (`session_id` primary
+key, `task_id` foreign key with `ON DELETE CASCADE`, `updated_at`) for the
+right-rail tab and assistant tools. The `focus` table is created by the base
+schema's `CREATE TABLE IF NOT EXISTS` without a schema-version bump, survives
+host restarts, and is cleared when its task is deleted. The rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
@@ -350,7 +359,10 @@ The package is private, so it is always installed from a directory: the GUI
 `plugin_manager install_bundle { target: "/absolute/path/to/dsh-gantt" }`, the
 CLI `dsh plugin --profile web add /absolute/path/to/dsh-gantt`, or the scripted
 deploy. All three record a pnpm `link:` dependency plus the bundle selection
-that makes the plugin part of the profile — nothing is copied.
+that makes the plugin part of the profile — nothing is copied. The right-rail
+conversation tab additionally needs `dsh-better-sidebar` in the same profile; the
+full pages and API work without it, and the assistant tools need the host
+`tools` service.
 
 | Command | Effect |
 | --- | --- |
@@ -427,15 +439,21 @@ curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/context"
 curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/brief"
 curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   http://127.0.0.1:3080/api/gantt/brief/compute -d '{}'
-# AI chat (a host without a model service must answer 503, not 500):
+# Conversation focus (the right-rail tab writes this; the assistant tools read it):
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/focus?sessionId=demo"
 curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
-  http://127.0.0.1:3080/api/gantt/chat -d '{"message":"拆解这个任务"}'
+  http://127.0.0.1:3080/api/gantt/focus/set \
+  -d '{"sessionId":"demo","taskId":"<task-id>"}'
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/focus?sessionId=demo"
+curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
+  http://127.0.0.1:3080/api/gantt/focus/set \
+  -d '{"sessionId":"demo","taskId":null}'
 ```
 
 Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
 `DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
 returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
-schemaVersion:4, kinds:[…], linkTypes:[…], endpoints:[…17 routes…]}`; `seed`
+schemaVersion:4, kinds:[…], linkTypes:[…], endpoints:[…18 routes…]}`; `seed`
 on an empty database inserts 13 demo tasks and returns
 `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry
@@ -448,10 +466,13 @@ with id `task|<task-id>|<date>`, and repeating the same call returns the same
 block id instead of a duplicate; `context` returns markdown with `chars`,
 `truncated`, `counts`, and a `## 今日窗口` section; `brief` returns the report
 with `cached` and the report's `slots`/`items`/`tracks`, and
-`brief/compute` returns the same shape with `source: 'manual'`; `chat` returns
-`503 {"ok":false,"error":"model unavailable"}` on a host without a model (a
-500 there means the optional-seam handling is broken). An invalid JSON body
-returns HTTP 400 with `{"ok":false,"error":"request body must be valid JSON"}`.
+`brief/compute` returns the same shape with `source: 'manual'`; the focus GET
+returns `{ok:true,taskId:null}` before the set, the set returns the canonical
+task id, a second GET returns it, and clearing returns `taskId:null`. The
+assistant tools are not HTTP routes: they are verified through a native
+conversation in the manual checklist below, and by `tests/host/tools.spec.js`.
+An invalid JSON body returns HTTP 400 with
+`{"ok":false,"error":"request body must be valid JSON"}`.
 
 Remove the disposable home when done: `rm -rf /tmp/dsh-gantt-verify`.
 
@@ -463,7 +484,10 @@ In the connected DSH Web GUI, use `cordis_inspect_query` → Client
 - `root: "sidebar.panellist"` shows the `gantt` and `today` entries.
 - `root: "main"` shows the pages registered under keys `gantt` and `today`.
 
-Registration proves composition, not rendering.
+Registration proves composition, not rendering. The right-rail conversation tab
+is a `dsh-better-sidebar` extension rather than a `main`/`sidebar.panellist`
+slot, so it does not appear in `Slots.listSubTree`; check it in the conversation
+sidebar itself.
 
 ### Manual GUI checklist
 
@@ -530,14 +554,19 @@ Open the page in the connected Web GUI and check:
       row per window (time, role, track, task, or 未填), generated-at and
       source, and **重新计算** recomputes and refreshes; an empty report shows
       the muted hint plus the button.
-- [ ] The **AI 拆解** header button opens the right sidebar below the
-      full-width 周视图/月视图 stats row, so that second row is never narrowed
-      or shifted while the panel is open; a row's ✦ action focuses that task
-      and opens it. With a model, sending a decomposition
-      request renders the reply and a proposal card, **应用拆解** calls
-      decompose and refreshes; without a model the panel shows the no-model
-      banner instead of breaking. Enter sends, Shift+Enter inserts a newline,
-      and the panel becomes a full-width overlay at narrow widths.
+- [ ] With `dsh-better-sidebar` installed, the conversation sidebar shows a
+      **甘特** tab. It renders the compact tree with refs, status dots, and kind
+      labels; clicking a row focuses it (chip + highlight), **clear** removes
+      the focus, **refresh** reloads, an empty tree shows its hint, and the tab
+      pauses refresh while it is not visible.
+- [ ] In a native conversation with that focus set, ask the model to decompose
+      the task: it calls `gantt_context` (the focused chain), then
+      `gantt_decompose`, and the new children appear in the tree without any
+      propose/apply card. `gantt_update_task` changes a task's status/progress/
+      title/`doneWhen` the same way.
+- [ ] Without `dsh-better-sidebar`, the full `/gantt` page still works and has
+      no AI button or in-page chat panel; without a host tools service, the
+      conversation simply has no assistant tools.
 - [ ] **Import plan** on the Today page reports success (or a readable error),
       and a fully planned day shows no integrity warnings while a day missing
       its evening slot or an evening inspiration id does.
@@ -600,13 +629,24 @@ running. An empty
 window list usually means an `unknown` day kind with no plan blocks — import the
 day plan or classify the day. See `docs/compatibility.md` §5 for the full list.
 
-### The AI sidebar says no model
+### The right-rail 甘特 tab is missing
 
-`POST /api/gantt/chat` answers `503 model unavailable` when the host exposes no
-`llm` service or no `agentDefaultModel` selection; the panel shows the no-model
-copy and nothing is broken. Configure a model in the harness (or use a host that
-provides one) and reopen the panel. A `502` is an upstream model failure or the
-60-second timeout, not a plugin state problem.
+The tab is registered through the optional `dsh-better-sidebar` client service
+(`ctx.inject(['betterSidebar'], …)`). If that plugin is not installed/enabled,
+the injection never resolves and no tab appears — the full `/gantt` page and
+every API route still work. Enable/install the sidebar plugin, reload the page,
+and confirm the tab in the conversation sidebar (it is not a
+`main`/`sidebar.panellist` slot, so it is not in `Slots.listSubTree`).
+
+### Assistant tools do nothing
+
+The tools are registered on the optional host `tools` service; without it,
+`registerTools` is a no-op. They are global tools, but they act on the calling
+conversation's focus: set a task in the right-rail tab (or via
+`POST /api/gantt/focus/set`) first. Tool errors keep the `GanttError` status
+(`400` validation, `404` unknown task) and are returned to the model; the plugin
+never calls an LLM itself, so a model that is unavailable or lacks tool access is
+a harness-side concern, not a plugin failure.
 
 ### Concurrent coverage runs collide on `./coverage`
 

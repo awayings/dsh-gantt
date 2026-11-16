@@ -46,6 +46,7 @@ const CREATE_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_plan_blocks_date ON plan_blocks(plan_date, sort_order, start_time);
   CREATE TABLE IF NOT EXISTS day_plans (plan_date TEXT PRIMARY KEY, weekday TEXT NOT NULL DEFAULT '', day_kind TEXT NOT NULL DEFAULT '', market_open INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', core_goal TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS daily_briefs (plan_date TEXT PRIMARY KEY, generated_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'auto', report TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS focus (session_id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, updated_at TEXT NOT NULL);
 `
 
 /**

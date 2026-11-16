@@ -91,5 +91,6 @@ export const ROUTES = {
   context: '/api/gantt/context',
   brief: '/api/gantt/brief',
   briefCompute: '/api/gantt/brief/compute',
-  chat: '/api/gantt/chat',
+  focus: '/api/gantt/focus',
+  focusSet: '/api/gantt/focus/set',
 }

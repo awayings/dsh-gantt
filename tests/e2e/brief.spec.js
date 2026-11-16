@@ -1,6 +1,4 @@
 // End-to-end: the daily 该动 report over real HTTP and a real SQLite file.
-// The chat route has no model service in this harness, so it must answer 503
-// rather than crash when the seam is absent.
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -76,9 +74,12 @@ describe('daily brief end-to-end', () => {
     expect(day.payload.brief).toMatchObject({ date: '2026-11-15' })
   })
 
-  it('answers 503 for chat when the host has no model service', async () => {
-    const result = await request('/api/gantt/chat', { message: '拆解' })
-    expect(result.status).toBe(503)
-    expect(result.payload).toEqual({ ok: false, error: 'model unavailable' })
+  it('round-trips the conversation focus over HTTP', async () => {
+    const created = await request('/api/gantt/tasks', { title: 'Data table' })
+    const set = await request('/api/gantt/focus/set', { sessionId: 'session-e2e', taskId: created.payload.task.id })
+    expect(set.status).toBe(200)
+    expect(set.payload).toEqual({ ok: true, taskId: created.payload.task.id })
+    const read = await request('/api/gantt/focus?sessionId=session-e2e')
+    expect(read.payload).toEqual({ ok: true, taskId: created.payload.task.id })
   })
 })

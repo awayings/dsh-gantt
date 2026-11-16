@@ -1,7 +1,7 @@
 // Route plumbing shared by every resource module: the JSON response shape, the
 // buffered body parser, the id guard, and the error mapping.
 
-import { ChatError, GanttError } from '../errors.js'
+import { GanttError } from '../errors.js'
 import { todayIso } from '../tree.js'
 
 /** @typedef {import('../store.js').GanttStore} GanttStore */
@@ -26,6 +26,7 @@ import { todayIso } from '../tree.js'
  * @property {{ fetch: { register: (route: GanttRoute) => unknown } }} connection
  * @property {(effect: () => () => void, hint?: string) => unknown} effect
  * @property {(name: string) => unknown} [get]
+ * @property {(deps: string[], callback: (ctx: GanttContext) => unknown) => unknown} [inject]
  */
 
 /**
@@ -33,7 +34,6 @@ import { todayIso } from '../tree.js'
  * @typedef {object} RouteDeps
  * @property {GanttStore} store
  * @property {GanttEndpoint[]} endpoints
- * @property {(name: string) => unknown} service
  */
 
 /**
@@ -99,7 +99,7 @@ export function requestedDate(request) {
 }
 
 /**
- * Register one route, mapping a `GanttError`/`ChatError` status and hiding any
+ * Register one route, mapping a `GanttError` status and hiding any
  * other failure behind a 500.
  * @param {GanttContext} ctx
  * @param {RouteSpec} spec
@@ -115,7 +115,7 @@ export function registerRoute(ctx, spec, deps) {
       try {
         return await spec.fetch(request, deps)
       } catch (error) {
-        const status = error instanceof GanttError || error instanceof ChatError ? error.status : 500
+        const status = error instanceof GanttError ? error.status : 500
         const message = error instanceof Error ? error.message : String(error)
         return json({ ok: false, error: message }, status)
       }

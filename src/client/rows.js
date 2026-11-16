@@ -77,7 +77,6 @@ export function GanttRow({
   onCycleStatus,
   onDecompose,
   onSchedule,
-  onAiDecompose,
 }) {
   const hasChildren = task.hasChildren
   const number = rowNumber(task)
@@ -124,17 +123,6 @@ export function GanttRow({
         onClick: () => onCycleStatus(task),
       }),
       h('div', { className: 'gantt-row-actions' },
-        h('button', {
-          className: 'gantt-row-action',
-          type: 'button',
-          'data-action': 'ai',
-          title: t('actions.ai'),
-          'aria-label': t('actions.ai'),
-          onClick: (event) => {
-            event.stopPropagation()
-            onAiDecompose(task)
-          },
-        }, '✦'),
         isTrack ? null : h('button', {
           className: 'gantt-row-action',
           type: 'button',

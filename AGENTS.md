@@ -5,27 +5,25 @@ by a local SQLite database and an authenticated JSON API.
 
 ## Shape
 
-- Layout mirrors the reference plugin: `src/host/` (runs in the `dsh web`
-  process), `src/client/` (browser modules), `src/shared/` (plain data used by
-  both halves). One concern per file; every source file stays under 1000 lines.
-- Host entry `src/host/index.js` owns the store lifecycle, the 08:00 scheduler,
-  and the `ctx.get` model seam; `routes/` holds the seventeen `/api/gantt/*`
-  route specs split by resource (plumbing in `http.js`); `store/` owns SQLite
-  and brief persistence; `tracker/` parses and imports the tracker markdown;
-  `tree/` holds pure tree/brief/context helpers; `clock.js` resolves task-day
-  dates; `daily/` builds the daily 该动 report; `chat/` assembles the model
-  prompt and parses proposals. The `store.js`/`tree.js`/`tracker.js`/`daily.js`/
-  `chat.js` facades keep the public surface stable for tests.
-- Client: `src/client/` ESM modules (plugin entry, two pages, brief strip,
-  dialogs, styles) bundled by `scripts/build-client.mjs` (rolldown) into the
-  gitignored `lib/client.js` — one classic script registered through
-  `window.__ModuleLoader__.load`, with React supplied by the factory `require`.
-  DSH derives the artifact revision from `exports["./client"]` metadata only, so
-  the artifact stays one file; rebuild after client edits, never commit `lib/`.
+- Host `src/host/` (plain ESM in the `dsh web` process): `index.js` owns the
+  store lifecycle, the 08:00 scheduler, and route/tool registration; `routes/`
+  holds eighteen route specs incl. `focus.js` (plumbing in `http.js`); `store/`
+  owns SQLite and brief persistence; `tracker/` parses the tracker markdown;
+  `tree/` holds pure tree/brief/context/chain helpers; `clock.js` resolves
+  task-day dates; `daily/` builds the daily report; `tools.js` declares the
+  assistant tools. Four facades keep the public surface stable for tests.
+- Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
+  right-rail `panel` tab, brief strip, dialogs, styles) bundled by
+  `scripts/build-client.mjs` (rolldown) into gitignored `lib/client.js` — one
+  classic script registered through `window.__ModuleLoader__.load`, React from
+  the factory `require`. DSH derives the artifact revision from
+  `exports["./client"]` metadata only; rebuild after client edits, never commit
+  `lib/`. One concern per file, every source file under 1000 lines.
 - One working tree: imported tracks/nodes, manual tasks, and decomposed tasks
-  all live in `tasks`; `tracks`/`nodes` are import snapshots only. `daily_briefs`
-  stores the derived daily report as a morning snapshot, refreshed by recompute
-  or the 08:00 run. Details in `docs/personal-task-system.md`.
+  live in `tasks`; `tracks`/`nodes` are import snapshots only. `daily_briefs` is
+  a morning snapshot refreshed by recompute or the 08:00 run; `focus` stores one
+  task per conversation for the right-rail tab and assistant tools. Details in
+  `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`) before deciding
   anything; never guess a seam. `docs/compatibility.md` owns the supported set.
@@ -35,11 +33,10 @@ by a local SQLite database and an authenticated JSON API.
 No pull requests: work commits straight to `main`, gated by two local hooks.
 
 - `pre-commit` → `pnpm run static` (lint + typecheck, ~3 s).
-- `pre-push` → `pnpm run check`: static + unit coverage thresholds + e2e in
-  parallel (~25 s cold; the e2e gate rebuilds `lib/client.js` first). A green
-  run is cached in `.tmp/check.stamp` for 60 min and skipped while the tree is
-  unchanged; the push is refused unless the stamp matches the pushed tree, so
-  commit or stash first. `--full` forces a run.
+- `pre-push` → `pnpm run check`: static + unit coverage + e2e in parallel
+  (~25 s cold; the e2e gate rebuilds `lib/client.js` first). A green run is
+  cached in `.tmp/check.stamp` for 60 min; the push is refused unless the stamp
+  matches the pushed tree, so commit or stash first. `--full` forces a run.
 - Never `--no-verify`, never push a red or uncommitted tree, no history rewrites.
 - Coverage floors live in `vitest.config.ts` and ratchet up: 100% per file for
   `src/host/**` and `src/shared/**`; 99/98/99/99 per file for `src/client/**`.
@@ -56,13 +53,13 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   frontier/next, and context markdown are derived at read time, never stored.
   Parent rollups are a cache: a parent that loses its last child keeps its last
   rolled-up values (known limitation in `docs/compatibility.md`). The daily
-  report is a snapshot, not live state; the model only proposes, and no tool
-  schemas are sent. Dates and the 08:00 recompute resolve in the task-day zone
+  report is a snapshot, not live state; a native conversation's assistant tools
+  write through the store, where validation is the guard, and the plugin never
+  calls an LLM. Dates and the 08:00 recompute resolve in the task-day zone
   (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host time zone.
 - Multi-row writes use one `BEGIN IMMEDIATE` transaction; validate before
-  mutating (dates, status vocabulary, progress bounds, parent existence,
-  cycles). The client refetches after every write and shows an error banner
-  instead of stale data.
+  mutating (dates, status, progress, parent existence, cycles). The client
+  refetches after every write and shows an error banner, never stale data.
 - Smallest change that fully solves it; reuse existing helpers; no abstraction
   with a single caller, no unused option; delete dead code and old tests.
 - All source and test files < 1000 lines; split by concern when a file grows.
@@ -76,12 +73,11 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   platform constraints (e.g. the artifact revision rule), never line narration.
 - Temp files only in `.tmp` (gitignored); delete them after use.
 - No leaks on either side; no unbounded polling or duplicate refreshes.
-- Layout: the pane is the shell's center column, so its width varies — use
-  container queries, not viewport breakpoints. Fold, never crush; verify desktop
-  → ~390 px, both locales, light and dark, a long tree.
-- Zero runtime dependencies (Node built-ins + loader-provided React). Dev
-  tooling is pinned and locked (rolldown builds the browser half); update one
-  concern at a time.
+- Layout: the pane is the shell's center column; use container queries, not
+  viewport breakpoints. Fold, never crush; verify desktop → ~390 px, both
+  locales and themes, a long tree.
+- Zero runtime dependencies (Node built-ins + loader-provided React); dev
+  tooling is pinned and locked (rolldown builds the browser half).
 - Conventional Commits, English, imperative subject, one concern per commit.
 - Release: `pnpm run release X.Y.Z --push` (validates a clean, synced `main` and
   its version, runs the full gate, tags, pushes, waits for the workflow).
@@ -96,10 +92,8 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   override with `DSH_GANTT_DB`; task-day zone `DSH_GANTT_TZ` (default
   `Asia/Shanghai`).
 - Install a checkout: `pnpm run deploy` (builds, links, checks composition;
-  `--check`, `--uninstall`), or the GUI
-  `plugin_manager install_bundle { target: "/abs/path" }`; restart `dsh web` for
-  host-side changes, rebuild + reload for client changes. The install is a link,
-  so an edit needs no reinstall.
+  `--check`, `--uninstall`), or GUI `plugin_manager install_bundle`; restart
+  `dsh web` for host changes, rebuild + reload for client changes.
 - `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
   manual checklist, acceptance pass, API — in `docs/development.md`,
   `docs/api.md`, `docs/compatibility.md`.

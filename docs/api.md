@@ -14,9 +14,10 @@ origin allowlist is involved.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
 - The schema is version 4: one working tree in `tasks` (track roots, imported
-  nodes, decomposed and manual tasks) plus the persisted daily brief report. The
-  domain model is in [personal-task-system.md](personal-task-system.md); the
-  migration in [compatibility.md](compatibility.md).
+  nodes, decomposed and manual tasks), the persisted daily brief report, and
+  per-conversation `focus` rows. The domain model is in
+  [personal-task-system.md](personal-task-system.md); the migration in
+  [compatibility.md](compatibility.md).
 
 Base URL: the origin printed by your own `dsh web` launch, for example
 `http://127.0.0.1:3080`.
@@ -26,6 +27,8 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | Method | Path | Body / Query | Success |
 | --- | --- | --- | --- |
 | `GET` | `/api/gantt/tree` | — | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats |
+| `GET` | `/api/gantt/focus` | `?sessionId=<id>` | `200 { ok, taskId }` |
+| `POST` | `/api/gantt/focus/set` | `{ sessionId, taskId? }` | `200 { ok, taskId }` |
 | `GET` | `/api/gantt/meta` | — | `200` database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `201` created task |
 | `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `200` updated task |
@@ -41,12 +44,11 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `POST` | `/api/gantt/plan/import` | `{ dir?, year? }` | `200 { ok, dir, imported }` |
 | `GET` | `/api/gantt/brief` | `?date=YYYY-MM-DD` | `200 { ok, today, date, brief, cached }` |
 | `POST` | `/api/gantt/brief/compute` | `{ date? }` | `200 { ok, today, date, brief, cached: false }` |
-| `POST` | `/api/gantt/chat` | `{ message, taskId?, history? }` | `200 { ok, reply, proposal, model }` |
 
-Seventeen routes are registered. Routes that read a body require a JSON
-object; any other JSON value is rejected with `400`. `GET` routes and `seed` do
-not read a body. The chat route is the only route that calls an upstream model;
-it answers `503` when the host has no model service.
+Eighteen routes are registered. Routes that read a body require a JSON object;
+any other JSON value is rejected with `400`. `GET` routes and `seed` do not read
+a body. The focus routes and the assistant tools share one per-conversation
+focus; the plugin itself never calls a model.
 
 ## Conventions
 
@@ -345,6 +347,47 @@ stores it (replacing any earlier report for that date), marks it
 the next 08:00 in the task-day zone. An invalid date or malformed body is a
 `400`.
 
+## Focus one task
+
+The right-hand **甘特** tab of the native conversation sidebar keeps one focused
+task per conversation. The focus is persisted in SQLite and is what the host
+assistant tools read, so a conversation can act on the task the user clicked.
+
+### Read the focus
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/focus?sessionId=<session-id>'
+```
+
+```json
+{ "ok": true, "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11" }
+```
+
+`taskId` is `null` when the conversation has no focused task. `sessionId` is
+required (1–200 characters, trimmed); a missing or blank value is a `400`
+(`sessionId is required`), and an over-long one is a `400`.
+
+### Set or clear the focus
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/focus/set \
+  -H 'content-type: application/json' \
+  -d '{ "sessionId": "<session-id>", "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11" }'
+```
+
+```json
+{ "ok": true, "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11" }
+```
+
+- `sessionId` is required; the body must be a JSON object.
+- `taskId` sets (or replaces) the focus and returns the canonical task id. A
+  missing, `null`, or `''` `taskId` clears it and returns `taskId: null`.
+- An unknown task id is a `404` (`task <id> was not found`); the focus row is
+  stored with a foreign key and is deleted automatically when its task is
+  deleted.
+- Focus is per conversation, survives a host restart (it lives in the
+  `focus` table), and does not affect other conversations.
+
 ## Read metadata
 
 ```sh
@@ -368,7 +411,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own seventeen-entry route catalog (abbreviated above);
+`endpoints` is the host's own eighteen-entry route catalog (abbreviated above);
 `taskCount` counts every row of the unified tree.
 
 ## Create a task
@@ -859,99 +902,80 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
   `MM/DD` day headings when the file's window note does not settle it.
 - A missing or unreadable directory is a `400`.
 
-## Chat about a decomposition
+## Assistant tools
 
-`POST /api/gantt/chat` sends one turn to the host's configured model to discuss
-and plan a decomposition. The route is optional infrastructure: when the host
-has no model service it answers `503` instead of failing the plugin. No tool
-schemas are sent to the model — it returns prose and, when it proposes a
-decomposition, exactly one fenced JSON block that the route validates.
+The host registers three tools on the DSH **tools service** so a native
+conversation can read the task tree and write task changes directly. The plugin
+does not call an LLM itself: the model is the normal DSH conversation, the tool
+schemas are the ones below, and every write goes through the store's validation
+and transaction path. If the host has no tools service, registration is a no-op
+and the rest of the plugin keeps working.
 
-```sh
-curl -s -X POST http://127.0.0.1:3080/api/gantt/chat \
-  -H 'content-type: application/json' \
-  -d '{
-    "message": "把 1.8.1 拆成今天能做的两步",
-    "taskId": "<task-id>",
-    "history": [
-      { "role": "user", "content": "先看看这周还差什么" },
-      { "role": "assistant", "content": "还差读数和收口。" }
-    ]
-  }'
-```
+Every tool resolves a task reference the same way: the internal task id, the
+external `ref` (`node:1.8.1`, `track:1`), or the rendered dotted number
+(`1.1.1`). An unusable reference is a `400` (`id is required`); an id that
+matches nothing is a `404` (`task <id> was not found`). Tool failures keep the
+`GanttError` status (`400` validation, `404` missing task) and are surfaced to
+the model by the harness; they are not HTTP responses.
 
-Request fields:
+### `gantt_context`
 
-| Field | Required | Meaning |
+Read the task context for the calling conversation.
+
+| | |
+| --- | --- |
+| Parameters | none |
+| Returns | `{ ok: true, markdown: string }` |
+
+The conversation id comes from the tool execution context, not from an
+argument. When the conversation has a focused task the markdown contains the
+chain from the track root to that task (kind, status, `doneWhen` per row), the
+task's dotted id, internal id, title, depth (and whether the 4-level cap has
+been reached), its status and `doneWhen`, and its direct children. With no
+focus, the tool falls back to the whole-tree context document, capped at 6000
+characters.
+
+### `gantt_decompose`
+
+Create child tasks under one task.
+
+| Parameter | Required | Meaning |
 | --- | --- | --- |
-| `message` | yes | 1–2000 characters |
-| `taskId` | no | Focused task id; must exist in the tree when present |
-| `history` | no | At most 8 prior turns; each turn has `role` `user` or `assistant` and `content` of at most 2000 characters |
+| `id` | yes | Parent task: internal id, `ref`, or dotted number |
+| `planDate` | no | `YYYY-MM-DD`; only a default for the children's start/end dates |
+| `children` | yes | 1–100 child objects |
+| `children[].title` | yes | 1–200 characters |
+| `children[].doneWhen` | yes | Verifiable completion standard |
+| `children[].estimate`, `category`, `landing`, `inspiration` | no | Optional metadata strings |
+| `children[].status` | no | `todo` (default), `in_progress`, `blocked`, or `done` |
 
-Unknown request fields are ignored. The host builds the model request from:
-today's date, the daily 该动 windows, and — when `taskId` is set — the focused
-task's chain from its track root down to the task itself (ref, title, kind,
-status, and each `doneWhen`), plus the focused task's ref, title, depth,
-`doneWhen`, and direct children. Without a `taskId` the truncated tree context
-markdown (9000 characters) is the fallback. The system prompt states the Hermes
-decomposition discipline (4-level cap including the track root, a verifiable
-`doneWhen` per child, ≤30-minute A-class steps or a B-class definition task,
-siblings parallel with at most one `dep`, no invented tasks). The call uses
-`maxTokens: 8000` and a 60-second timeout; only `text-delta` stream chunks are
-joined into the reply, and a thinking model that spends the whole budget on
-reasoning is retried once with `reasoningEffort: "off"`. An empty reply is a
-`502`, never an empty chat bubble.
+Returns `{ ok: true, message: string }` listing the created children with their
+dotted ids and `doneWhen`. The store enforces the same rules as
+`POST /api/gantt/task/decompose`: the 4-level cap, at most 100 children, valid
+dates/status, and one atomic transaction.
 
-`200 OK`:
+### `gantt_update_task`
 
-```json
-{
-  "ok": true,
-  "reply": "可以拆成两步：先列读数口径，再跑一遍收口。",
-  "proposal": {
-    "planDate": "2026-11-16",
-    "children": [
-      {
-        "title": "列出读数口径",
-        "doneWhen": "口径表能直接贴进日报",
-        "estimate": "30min",
-        "plan": { "date": "2026-11-16", "startTime": "21:00", "endTime": "21:30", "slot": "evening" }
-      },
-      { "title": "跑一遍收口", "doneWhen": "表里没有待填格" }
-    ]
-  },
-  "model": { "provider": "deepseek-official", "model": "fast" }
-}
-```
+Update one task's fields.
 
-`proposal` is `null` when the model did not return a valid fenced proposal.
-When it does, the block is removed from `reply` and validated:
-
-- the last fenced ` ```json ` block wins;
-- `children` has 1–8 entries; each `title` and `doneWhen` is required, 1–200
-  characters; `landing`, `estimate`, `category`, and `inspiration` are optional
-  strings of at most 200 characters; `startDate`/`endDate` are valid dates when
-  present; `plan` is `null` or an object whose `date` is a valid date, whose
-  optional `startTime`/`endTime` are `HH:MM`, and whose optional `slot` is
-  `morning`, `daytime`, `evening`, or `other` (derived from `startTime` when
-  omitted); `planDate` is a valid date or `null`;
-- unknown fields are stripped; an invalid proposal becomes `proposal: null` and
-  the reply is kept;
-- when the focused task is already at the 4-level cap, the proposal is dropped
-  and a Chinese note is appended to the reply — the route still answers `200`.
-
-The route does not persist the conversation; the client sends the last eight
-turns back as `history`. Applying a proposal is a client action that calls the
-existing `POST /api/gantt/task/decompose` route with the proposal's `children`
-and `planDate`.
-
-Chat errors:
-
-| Status | Cause | Example `error` |
+| Parameter | Required | Meaning |
 | --- | --- | --- |
-| `400` | invalid message/history/taskId/context | `message is required`, `history must be an array`, `task <id> was not found` |
-| `502` | model request failed, timed out, or was aborted | `model request failed`, `model request timed out` |
-| `503` | no model service or no default model selection | `model unavailable` |
+| `id` | yes | Task: internal id, `ref`, or dotted number |
+| `status` | no | New status vocabulary value |
+| `progress` | no | 0–100 |
+| `title` | no | New title |
+| `doneWhen` | no | New completion standard |
+
+Returns `{ ok: true, message: string }` with the updated task's ref/number,
+title, status label, and progress. At least one of `status`/`progress`/`title`/
+`doneWhen` is required (`400 nothing to update`); an unknown task is a `404`.
+Status/progress follow the same pairing rules as the HTTP update route.
+
+The tools are registered globally on the host, but the context they read is
+per conversation: the focus row keyed by the conversation id is what
+`gantt_context` resolves, and it is what the right-rail tab writes when a row is
+clicked. Writes do not trigger an approval prompt: they are ordinary store
+calls over SQLite, not shell or filesystem work.
 
 ## Errors
 
@@ -970,12 +994,10 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |
 | `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |
-| `400` | invalid chat input | `message is required`, `message must be at most 2000 characters`, `history must be an array`, `task <id> was not found` |
+| `400` | invalid focus input | `sessionId is required`, `sessionId must be at most 200 characters` |
 | `404` | unknown task id | `task <id> was not found` |
 | `404` | unknown plan block id | `plan block <id> was not found` |
 | `409` | duplicate `(kind, ref)` | `task with kind node and ref node:1.8.1 already exists` |
-| `502` | model request failed, timed out, or was aborted | `model request failed`, `model request timed out` |
-| `503` | no model service or default model selection | `model unavailable` |
 | `500` | unexpected host failure | the thrown error's message |
 
 A wrong method or an unknown path is left to the harness's `/api` dispatch (it
