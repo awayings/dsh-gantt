@@ -199,6 +199,24 @@ export const CSS_WORKBENCH = `
     border-radius: 7px;
     background: var(--gantt-surface);
   }
+  .gantt-workbench-prompt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .gantt-workbench-prompt-label { font-size: 10.5px; color: var(--gantt-muted); }
+  .gantt-workbench-prompt-input {
+    width: 100%;
+    min-height: 54px;
+    max-height: 180px;
+    resize: vertical;
+    padding: 6px 7px;
+    border: 1px solid var(--gantt-line);
+    border-radius: 7px;
+    background: var(--gantt-surface);
+    color: var(--gantt-text);
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+  .gantt-workbench-prompt-input:focus-visible { outline: 2px solid color-mix(in srgb, var(--gantt-accent) 65%, transparent); outline-offset: 1px; }
+  .gantt-workbench-prompt-input::placeholder { color: var(--gantt-muted); }
   .gantt-workbench-chat-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .gantt-workbench-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .gantt-workbench-item {

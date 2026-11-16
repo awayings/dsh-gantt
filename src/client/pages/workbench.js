@@ -2,8 +2,9 @@
 // trajectory, plus the host skills and the conversation's subagent team. In
 // work mode a task click focuses the task and reveals this tab instead of
 // navigating away, so the panel also hosts the execute/decompose entry points
-// that create the conversation, queue the starting prompt, and open it in a new
-// browser window. Data is read
+// that create the conversation, queue the starting prompt (with the user's
+// optional instructions), and open it in a new browser window. A Send entry
+// delivers the editor text alone. Data is read
 // through the authenticated JSON API plus the client session snapshots; the
 // component never polls and never throws into render, so a failing endpoint is
 // a panel-level message instead of a crashed sidebar.
@@ -31,6 +32,13 @@ const NO_TRAJECTORY = { events: [], error: null }
 
 function failureMessage(failure) {
   return failure instanceof Error ? failure.message : String(failure)
+}
+
+/** Compose the fixed starting prompt with the user's optional instructions. A
+ * blank editor contributes nothing, so the base prompt stays byte-identical to
+ * the pre-editor behavior and tests keep their stable expectation. */
+function composePrompt(base, extra) {
+  return extra === '' ? base : `${base}\n\n${extra}`
 }
 
 /** Localized wall-clock time for an ISO timestamp or epoch milliseconds. */
@@ -136,8 +144,12 @@ function trajectoryList(trajectory, t, locale, openSession) {
   ))
 }
 
-/** Full task view: the bound conversation (or its execute entry) and trajectory. */
-function taskPanel({ work, trajectory, action, locale, t, statuses, openSession, onExecute, onDecompose, onOpenWindow }) {
+/** Full task view: the bound conversation (or its execute entry), the editable
+ * prompt, and the trajectory. */
+function taskPanel({
+  work, trajectory, action, locale, t, statuses, prompt, openSession,
+  onPromptChange, onExecute, onDecompose, onSend, onOpenWindow,
+}) {
   if (work.task === null) {
     return section('task', h('p', { className: 'gantt-workbench-empty' }, t('workbench.focusNone')))
   }
@@ -176,6 +188,15 @@ function taskPanel({ work, trajectory, action, locale, t, statuses, openSession,
     }, action.busy && action.kind === 'decompose'
       ? t('workbench.task.decomposing')
       : t('workbench.task.decompose')),
+    h('button', {
+      className: 'gantt-workbench-btn',
+      type: 'button',
+      'data-action': 'send',
+      disabled: action.busy || prompt.trim() === '',
+      onClick: onSend,
+    }, action.busy && action.kind === 'send'
+      ? t('workbench.task.sending')
+      : t('workbench.task.send')),
     work.sessionId === null
       ? null
       : h(React.Fragment, null,
@@ -205,6 +226,17 @@ function taskPanel({ work, trajectory, action, locale, t, statuses, openSession,
         ? h('p', { className: 'gantt-workbench-error', role: 'status' },
           `${t(action.stage === 'prompt' ? 'workbench.task.promptError' : 'work.error')} ${action.error}`)
         : null,
+      h('label', { className: 'gantt-workbench-prompt' },
+        h('span', { className: 'gantt-workbench-prompt-label' }, t('workbench.task.promptLabel')),
+        h('textarea', {
+          className: 'gantt-workbench-prompt-input',
+          'data-field': 'prompt',
+          rows: 3,
+          value: prompt,
+          placeholder: t('workbench.task.promptPlaceholder'),
+          onChange: event => onPromptChange(event.target.value),
+        }),
+      ),
       h('div', { className: 'gantt-workbench-chat-actions' }, buttons),
     ),
     h('section', { className: 'gantt-workbench-conversation', 'data-block': 'trajectory' },
@@ -304,6 +336,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
   const followFocus = targetTaskId === null ? focusRevision : 0
   const [tab, setTab] = useState('task')
   const [revision, setRevision] = useState(0)
+  const [prompt, setPrompt] = useState('')
   const [state, setState] = useState({ status: 'loading', work: null, panels: null, error: null })
   const [action, setAction] = useState({ busy: false, error: null, kind: null, stage: 'conversation' })
   const mounted = useRef(true)
@@ -350,14 +383,15 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
     : null
   /**
    * Start one task turn: reuse or create the bound conversation, queue the
-   * localized prompt through the session scope, then hand the conversation to
+   * composed prompt through the session scope, then hand the conversation to
    * a new window so the running turn is visible. The prompt reaches the Host
-   * before navigation, so a blocked popup still starts the work.
-   * @param {'execute' | 'decompose'} kind
-   * @param {string} promptKey
+   * before navigation, so a blocked popup still starts the work. A successful
+   * turn clears the optional editor; a failed one keeps the user's text.
+   * @param {'execute' | 'decompose' | 'send'} kind
+   * @param {string} text
    * @returns {Promise<void>}
    */
-  const runPrompt = async (kind, promptKey) => {
+  const runPrompt = async (kind, text) => {
     const work = state.work
     if (work?.task === null || work?.task === undefined) return
     const win = openSessionWindow()
@@ -367,7 +401,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
       const bound = typeof work.sessionId === 'string' && work.sessionId !== '' ? work.sessionId : null
       const target = bound ?? (await openWorkTask(ctx, work.task, { open: false })).sessionId
       stage = 'prompt'
-      await sendWorkPrompt(ctx, target, t(promptKey))
+      await sendWorkPrompt(ctx, target, text)
       stage = 'open'
       if (!sendSessionToWindow(win, target)) {
         if (win) win.close()
@@ -375,6 +409,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
         openSession(target)
       }
       if (!mounted.current) return
+      setPrompt('')
       setAction({ busy: false, error: null, kind: null, stage: 'conversation' })
       refresh()
     } catch (failure) {
@@ -382,8 +417,10 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
       if (mounted.current) setAction({ busy: false, error: failureMessage(failure), kind: null, stage })
     }
   }
-  const execute = () => runPrompt('execute', 'workbench.prompt.execute')
-  const decompose = () => runPrompt('decompose', 'workbench.prompt.decompose')
+  const extra = prompt.trim()
+  const execute = () => runPrompt('execute', composePrompt(t('workbench.prompt.execute'), extra))
+  const decompose = () => runPrompt('decompose', composePrompt(t('workbench.prompt.decompose'), extra))
+  const send = () => (extra === '' ? undefined : runPrompt('send', extra))
   const openInWindow = () => {
     const work = state.work
     const win = openSessionWindow()
@@ -461,9 +498,12 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
           locale,
           t,
           statuses,
+          prompt,
           openSession,
+          onPromptChange: setPrompt,
           onExecute: execute,
           onDecompose: decompose,
+          onSend: send,
           onOpenWindow: openInWindow,
         })
         : tab === 'skills'
