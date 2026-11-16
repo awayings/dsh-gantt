@@ -1,6 +1,31 @@
 /** Timeline header, rows, task cells, bars and grid lines. */
 export const CSS_GRID = `
-  .gantt-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+  .gantt-body { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relative; }
+  .gantt-main { flex: 1 1 auto; min-width: 0; overflow: auto; position: relative; }
+  .gantt-task-panel {
+    flex: 0 0 clamp(320px, 34%, 420px);
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--gantt-line-strong);
+    background: var(--gantt-surface);
+  }
+  .gantt-task-panel > * { flex: 1 1 auto; min-height: 0; }
+  @container (max-width: 900px) {
+    .gantt-task-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(420px, 100%);
+      z-index: 30;
+      box-shadow: -12px 0 28px color-mix(in srgb, #000 18%, transparent);
+    }
+  }
+  @container (max-width: 520px) {
+    .gantt-task-panel { width: 100%; border-left: 0; }
+  }
   .gantt-grid { position: relative; min-width: max-content; }
   .gantt-header {
     position: sticky;

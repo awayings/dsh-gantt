@@ -19,11 +19,12 @@ sidebar:
   decompositions straight into the tree. Every tool write records the DSH
   session and turn in a task trajectory that the tab, the tools, and
   `GET /api/gantt/trajectory` can read back. **Work mode** turns a row click
-  into a focused workbench: the **工作台** tab in the right rail opens with the
-  task's work conversation and trajectory, and a task without a conversation
-  shows **执行**, which creates it in the work workspace and opens it in a new
-  browser window (one conversation per task, reused afterwards); waiting tasks
-  carry a warning badge. Each round is required to close with
+  into a workbench interaction without leaving the page: the **工作台** panel
+  opens beside the tree with the task's work conversation and trajectory. A task
+  without a conversation shows **执行**, which creates it in the work workspace
+  and opens that same conversation in a new browser window (one conversation per
+  task, reused afterwards); waiting tasks carry a warning badge. The workbench
+  is also registered as a tab in the native right rail. Each round is required to close with
   `gantt_track` / `gantt_update_task` / `gantt_decompose` /
   `gantt_create_task` so the trajectory stays exact.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
@@ -288,7 +289,7 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
-| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, `workbench`), work-mode navigation, brief strip, dialogs, styles |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), brief strip, dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 

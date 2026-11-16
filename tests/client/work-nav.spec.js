@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeSessionId,
+  canExecuteWorkTask,
   canOpenWorkTask,
   loadWork,
   noteWorkFocus,
@@ -76,6 +77,12 @@ describe('workServices', () => {
       uiWorkspace: { openSession: () => {} },
     }))).toBe(true)
   })
+
+  it('reports the execute/panel availability from the session service alone', () => {
+    expect(canExecuteWorkTask(undefined)).toBe(false)
+    expect(canExecuteWorkTask(fakeCtx({ uiWorkspace: { openSession: () => {} } }))).toBe(false)
+    expect(canExecuteWorkTask(fakeCtx({ sessions: { create: async () => 's1' } }))).toBe(true)
+  })
 })
 
 describe('activeSessionId', () => {
@@ -84,11 +91,27 @@ describe('activeSessionId', () => {
     expect(activeSessionId(fakeCtx({ betterSidebar }))).toBe('session-main')
   })
 
-  it('returns null without a usable sidebar snapshot', () => {
+  it('falls back to the ui-session main binding when the sidebar is closed', () => {
+    const uiSession = { adapter: { current: { value: { key: 'session-main' } } } }
+    expect(activeSessionId(fakeCtx({ uiSession }))).toBe('session-main')
+    const current = { current: { value: { key: 'session-current' } } }
+    expect(activeSessionId(fakeCtx({ uiSession: current }))).toBe('session-current')
+  })
+
+  it('prefers the sidebar snapshot over the ui-session binding', () => {
+    const betterSidebar = { getSnapshot: () => ({ sessionId: 'session-sidebar' }) }
+    const uiSession = { adapter: { current: { value: { key: 'session-main' } } } }
+    expect(activeSessionId(fakeCtx({ betterSidebar, uiSession }))).toBe('session-sidebar')
+  })
+
+  it('returns null without a usable sidebar snapshot or main binding', () => {
     expect(activeSessionId(undefined)).toBeNull()
     expect(activeSessionId(fakeCtx({ betterSidebar: { getSnapshot: () => ({}) } }))).toBeNull()
     expect(activeSessionId(fakeCtx({ betterSidebar: { getSnapshot: () => ({ sessionId: '' }) } }))).toBeNull()
     expect(activeSessionId(fakeCtx({ betterSidebar: {} }))).toBeNull()
+    expect(activeSessionId(fakeCtx({ uiSession: {} }))).toBeNull()
+    expect(activeSessionId(fakeCtx({ uiSession: { adapter: { current: { value: {} } } } }))).toBeNull()
+    expect(activeSessionId(fakeCtx({ uiSession: { adapter: { current: { value: { key: '' } } } } }))).toBeNull()
   })
 })
 

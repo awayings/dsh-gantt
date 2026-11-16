@@ -219,7 +219,7 @@ export const DICT_EN = {
   'panel.action.track': 'Tracked',
   'panel.turn': 'Turn {n}',
   'actions.workMode': 'Work mode',
-  'actions.workModeHint': 'Click a task to open its dedicated work conversation.',
+  'actions.workModeHint': 'Click a task to show its work panel without leaving this page.',
   'work.notice.opened': 'Opened the work conversation.',
   'work.notice.created': 'Created the work conversation.',
   'work.error': 'Could not open the work conversation.',

@@ -219,7 +219,7 @@ export const DICT_ZH = {
   'panel.action.track': '已关联',
   'panel.turn': '轮次 {n}',
   'actions.workMode': '工作模式',
-  'actions.workModeHint': '点击任务打开它的专属工作对话。',
+  'actions.workModeHint': '点击任务在页面内打开工作面板，不离开当前页。',
   'work.notice.opened': '已打开专属工作对话。',
   'work.notice.created': '已创建专属工作对话。',
   'work.error': '无法打开专属工作对话。',

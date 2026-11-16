@@ -187,7 +187,7 @@ Recorded decisions:
 | `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v7 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-three routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and reveals the workbench without navigating, sidebar fallback, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench tab (task view with conversation and trajectory, execute entry that opens a new window, skills and agent-team states, live status states), the cross-window handoff and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute entry that opens a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, catalog-aware resume) and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 7, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
@@ -208,7 +208,10 @@ and prompt-context cases (`task_events` migration, tool session/turn recording,
 replaces the stale v5 schema spec. The workbench-interaction round adds
 `tests/client/session-window.spec.js` and `tests/client/session-status.spec.js`,
 extends the page filter and row-activity tests, and pins the `workSessionId`
-field that `/tree` derives from `work_sessions`. Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
+field that `/tree` derives from `work_sessions`. The in-page-panel round moves
+the workbench beside the tree, seeds `dsh.sessions.current` plus a per-window
+handoff before opening a conversation in a new window, and adds the
+ui-session main-binding fallback for the on-screen conversation id. Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
 
@@ -622,15 +625,18 @@ Open the page in the connected Web GUI and check:
       receives the ancestor chain, focus detail, and recent trajectory via the
       `gantt:focus` runtime context.
 - [ ] **工作模式** on the Gantt page: the header toggle stays pressed after a
-      reload; clicking a row no longer opens the edit dialog but opens (or
-      reuses) that task's dedicated main conversation in the work workspace with
-      its focus set, and the workbench tab opens in the right rail; the row's
-      edit button still opens the edit dialog.
-- [ ] The **工作台** right-rail tab shows the focused-task chip and four
-      sub-pages: 轨迹 (task events including `track`), 对话 (the dedicated
-      conversation's title/state plus open/create), 技能 (available host skills
-      or the unavailable hint), 编队 (the conversation's subagents, each
-      openable).
+      reload; clicking a row no longer opens the edit dialog or navigates away —
+      the task opens in the **工作台** panel beside the tree, with its focus set
+      on the on-screen conversation; the panel's close button and turning work
+      mode off both hide it; the row's edit button still opens the edit dialog.
+- [ ] The **工作台** panel (also available as a right-rail tab) shows the task
+      chip and three sub-pages: 任务 (the dedicated conversation's title/state
+      plus open/create/new-window and the task trajectory including `track`),
+      技能 (available host skills or the unavailable hint), 编队 (the
+      conversation's subagents, each openable).
+- [ ] **新窗口** on a bound task opens the same conversation, not the
+      previously selected one; **执行** on an unbound task creates the dedicated
+      conversation and opens it in a new window the same way.
 - [ ] In a work conversation a round that changes no task still ends with
       `gantt_track`; a round that opens a sibling ends with
       `gantt_create_task`, and the new sibling sits immediately after the
@@ -714,10 +720,12 @@ and confirm the tab in the conversation sidebar (it is not a
 
 ### The workbench tab or work mode is missing or disabled
 
-Work mode needs the client session services (`ctx.get('sessions')`,
-`ctx.get('uiWorkspace')`); without them the Gantt page toggle renders disabled
-and rows keep opening the edit dialog. The workbench tab needs
-`dsh-better-sidebar` exactly like the 甘特 tab. A dedicated conversation is
+Work mode needs the client session service (`ctx.get('sessions')`), plus
+`uiWorkspace` for "open in place"; without the session service the Gantt page
+toggle renders disabled and rows keep opening the edit dialog. The in-page panel
+uses the `uiSession` main binding when the right rail is closed, so it does not
+depend on `dsh-better-sidebar`; the right-rail **工作台** tab does, exactly like
+the 甘特 tab. A dedicated conversation is
 created in `DSH_GANTT_WORK_CWD` (default `/data/home/ws-plugin`); when that path
 is not a registered Workspace the session is created by `cwd` instead. The
 技能/编队 sub-pages degrade to explicit hints when the host has no

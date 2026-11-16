@@ -258,16 +258,28 @@ function section(name, content) {
 }
 
 /**
- * Workbench body for the conversation sidebar: the focused task's dedicated
- * conversation, its trajectory, the available skills, and the subagent team.
- * @param {{ ctx: any, scope?: { sessionId?: string }, visible?: boolean }} props
+ * Workbench body for the conversation sidebar and the Gantt page's task panel:
+ * one task's dedicated conversation, its trajectory, the available skills, and
+ * the subagent team. Without a `taskId` the panel follows the conversation's
+ * focused task; the in-page panel pins the task the user just activated.
+ * @param {{
+ *   ctx: any,
+ *   scope?: { sessionId?: string },
+ *   visible?: boolean,
+ *   taskId?: string | null,
+ *   onClose?: (() => void) | null,
+ * }} props
  * @returns {any} the rendered workbench element
  */
-export function GanttWorkbench({ ctx, scope, visible = true }) {
+export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onClose = null }) {
   const { locale, t } = useLocale(ctx)
   const sessionId = scope?.sessionId ?? ''
+  const targetTaskId = typeof taskId === 'string' && taskId !== '' ? taskId : null
   const statuses = useSessionStatuses(ctx)
   const focusRevision = useSyncExternalStore(subscribeWorkFocus, workFocusRevisionSnapshot, workFocusRevisionSnapshot)
+  // A pinned task panel always shows the task the user activated; only the
+  // conversation sidebar's workbench follows the focus revision.
+  const followFocus = targetTaskId === null ? focusRevision : 0
   const [tab, setTab] = useState('task')
   const [revision, setRevision] = useState(0)
   const [state, setState] = useState({ status: 'loading', work: null, panels: null, error: null })
@@ -284,7 +296,7 @@ export function GanttWorkbench({ ctx, scope, visible = true }) {
     let active = true
     const load = async () => {
       try {
-        const work = await loadWork({ sessionId })
+        const work = await loadWork(targetTaskId === null ? { sessionId } : { taskId: targetTaskId })
         if (!active) return
         const [trajectory, skills, team] = await Promise.all([
           work.task === null ? NO_TRAJECTORY : fetchTrajectory(work.task.id),
@@ -301,7 +313,7 @@ export function GanttWorkbench({ ctx, scope, visible = true }) {
     return () => {
       active = false
     }
-  }, [sessionId, revision, visible, focusRevision])
+  }, [sessionId, targetTaskId, revision, visible, followFocus])
 
   useEffect(() => {
     if (!visible) return undefined
@@ -359,6 +371,16 @@ export function GanttWorkbench({ ctx, scope, visible = true }) {
       'aria-label': t('actions.refresh'),
       onClick: refresh,
     }, '⟳'),
+    onClose === null
+      ? null
+      : h('button', {
+        className: 'gantt-workbench-btn',
+        type: 'button',
+        'data-action': 'close-panel',
+        title: t('actions.close'),
+        'aria-label': t('actions.close'),
+        onClick: onClose,
+      }, '×'),
   )
 
   const tabs = h('nav', { className: 'gantt-workbench-tabs', role: 'tablist' },

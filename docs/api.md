@@ -459,12 +459,15 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
 ## Work mode
 
 Work mode turns a task-row click into a workbench interaction instead of
-navigation: the row focuses that task in the current conversation and reveals
-the right-rail **Workbench** tab, which shows the task's dedicated main
-conversation and its trajectory side by side. A task without a conversation
-shows an **Execute** button that creates the dedicated conversation and opens it
-in a new browser window; an existing conversation can be opened in place or in a
-new window. The **Active** view filter keeps only tasks whose dedicated
+navigation: the row focuses that task in the current conversation and opens the
+in-page **Workbench** panel beside the tree (the same body is registered as a
+right-rail tab), showing the task's dedicated main conversation and its
+trajectory side by side. A task without a conversation shows an **Execute**
+button that creates the dedicated conversation and opens it in a new browser
+window; an existing conversation can be opened in place or in a new window. The
+new window restores that exact conversation: the opener seeds the workspace
+selection key and a short-lived `window.name`/localStorage handoff, so the window
+does not come up on the previously selected conversation. The **Active** view filter keeps only tasks whose dedicated
 conversation is running or waiting for a user choice, and those waiting rows
 carry a visual warning badge.
 

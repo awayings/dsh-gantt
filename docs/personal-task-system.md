@@ -501,12 +501,14 @@ results straight into the tree.
 - **Work mode.** A task owns one dedicated main conversation (a real DSH
   session, never a subagent) recorded in the `work_sessions` table. The Gantt
   page's work-mode toggle turns a row click into a workbench interaction: the
-  row focuses that task in the conversation that owns the sidebar and reveals
-  the right-rail **Workbench** tab, which shows the bound conversation and the
-  task trajectory without leaving the Gantt page. A task without a conversation
-  offers **Execute**, which creates the conversation and opens it in a new
-  browser window (falling back to the current window when the browser blocks the
-  popup); an existing conversation can be opened in place or in a new window.
+  row focuses that task in the on-screen conversation and opens the **Workbench**
+  panel beside the tree, which shows the bound conversation and the task
+  trajectory without leaving the Gantt page. The same workbench is available as
+  a right-rail tab. A task without a conversation offers **Execute**, which
+  creates the conversation and opens it in a new browser window (falling back to
+  the current window when the browser blocks the popup); the new window selects
+  that conversation directly instead of restoring the previous one. An existing
+  conversation can be opened in place or in a new window.
   The **Active** view filter keeps tasks whose bound conversation is running or
   waiting for a user choice, and waiting tasks carry a warning badge. `GET
   api/gantt/work` reports the task, its bound conversation, and the work

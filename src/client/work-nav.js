@@ -67,14 +67,36 @@ export function canOpenWorkTask(ctx) {
 }
 
 /**
- * The Session on screen, whose right sidebar hosts the workbench tab.
+ * Whether this host can create and bind a task's work conversation. Opening
+ * that conversation needs `uiWorkspace`, but the in-page panel and its execute
+ * button only need the session service.
+ * @param {any} ctx
+ * @returns {boolean}
+ */
+export function canExecuteWorkTask(ctx) {
+  return workServices(ctx).sessions !== null
+}
+
+/** A non-empty string service field, or null. @param {unknown} value @returns {string | null} */
+function idOf(value) {
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
+/**
+ * The Session on screen: the conversation whose sidebar hosts the workbench
+ * tab. The better-sidebar snapshot names it while that panel is mounted; the
+ * ui-session main binding names it even when the right sidebar is closed.
  * @param {any} ctx
  * @returns {string | null}
  */
 export function activeSessionId(ctx) {
-  const snapshot = workServices(ctx).betterSidebar?.getSnapshot?.()
-  const sessionId = snapshot?.sessionId
-  return typeof sessionId === 'string' && sessionId !== '' ? sessionId : null
+  const services = workServices(ctx)
+  const fromSidebar = idOf(services.betterSidebar?.getSnapshot?.()?.sessionId)
+  if (fromSidebar !== null) return fromSidebar
+  const get = name => (typeof ctx?.get === 'function' ? ctx.get(name) : undefined)
+  const uiSession = get('uiSession')
+  const binding = uiSession?.adapter?.current?.value ?? uiSession?.current?.value
+  return idOf(binding?.key)
 }
 
 /**

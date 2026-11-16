@@ -202,7 +202,13 @@ function renderWorkbench(options = {}) {
     ? buildCtx({ services, locale: options.locale, ...(options.ctxOptions ?? {}) })
     : options.ctx
   const scope = options.scope === undefined ? { sessionId: options.sessionId ?? 's1' } : options.scope
-  const props = { ctx, scope, visible: options.visible ?? true }
+  const props = {
+    ctx,
+    scope,
+    visible: options.visible ?? true,
+    ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
+    ...(options.onClose === undefined ? {} : { onClose: options.onClose }),
+  }
   const view = mount(createElement(GanttWorkbench, props))
   return { view, ctx, services, props }
 }
@@ -333,6 +339,24 @@ describe('task view', () => {
 
     click(rowElements(view.container)[2].querySelector('.gantt-workbench-row-session'))
     expect(services.opened).toEqual(['session-work'])
+  })
+
+  it('pins a task for the in-page panel and closes through its button', async () => {
+    const { calls } = installFetch(defaultRoutes())
+    let closed = 0
+    const { view } = renderWorkbench({ taskId: 'task-1', onClose: () => { closed += 1 } })
+    await flush()
+
+    expect(calls.map(call => call.path)).toEqual([
+      `${WORK}?taskId=task-1`,
+      `${TRAJECTORY}?taskId=task-1&limit=20`,
+      SKILLS,
+      `${TEAM}?sessionId=session-work`,
+    ])
+    expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
+
+    click(q(view.container, '[data-action="close-panel"]'))
+    expect(closed).toBe(1)
   })
 })
 

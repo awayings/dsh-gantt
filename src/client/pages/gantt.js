@@ -14,8 +14,9 @@ import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
 import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, taskPath, visibleRows } from '../view.js'
-import { activeSessionId, canOpenWorkTask, noteWorkFocus, openWorkTask, openWorkbenchTab, workServices } from '../work-nav.js'
+import { activeSessionId, canExecuteWorkTask, noteWorkFocus } from '../work-nav.js'
 import { taskActivity, useSessionStatuses } from '../session-status.js'
+import { GanttWorkbench } from './workbench.js'
 import { h } from '../dom.js'
 
 const WORK_MODE_KEY = 'gantt.workMode'
@@ -52,9 +53,10 @@ function writeWorkMode(on) {
 export function GanttPage({ ctx }) {
   const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData()
-  const workAvailable = canOpenWorkTask(ctx)
+  const workAvailable = canExecuteWorkTask(ctx)
   const [workMode, setWorkMode] = useState(readWorkMode)
   const workOn = workMode && workAvailable
+  const [panelTaskId, setPanelTaskId] = useState(null)
   const [scale, setScale] = useState('week')
   const [anchor, setAnchor] = useState(() => todayIso())
   const [collapsed, setCollapsed] = useState(() => new Set())
@@ -157,6 +159,9 @@ export function GanttPage({ ctx }) {
     if (status === 'ready' && selectedId && !byId.has(selectedId)) setSelectedId(null)
   }, [status, selectedId, byId])
   useEffect(() => {
+    if (status === 'ready' && panelTaskId !== null && !byId.has(panelTaskId)) setPanelTaskId(null)
+  }, [status, panelTaskId, byId])
+  useEffect(() => {
     if (!dialog) return
     if ((dialog.type === 'edit' || dialog.type === 'split' || dialog.type === 'decompose' || dialog.type === 'schedule')
       && dialog.id && !byId.has(dialog.id)) {
@@ -254,34 +259,23 @@ export function GanttPage({ ctx }) {
     const next = !workMode
     writeWorkMode(next)
     setWorkMode(next)
+    if (!next) setPanelTaskId(null)
   }, [workMode])
-  const openWork = useCallback(async (task) => {
+  // Work-mode activation stays on the Gantt page: the task opens in the
+  // in-page panel and the conversation on screen just follows its focus.
+  const openWork = useCallback((task) => {
     setSelectedId(task.id)
-    const services = workServices(ctx)
+    setFocusId(task.id)
+    setPanelTaskId(task.id)
     const sessionId = activeSessionId(ctx)
-    // Without a right sidebar there is nowhere to show the task, so keep the
-    // old direct-open behavior as the fallback.
-    if (services.betterSidebar === null || sessionId === null) {
-      try {
-        const { created } = await openWorkTask(ctx, task)
-        setToast({ text: created ? t('work.notice.created') : t('work.notice.opened'), kind: 'ok' })
-      } catch (failure) {
-        const message = failure instanceof Error ? failure.message : String(failure)
-        setToast({ text: `${t('work.error')} ${message}`, kind: 'error' })
-      }
-      return
-    }
-    try {
-      await requestJson('api/gantt/focus/set', {
-        method: 'POST',
-        body: JSON.stringify({ sessionId, taskId: task.id }),
-      })
-      noteWorkFocus()
-      openWorkbenchTab(services.betterSidebar, sessionId)
-    } catch (failure) {
+    if (sessionId === null) return
+    requestJson('api/gantt/focus/set', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, taskId: task.id }),
+    }).then(() => noteWorkFocus(), (failure) => {
       const message = failure instanceof Error ? failure.message : String(failure)
       setToast({ text: `${t('work.error')} ${message}`, kind: 'error' })
-    }
+    })
   }, [ctx, t])
   const shift = useCallback((direction) => {
     setAnchor(current => (scale === 'week'
@@ -371,6 +365,7 @@ export function GanttPage({ ctx }) {
       onClose: () => setDialog(null),
     })
   }
+  const panelId = workOn && panelTaskId !== null && byId.has(panelTaskId) ? panelTaskId : null
   const content = tasks.length === 0
     ? h('div', { className: 'gantt-empty-wrap' },
       h('div', { className: 'gantt-empty' },
@@ -388,34 +383,46 @@ export function GanttPage({ ctx }) {
         h('div', { className: 'gantt-empty-title' }, t(`filter.empty.${filter}`)),
         h('p', { className: 'gantt-hint' }, t(`filter.hint.${filter}`)),
       )
-      : h('div', { className: 'gantt-body' },
-        h('div', {
-          className: 'gantt-grid',
-          style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
-        },
-        h(TimelineHeader, { timeline, t, locale, taskCount: visibleTaskCount }),
-        h('div', { className: 'gantt-rows' },
-          h(GridLines, { timeline }),
-          rows.map(({ task, depth }) => h(GanttRow, {
-            key: task.id,
-            task,
-            depth,
-            timeline,
-            selected: task.id === selectedId,
-            collapsed: collapsed.has(task.id),
-            t,
-            work: workOn,
-            activity: activityByTask.get(task.id) ?? null,
-            onSelect: workOn ? openWork : openEdit,
-            onEdit: openEdit,
-            onToggle: toggleCollapse,
-            onAddChild: openCreate,
-            onCycleStatus: cycleStatus,
-            onDecompose: openDecompose,
-            onSchedule: openSchedule,
-          })),
+      : h('div', { className: 'gantt-body', 'data-panel': panelId === null ? undefined : 'work' },
+        h('div', { className: 'gantt-main' },
+          h('div', {
+            className: 'gantt-grid',
+            style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
+          },
+          h(TimelineHeader, { timeline, t, locale, taskCount: visibleTaskCount }),
+          h('div', { className: 'gantt-rows' },
+            h(GridLines, { timeline }),
+            rows.map(({ task, depth }) => h(GanttRow, {
+              key: task.id,
+              task,
+              depth,
+              timeline,
+              selected: task.id === selectedId,
+              collapsed: collapsed.has(task.id),
+              t,
+              work: workOn,
+              activity: activityByTask.get(task.id) ?? null,
+              onSelect: workOn ? openWork : openEdit,
+              onEdit: openEdit,
+              onToggle: toggleCollapse,
+              onAddChild: openCreate,
+              onCycleStatus: cycleStatus,
+              onDecompose: openDecompose,
+              onSchedule: openSchedule,
+            })),
+          ),
+          ),
         ),
-        ),
+        panelId === null
+          ? null
+          : h('aside', { className: 'gantt-task-panel', 'data-panel': 'work-task' },
+            h(GanttWorkbench, {
+              ctx,
+              taskId: panelId,
+              scope: { sessionId: activeSessionId(ctx) ?? '' },
+              onClose: () => setPanelTaskId(null),
+            }),
+          ),
       )
   return shell(h(React.Fragment, null,
     h('header', { className: 'gantt-head' },

@@ -1,7 +1,7 @@
 // Work mode on the Gantt page: a persisted header toggle that turns a task
 // activation (row, task bar, Enter/Space) from "open the edit dialog" into
-// "open the task's dedicated work conversation", while an explicit row action
-// keeps editing reachable.
+// "show the task in the in-page work panel", while an explicit row action keeps
+// editing reachable. The panel never navigates the Gantt page away.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import {
@@ -25,33 +25,88 @@ import { treePayload } from './fixtures.js'
 const TREE = 'api/gantt/tree'
 const WORK = 'api/gantt/work'
 const WORK_SESSION = 'api/gantt/work/session'
+const SKILLS = 'api/gantt/work/skills'
+const TEAM = 'api/gantt/work/team'
+const TRAJECTORY = 'api/gantt/trajectory'
 const FOCUS = 'api/gantt/focus/set'
 const STORAGE_KEY = 'gantt.workMode'
 const WORK_CWD = '/data/home/ws-plugin'
+const EMPTY_STATUSES = new Map()
+
+const TASK = {
+  id: 'c1',
+  number: '1.1',
+  ref: '1.1',
+  title: 'Ship work mode',
+  status: 'done',
+  progress: 100,
+  doneWhen: 'green gates',
+}
+
+const WORK_PAYLOAD = {
+  ok: true,
+  cwd: WORK_CWD,
+  task: TASK,
+  sessionId: 'session-bound',
+}
+
+const WORK_WITHOUT_SESSION = { ...WORK_PAYLOAD, sessionId: null }
+
+const SESSION_LIST = {
+  ids: ['session-bound'],
+  phase: 'ready',
+  byId: {
+    'session-bound': {
+      id: 'session-bound',
+      displayTitle: 'Ship work mode',
+      running: false,
+      updatedAt: Date.UTC(2026, 10, 16, 6, 30),
+    },
+  },
+}
 
 /** Fake host services work mode needs, recording what the flow did. */
-function workServices(createdId = 'session-created') {
+function workServices(options = {}) {
   const created = []
   const opened = []
-  const sidebar = fakeSidebarService()
+  const sidebar = options.sidebar ?? fakeSidebarService()
   const services = {
     sessions: {
-      create: async (options) => {
-        created.push(options)
-        return createdId
+      create: async (request) => {
+        created.push(request)
+        return 'session-created'
       },
+      list: { getSnapshot: () => SESSION_LIST },
     },
     uiWorkspace: { openSession: (sessionId) => { opened.push(sessionId) } },
     workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: WORK_CWD }] }) } },
     betterSidebar: sidebar,
   }
+  if (options.sidebar !== null) services.betterSidebar = sidebar
+  if (options.mainSession !== null) {
+    services.uiSession = {
+      adapter: { current: { value: { key: options.mainSession ?? 'session-main' } } },
+      sessionStatus: { getSnapshot: () => EMPTY_STATUSES, subscribe: () => () => {} },
+    }
+  }
   return { services, created, opened, sidebar }
+}
+
+function defaultRoutes(overrides = {}) {
+  return {
+    [WORK]: () => jsonResponse(overrides.work ?? WORK_PAYLOAD),
+    [WORK_SESSION]: () => jsonResponse({ ok: true, taskId: 'c1', sessionId: 'session-created' }),
+    [SKILLS]: () => jsonResponse({ ok: true, available: true, skills: [] }),
+    [TEAM]: () => jsonResponse({ ok: true, available: true, agents: [] }),
+    [TRAJECTORY]: () => jsonResponse({ ok: true, events: [] }),
+    ...overrides.routes,
+  }
 }
 
 /** Mount the registered Gantt page; `store` seeds localStorage first. */
 async function renderPage({ routes = {}, services = undefined, store = {} } = {}) {
   for (const [key, value] of Object.entries(store)) localStorage.setItem(key, value)
-  const fetchState = installFetch({ [TREE]: () => jsonResponse(treePayload()), ...routes })
+  const fetchState = installFetch({ [TREE]: () => jsonResponse(treePayload()), ...defaultRoutes({ routes }) })
   const app = setupApp({ services })
   const view = mount(createElement(app.page().component))
   await flush()
@@ -70,6 +125,14 @@ function toast(container) {
   return q(container, '.gantt-toast')
 }
 
+function panel(container) {
+  return q(container, '.gantt-task-panel')
+}
+
+function closePanelButton(container) {
+  return q(container, '.gantt-task-panel button[data-action="close-panel"]')
+}
+
 beforeEach(() => {
   localStorage.clear()
 })
@@ -81,13 +144,13 @@ afterEach(() => {
 })
 
 describe('work-mode toggle', () => {
-  it('renders a disabled toggle when the host exposes no session services', async () => {
+  it('renders a disabled toggle when the host exposes no session service', async () => {
     const { view } = await renderPage({ store: { [STORAGE_KEY]: '1' } })
     const toggle = toggleButton(view.container)
 
     expect(toggle).not.toBeNull()
     expect(toggle.textContent).toBe('Work mode')
-    expect(toggle.getAttribute('title')).toBe('Click a task to open its dedicated work conversation.')
+    expect(toggle.getAttribute('title')).toBe('Click a task to show its work panel without leaving this page.')
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
     expect(toggle.getAttribute('data-active')).toBeNull()
     expect(toggle.disabled).toBe(true)
@@ -95,7 +158,7 @@ describe('work-mode toggle', () => {
     click(row(view.container, '1.1 Write spec'))
     await flush()
     expect(dialog(view.container)).not.toBeNull()
-    expect(editButton(view.container, '1.1 Write spec')).toBeNull()
+    expect(panel(view.container)).toBeNull()
   })
 
   it('persists the switch across a remount and navigates nowhere on toggle', async () => {
@@ -119,48 +182,11 @@ describe('work-mode toggle', () => {
     expect(toggleButton(remounted.container).getAttribute('aria-pressed')).toBe('false')
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
   })
-
-  it('keeps opening the edit dialog while the switch is off', async () => {
-    const { services } = workServices()
-    const { view } = await renderPage({ services })
-
-    click(row(view.container, '1.1 Write spec'))
-    expect(dialog(view.container)).not.toBeNull()
-    expect(text(view.container, '.gantt-dialog-title')).toContain('Edit task')
-    expect(editButton(view.container, '1.1 Write spec')).toBeNull()
-  })
-
-  it('keeps the switch usable when the browser storage throws', async () => {
-    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
-    const { services } = workServices()
-    const { view } = await renderPage({ services })
-
-    expect(toggleButton(view.container).getAttribute('data-active')).toBeNull()
-    click(toggleButton(view.container))
-    expect(toggleButton(view.container).getAttribute('data-active')).toBe('true')
-    expect(getItem).toHaveBeenCalled()
-    expect(setItem).toHaveBeenCalled()
-  })
 })
 
-describe('work-mode sidebar interaction', () => {
-  /** Sidebar-aware host services: clicking a task focuses it instead of navigating. */
-  function sidebarServices() {
-    const opened = []
-    const created = []
-    const sidebar = fakeSidebarService()
-    const services = {
-      sessions: { create: async (options) => { created.push(options); return 'session-created' } },
-      uiWorkspace: { openSession: (sessionId) => { opened.push(sessionId) } },
-      workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: WORK_CWD }] }) } },
-      betterSidebar: { ...sidebar, getSnapshot: () => ({ sessionId: 'session-main' }) },
-    }
-    return { services, opened, created, sidebar }
-  }
-
-  it('focuses the task and reveals the workbench instead of navigating away', async () => {
-    const { services, created, opened, sidebar } = sidebarServices()
+describe('work-mode activation', () => {
+  it('opens the task in the in-page panel and focuses the on-screen conversation', async () => {
+    const { services, opened } = workServices()
     const { view, calls } = await renderPage({
       services,
       store: { [STORAGE_KEY]: '1' },
@@ -172,31 +198,51 @@ describe('work-mode sidebar interaction', () => {
 
     expect(dialog(view.container)).toBeNull()
     expect(row(view.container, '1.1 Write spec').getAttribute('data-selected')).toBe('true')
-    expect(created).toEqual([])
+    expect(panel(view.container)).not.toBeNull()
+    expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
+    expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（bound）')
     expect(opened).toEqual([])
-    expect(sidebar.opens).toEqual([{ seed: { type: 'gantt-work' }, scope: { sessionId: 'session-main' } }])
+    expect(calls.map(call => call.path).sort()).toEqual([
+      TREE,
+      `${WORK}?taskId=c1`,
+      FOCUS,
+      `${TRAJECTORY}?taskId=c1&limit=20`,
+      SKILLS,
+      `${TEAM}?sessionId=session-bound`,
+    ].sort())
     const focusCall = calls.find(call => call.path === FOCUS)
     expect(requestBody(focusCall)).toEqual({ sessionId: 'session-main', taskId: 'c1' })
   })
 
-  it('reports a failed focus write and leaves the sidebar alone', async () => {
-    const { services, sidebar } = sidebarServices()
-    const { view } = await renderPage({
+  it('falls back to the ui-session main binding when the sidebar has no snapshot', async () => {
+    const { services } = workServices({ sidebar: null })
+    const { view, calls } = await renderPage({
       services,
       store: { [STORAGE_KEY]: '1' },
-      routes: { [FOCUS]: () => jsonResponse({ ok: false, error: 'focus write failed' }, 500) },
+      routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
     })
 
     click(row(view.container, '1.1 Write spec'))
     await flush()
 
-    expect(sidebar.opens).toEqual([])
-    expect(text(view.container, '.gantt-toast')).toBe('Could not open the work conversation. focus write failed')
-    expect(toast(view.container).getAttribute('data-error')).toBe('true')
+    expect(panel(view.container)).not.toBeNull()
+    const focusCall = calls.find(call => call.path === FOCUS)
+    expect(requestBody(focusCall)).toEqual({ sessionId: 'session-main', taskId: 'c1' })
   })
 
-  it('treats a task-bar click as the same focus-only interaction', async () => {
-    const { services, sidebar } = sidebarServices()
+  it('still opens the panel when the host exposes no on-screen conversation', async () => {
+    const { services } = workServices({ sidebar: null, mainSession: null })
+    const { view, calls } = await renderPage({ services, store: { [STORAGE_KEY]: '1' } })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+
+    expect(panel(view.container)).not.toBeNull()
+    expect(calls.some(call => call.path === FOCUS)).toBe(false)
+  })
+
+  it('treats a task-bar click and the row keyboard activation as work activation', async () => {
+    const { services } = workServices()
     const { view } = await renderPage({
       services,
       store: { [STORAGE_KEY]: '1' },
@@ -205,81 +251,16 @@ describe('work-mode sidebar interaction', () => {
 
     click(q(row(view.container, '1.1 Write spec'), '.gantt-bar'))
     await flush()
-    expect(sidebar.opens).toHaveLength(1)
-    expect(dialog(view.container)).toBeNull()
-  })
-})
-
-describe('work-mode activation', () => {
-  it('creates, binds, and opens the dedicated conversation on a row click', async () => {
-    const { services, created, opened, sidebar } = workServices('session-created')
-    const { view, calls } = await renderPage({
-      services,
-      store: { [STORAGE_KEY]: '1' },
-      routes: {
-        [WORK]: () => jsonResponse({ ok: true, cwd: WORK_CWD, task: null, sessionId: null }),
-        [WORK_SESSION]: () => jsonResponse({ ok: true, taskId: 'c1', sessionId: 'session-created' }),
-      },
-    })
-
-    click(row(view.container, '1.1 Write spec'))
-    await flush()
-
-    expect(dialog(view.container)).toBeNull()
-    expect(row(view.container, '1.1 Write spec').getAttribute('data-selected')).toBe('true')
-    expect(text(view.container, '.gantt-toast')).toBe('Created the work conversation.')
-    expect(toast(view.container).getAttribute('data-error')).toBeNull()
-    expect(created).toEqual([{ workspaceId: 'ws-1' }])
-    expect(opened).toEqual(['session-created'])
-    expect(sidebar.opens).toEqual([{ seed: { type: 'gantt-work' }, scope: { sessionId: 'session-created' } }])
-    expect(calls.map(call => call.path)).toEqual([TREE, `${WORK}?taskId=c1`, WORK_SESSION])
-    expect(requestBody(calls[2])).toEqual({ taskId: 'c1', sessionId: 'session-created' })
-  })
-
-  it('reuses the bound conversation and refreshes its focus', async () => {
-    const { services, created, opened, sidebar } = workServices()
-    const { view, calls } = await renderPage({
-      services,
-      store: { [STORAGE_KEY]: '1' },
-      routes: {
-        [WORK]: () => jsonResponse({ ok: true, cwd: WORK_CWD, task: null, sessionId: 'session-bound' }),
-        [FOCUS]: () => jsonResponse({ ok: true, taskId: 'c1', sessionId: 'session-bound' }),
-      },
-    })
-
-    click(row(view.container, '1.1 Write spec'))
-    await flush()
-
-    expect(dialog(view.container)).toBeNull()
-    expect(text(view.container, '.gantt-toast')).toBe('Opened the work conversation.')
-    expect(created).toEqual([])
-    expect(opened).toEqual(['session-bound'])
-    expect(sidebar.opens).toEqual([{ seed: { type: 'gantt-work' }, scope: { sessionId: 'session-bound' } }])
-    const focusCall = calls.find(call => call.path === FOCUS)
-    expect(requestBody(focusCall)).toEqual({ sessionId: 'session-bound', taskId: 'c1' })
-  })
-
-  it('treats a task-bar click and the row keyboard activation as work activation', async () => {
-    const { services, opened } = workServices()
-    const { view } = await renderPage({
-      services,
-      store: { [STORAGE_KEY]: '1' },
-      routes: {
-        [WORK]: () => jsonResponse({ ok: true, cwd: WORK_CWD, task: null, sessionId: 'session-bound' }),
-        [FOCUS]: () => jsonResponse({ ok: true }),
-      },
-    })
-
-    click(q(row(view.container, '1.1 Write spec'), '.gantt-bar'))
-    await flush()
-    expect(opened).toEqual(['session-bound'])
-    expect(dialog(view.container)).toBeNull()
+    expect(panel(view.container)).not.toBeNull()
+    expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
 
     keydown(row(view.container, '1.2 Build UI'), 'Enter')
     await flush()
+    expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
+
     keydown(row(view.container, '2.1 Announce'), ' ')
     await flush()
-    expect(opened).toEqual(['session-bound', 'session-bound', 'session-bound'])
+    expect(panel(view.container)).not.toBeNull()
     expect(dialog(view.container)).toBeNull()
   })
 
@@ -299,38 +280,115 @@ describe('work-mode activation', () => {
     expect(calls.map(call => call.path)).toEqual([TREE])
   })
 
-  it('reports a failed activation in an error toast', async () => {
-    const { services, opened } = workServices()
+  it('reports a failed focus in an error toast and keeps the panel open', async () => {
+    const { services } = workServices()
     const { view } = await renderPage({
       services,
       store: { [STORAGE_KEY]: '1' },
-      routes: { [WORK]: () => jsonResponse({ ok: false, error: 'no work directory' }, 500) },
+      routes: { [FOCUS]: () => jsonResponse({ ok: false, error: 'focus write failed' }, 500) },
     })
 
     click(row(view.container, '1.1 Write spec'))
     await flush()
 
-    expect(dialog(view.container)).toBeNull()
-    expect(toast(view.container).textContent).toBe('Could not open the work conversation. no work directory')
+    expect(panel(view.container)).not.toBeNull()
+    expect(text(view.container, '.gantt-toast')).toBe('Could not open the work conversation. focus write failed')
     expect(toast(view.container).getAttribute('data-error')).toBe('true')
-    expect(opened).toEqual([])
   })
 
-  it('reports a non-Error failure message verbatim', async () => {
-    const services = {
-      sessions: { create: () => Promise.reject('session store offline') },
-      uiWorkspace: { openSession: () => {} },
-    }
+  it('reports a non-Error focus failure message verbatim', async () => {
+    const { services } = workServices()
     const { view } = await renderPage({
       services,
       store: { [STORAGE_KEY]: '1' },
-      routes: { [WORK]: () => jsonResponse({ ok: true, cwd: WORK_CWD, sessionId: null }) },
+      routes: { [FOCUS]: () => Promise.reject('session store offline') },
     })
 
     click(row(view.container, '1.1 Write spec'))
     await flush()
 
+    expect(panel(view.container)).not.toBeNull()
     expect(toast(view.container).textContent).toBe('Could not open the work conversation. session store offline')
-    expect(toast(view.container).getAttribute('data-error')).toBe('true')
+  })
+
+  it('closes the panel from its close button and when work mode turns off', async () => {
+    const { services } = workServices()
+    const { view } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
+    })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+    expect(panel(view.container)).not.toBeNull()
+
+    click(closePanelButton(view.container))
+    await flush()
+    expect(panel(view.container)).toBeNull()
+    expect(row(view.container, '1.1 Write spec').getAttribute('data-selected')).toBe('true')
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+    expect(panel(view.container)).not.toBeNull()
+
+    click(toggleButton(view.container))
+    await flush()
+    expect(panel(view.container)).toBeNull()
+  })
+
+  it('closes the panel when the task disappears from the tree', async () => {
+    const { services } = workServices()
+    let payload = treePayload()
+    const { view } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: {
+        [TREE]: () => jsonResponse(payload),
+        [FOCUS]: () => jsonResponse({ ok: true }),
+      },
+    })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+    expect(panel(view.container)).not.toBeNull()
+
+    payload = treePayload({
+      tasks: treePayload().tasks.filter(task => task.id !== 'p1'),
+    })
+    click(q(view.container, 'button[title="Refresh"]'))
+    await flush()
+    expect(panel(view.container)).toBeNull()
+  })
+
+  it('shows the execute entry for an unbound task and opens the new conversation in a fresh window', async () => {
+    const { services, created } = workServices()
+    const win = {
+      name: '',
+      closed: false,
+      close() {
+        this.closed = true
+      },
+      location: { replaced: '', replace(target) { this.replaced = target } },
+    }
+    vi.stubGlobal('open', () => win)
+    const { view } = await renderPage({
+      services,
+      store: { [STORAGE_KEY]: '1' },
+      routes: { [WORK]: () => jsonResponse(WORK_WITHOUT_SESSION) },
+    })
+
+    click(row(view.container, '1.1 Write spec'))
+    await flush()
+    const execute = q(view.container, '.gantt-task-panel button[data-action="execute"]')
+    expect(execute).not.toBeNull()
+
+    click(execute)
+    await flush()
+
+    expect(created).toEqual([{ workspaceId: 'ws-1' }])
+    expect(win.location.replaced).toBe(globalThis.location.href)
+    expect(JSON.parse(localStorage.getItem('dsh.sessions.current'))).toEqual({ sessionId: 'session-created' })
+    expect(win.closed).toBe(false)
   })
 })

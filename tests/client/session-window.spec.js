@@ -4,11 +4,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   HANDOFF_KEY,
+  SELECTION_KEY,
+  WINDOW_NAME_PREFIX,
   openSessionWindow,
   resumeHandedSession,
   sendSessionToWindow,
   takeSessionHandoff,
 } from '../../src/client/session-window.js'
+
+/** Window-shaped globalThis for `window.name` access in tests. */
+const winScope = /** @type {any} */ (globalThis)
 
 function fakeWindow() {
   return /** @type {any} */ ({
@@ -64,6 +69,7 @@ function stash(sessionId, at = Date.now()) {
 
 afterEach(() => {
   localStorage.clear()
+  winScope.name = ''
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
@@ -100,10 +106,23 @@ describe('openSessionWindow', () => {
 })
 
 describe('sendSessionToWindow', () => {
-  it('stores the handoff and navigates the window to the app', () => {
+  it('stores both handoffs, seeds the selection, and navigates the window', () => {
     const win = fakeWindow()
     expect(sendSessionToWindow(win, 'session-1')).toBe(true)
     expect(JSON.parse(localStorage.getItem(HANDOFF_KEY))).toMatchObject({ sessionId: 'session-1' })
+    expect(JSON.parse(localStorage.getItem(SELECTION_KEY))).toEqual({ sessionId: 'session-1' })
+    expect(win.name).toMatch(new RegExp(`^${WINDOW_NAME_PREFIX}\\d+:session-1$`))
+    expect(win.location.replaced).toBe(globalThis.location.href)
+  })
+
+  it('keeps navigating when the per-window name is sealed', () => {
+    const win = fakeWindow()
+    Object.defineProperty(win, 'name', {
+      set() {
+        throw new Error('sealed')
+      },
+    })
+    expect(sendSessionToWindow(win, 'session-1')).toBe(true)
     expect(win.location.replaced).toBe(globalThis.location.href)
   })
 
@@ -139,6 +158,38 @@ describe('takeSessionHandoff', () => {
     stash('session-1')
     expect(takeSessionHandoff()).toBe('session-1')
     expect(localStorage.getItem(HANDOFF_KEY)).toBeNull()
+  })
+
+  it('prefers and clears the per-window handoff', () => {
+    winScope.name = `${WINDOW_NAME_PREFIX}${Date.now()}:session-window`
+    stash('session-storage')
+    expect(takeSessionHandoff()).toBe('session-window')
+    expect(winScope.name).toBe('')
+    expect(JSON.parse(localStorage.getItem(HANDOFF_KEY))).toMatchObject({ sessionId: 'session-storage' })
+  })
+
+  it('ignores a stale or malformed per-window handoff', () => {
+    winScope.name = `${WINDOW_NAME_PREFIX}1:session-window`
+    expect(takeSessionHandoff()).toBeNull()
+    expect(winScope.name).toBe('')
+
+    winScope.name = `${WINDOW_NAME_PREFIX}now:session-window`
+    expect(takeSessionHandoff()).toBeNull()
+
+    winScope.name = `${WINDOW_NAME_PREFIX}session-window`
+    expect(takeSessionHandoff()).toBeNull()
+
+    winScope.name = `${WINDOW_NAME_PREFIX}${Date.now()}:`
+    expect(takeSessionHandoff()).toBeNull()
+
+    Object.defineProperty(globalThis, 'name', {
+      configurable: true,
+      get() {
+        throw new Error('sealed')
+      },
+    })
+    expect(takeSessionHandoff()).toBeNull()
+    delete winScope.name
   })
 
   it('ignores an absent, malformed, or stale handoff', () => {
@@ -187,6 +238,34 @@ describe('resumeHandedSession', () => {
       uiWorkspace: { openSession: id => opened.push(id) },
     }
     expect(resumeHandedSession(resumeCtx(services))).toBe(true)
+    expect(opened).toEqual(['session-1'])
+  })
+
+  it('leaves a conversation that the seeded selection already restored alone', () => {
+    stash('session-1')
+    const opened = []
+    const services = {
+      sessions: {
+        list: catalog().store,
+        retainInfo: () => ({ getSnapshot: () => ({ retainedBy: { mainView: 1 } }) }),
+      },
+      uiWorkspace: { openSession: id => opened.push(id) },
+    }
+    expect(resumeHandedSession(resumeCtx(services))).toBe(true)
+    expect(opened).toEqual([])
+  })
+
+  it('selects the conversation when retention reports no main view', () => {
+    stash('session-1')
+    const opened = []
+    const services = {
+      sessions: {
+        list: catalog().store,
+        retainInfo: () => ({ getSnapshot: () => ({ retainedBy: { mainView: 0 } }) }),
+      },
+      uiWorkspace: { openSession: id => opened.push(id) },
+    }
+    resumeHandedSession(resumeCtx(services))
     expect(opened).toEqual(['session-1'])
   })
 
