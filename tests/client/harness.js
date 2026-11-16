@@ -78,6 +78,10 @@ export function applyPlugin(plugin, options = {}) {
       return typeof result === 'function' ? result : () => {}
     }
   }
+  // The real client root exposes every plugin service through `ctx.get`; the
+  // work-mode components resolve optional services that way so a host without
+  // one degrades instead of crashing.
+  ctx.get = name => services[name]
   plugin.apply(ctx)
   return {
     ctx,
@@ -111,17 +115,30 @@ export function setupApp(options = {}) {
   return applyPlugin(createPlugin(), options)
 }
 
-/** Minimal `ctx.betterSidebar` fake: records tabs and returns disposers. */
+/** Minimal `ctx.betterSidebar` fake: records tabs and opens, returns disposers. */
 export function fakeSidebarService() {
   const tabs = []
+  const opens = []
+  const active = []
   return {
     tabs,
+    opens,
+    active,
     registerTab(descriptor) {
       tabs.push(descriptor)
       return () => {
         const index = tabs.indexOf(descriptor)
         if (index >= 0) tabs.splice(index, 1)
       }
+    },
+    openTab(seed, scope) {
+      opens.push({ seed, scope })
+    },
+    activateTab(tabId, scope) {
+      active.push({ tabId, scope })
+    },
+    getTabs() {
+      return tabs
     },
   }
 }
