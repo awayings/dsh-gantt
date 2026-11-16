@@ -20,6 +20,7 @@ and a feature tour.
 | [api.md](api.md) | integrators | Complete JSON API reference: twenty-three routes, auth, the extended task shape, frontier `brief` and the daily report, decompose/schedule/context, brief read/recompute, conversation focus, task trajectory, work-mode bindings, assistant tools and background prompt context, request/response examples, errors |
 | [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence (optional tools, right-rail sidebar, and systemPrompt services), rules, v2→v5 migration and data layering, limitations, verification |
 | [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The unified task tree and the system built on it: tracks/nodes/decomposed tasks, refs and provenance, state mapping, decomposition discipline, frontier/next, the daily 该动 report algorithm, perspectives, native-conversation assistant tools, task trajectory/protocol context, links, context export, deferred work |
+| [work-context.md](work-context.md) | integrators, maintainers | What a work-mode conversation sees: the static protocol section, the dynamic focus context (ancestor chain, focus detail including the description, trajectory), the `gantt_context` result, the workbench prompt editor, data sources, renderers, and the rules for adding a new context field |
 
 ## Reference notes
 

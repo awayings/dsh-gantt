@@ -469,8 +469,12 @@ window; an existing conversation can be opened in place or in a new window.
 task." / "Decompose this task into subtasks."; 完成任务 / 拆解任务 in Chinese)
 into the conversation through the client's scope-addressed conversation service,
 so the Host starts a turn before the window even opens (and still starts one
-when the popup is blocked). The prompt is an ordinary user message; the model
-reads the focused task from the injected `gantt:focus` runtime context. The
+when the popup is blocked). An optional instructions editor appends the user's
+text after a blank line for those two buttons; a **Send** entry delivers the
+editor text alone and also creates the dedicated conversation when the task has
+none. The prompt is an ordinary user message; the model reads the focused task
+from the injected `gantt:focus` runtime context. The full context layout is in
+[work-context.md](work-context.md). The
 new window restores that exact conversation: the opener seeds the workspace
 selection key and a short-lived `window.name`/localStorage handoff, so the window
 does not come up on the previously selected conversation. The **Active** view filter keeps only tasks whose dedicated
@@ -1105,8 +1109,9 @@ Read the task context for the calling conversation.
 The conversation id comes from the tool execution context, not from an
 argument. When the conversation has a focused task the markdown contains the
 chain from the track root to that task (kind, status, `doneWhen` per row), the
-task's dotted id, internal id, title, depth (and whether the 4-level cap has
-been reached), its status and `doneWhen`, and its direct children. It also
+task's dotted id, internal id, title, description (omitted when empty), depth
+(and whether the 4-level cap has been reached), its status and `doneWhen`, and
+its direct children. It also
 includes a `## 任务轨迹（会话与轮次）` section listing recent trajectory events
 newest first, each with the full session id and turn, so the model can see how
 the task reached its current state. With no focus, the tool falls back to the whole-tree
@@ -1207,8 +1212,10 @@ prompt pieces so a conversation knows how to advance tasks without being asked:
   automatically;
 - a **dynamic runtime context** named `gantt:focus` at order `530`, emitted only
   when the conversation has a focused task. It carries the focused task's
-  ancestor chain (ref, title, kind, status, `doneWhen`), the focus detail, and
-  the task's recent trajectory.
+  ancestor chain (ref, title, kind, status, `doneWhen`), the focus detail
+  (including the description, omitted when empty), and the task's recent
+  trajectory. The layout and its data sources are documented in
+  [work-context.md](work-context.md).
 
 The plugin declares the dependency lazily through `ctx.inject(['systemPrompt'],
 …)`; without that service it registers nothing and the tools/API keep working.

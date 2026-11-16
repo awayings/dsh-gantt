@@ -511,7 +511,13 @@ results straight into the tree.
   and **Decompose** queue the localized prompt (完成任务 / 拆解任务; "Complete this
   task." / "Decompose this task into subtasks.") into the conversation before
   navigating, so the Host starts a turn immediately and the trajectory records
-  it. An existing conversation can be opened in place or in a new window.
+  it. The task view also has an optional instructions editor: **Execute** and
+  **Decompose** append its text to the fixed base prompt, and a **Send** entry
+  (disabled while the editor is blank) delivers the editor text alone. Send also
+  works when the task has no conversation yet — it creates the dedicated
+  conversation, queues the message, then opens it. A successful send clears the
+  editor; a failure keeps the text. An existing conversation can be opened in
+  place or in a new window.
   The **Active** view filter keeps tasks whose bound conversation is running or
   waiting for a user choice, and waiting tasks carry a warning badge. `GET
   api/gantt/work` reports the task, its bound conversation, and the work
@@ -526,9 +532,12 @@ results straight into the tree.
 - **Context for the model.** `gantt_context` resolves the conversation id from
   the tool execution context and renders the chain from the track root to the
   focused task (kind, status, `doneWhen` per row), the task's dotted id,
-  internal id, title, depth, status, `doneWhen`, and direct children. With no
-  focus it falls back to the whole-tree context document capped at 6000
-  characters.
+  internal id, title, description (omitted when empty), depth, status,
+  `doneWhen`, and direct children. With no focus it falls back to the
+  whole-tree context document capped at 6000 characters. The runtime
+  `gantt:focus` snapshot renders the same chain and detail; the full context
+  layout, its data sources, and the rules for adding a field are in
+  [work-context.md](work-context.md).
 - **Writes.** `gantt_decompose` creates children (`id`, `children`, optional
   `planDate`), `gantt_update_task` changes `status`/`progress`/`title`/
   `doneWhen`, and `gantt_create_task` inserts a new sibling right after the
@@ -588,8 +597,9 @@ optional `systemPrompt` service is present:
   allowed;
 - a dynamic runtime context, `gantt:focus`, order `530`, is emitted only while
   the conversation has a focused task and contains the focused ancestor chain
-  (ref, title, kind, status, `doneWhen`), the focus detail, and the recent
-  trajectory.
+  (ref, title, kind, status, `doneWhen`), the focus detail (including the task
+  description), and the recent trajectory. See
+  [work-context.md](work-context.md).
 
 The plugin declares the `systemPrompt` dependency lazily
 (`ctx.inject(['systemPrompt'], …)`); when the service is absent it contributes
