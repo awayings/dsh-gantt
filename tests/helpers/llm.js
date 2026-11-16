@@ -39,6 +39,28 @@ export function fakeLlm(chunks = [textDelta('ok'), finish()]) {
 }
 
 /**
+ * Fake llm that replays one chunk script per `stream` call; calls beyond the
+ * script list repeat the last one.
+ * @param {any[][]} scripts
+ * @returns {{ calls: ChatStreamOptions[], stream: (options: ChatStreamOptions) => AsyncIterable<any> }}
+ */
+export function sequenceLlm(scripts) {
+  /** @type {ChatStreamOptions[]} */
+  const calls = []
+  return {
+    calls,
+    stream(options) {
+      const index = calls.length
+      calls.push(options)
+      const chunks = scripts[index] ?? scripts.at(-1) ?? []
+      return (async function* () {
+        for (const chunk of chunks) yield chunk
+      })()
+    },
+  }
+}
+
+/**
  * Fake llm whose `stream` throws synchronously before yielding anything.
  * @param {any} [error]
  */

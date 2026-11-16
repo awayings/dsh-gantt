@@ -179,9 +179,47 @@ function renderFocus(tasks, focus) {
   }
   return lines
 }
+const STATUS_LABELS = { todo: '待办', in_progress: '进行中', blocked: '阻塞', done: '已完成' }
+const KIND_LABELS = { track: '支线', node: '节点', task: '任务' }
+
+/**
+ * Render the focused task's chain from its track root down to the task itself.
+ * The decompose turn only needs this path (plus the focus detail section);
+ * the rest of the tree is noise for the model.
+ * @param {TreeTaskNode[]} tasks
+ * @param {TreeTaskNode} focus
+ * @returns {string[]}
+ */
+export function renderFocusChain(tasks, focus) {
+  const byId = new Map(flattenTree(tasks).map(task => [task.id, task]))
+  /** @type {TreeTaskNode[]} */
+  const chain = []
+  const seen = new Set()
+  /** @type {TreeTaskNode | undefined} */
+  let current = focus
+  while (current !== undefined && !seen.has(current.id)) {
+    seen.add(current.id)
+    chain.unshift(current)
+    /** @type {string | null} */
+    const parentId = current.parentId
+    current = typeof parentId === 'string' && parentId !== '' ? byId.get(parentId) : undefined
+  }
+  const lines = ['## 聚焦任务链路（从支线根到聚焦任务）']
+  for (const [index, task] of chain.entries()) {
+    const ref = task.ref === '' ? task.number : task.ref
+    const kind = KIND_LABELS[task.kind] ?? '任务'
+    const status = STATUS_LABELS[task.status] ?? task.status
+    const current = task.id === focus.id ? ' · 当前聚焦' : ''
+    lines.push(`${'  '.repeat(index)}- ${ref} ${task.title}（${kind} · ${status}${current}）`)
+    if (task.doneWhen !== '') lines.push(`${'  '.repeat(index + 1)}完成标准：${task.doneWhen}`)
+  }
+  return lines
+}
+
 /**
  * Build the system prompt: the decomposition discipline, today's date and
- * windows, the truncated tree context markdown, and the focused task.
+ * windows, and — with a focused task — its chain from the track root plus the
+ * focus detail. Without a focus the truncated tree markdown is the fallback.
  * @param {{ context: ChatContext, dailyBrief?: DailyBriefLike | null, taskId?: string | null }} input
  * @returns {string}
  */
@@ -195,11 +233,12 @@ export function buildSystemPrompt({ context, dailyBrief = null, taskId = null })
     '',
     '## 今日窗口',
     ...renderWindows(dailyBrief),
-    '',
-    '## 任务树上下文',
-    clampMarkdown(context.markdown),
   ]
-  if (focus !== null) lines.push(...renderFocus(context.tasks, focus))
+  if (focus === null) {
+    lines.push('', '## 任务树上下文', clampMarkdown(context.markdown))
+  } else {
+    lines.push('', ...renderFocusChain(context.tasks, focus), ...renderFocus(context.tasks, focus))
+  }
   return lines.join('\n')
 }
 /**

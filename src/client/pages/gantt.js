@@ -227,13 +227,16 @@ export function GanttPage({ ctx }) {
     setMessages(current => [...current, { role: 'user', content: message }])
     try {
       const payload = await requestJson('api/gantt/chat', { method: 'POST', body: JSON.stringify(body) })
-      setMessages(current => [
-        ...current,
-        { role: 'assistant', content: payload.reply, proposal: payload.proposal ?? null },
-      ])
+      const reply = typeof payload.reply === 'string' ? payload.reply : ''
+      const proposal = payload.proposal ?? null
+      if (reply === '' && proposal === null) {
+        setChatError(t('chat.error'))
+        return
+      }
+      setMessages(current => [...current, { role: 'assistant', content: reply, proposal }])
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : String(failure)
-      setChatError(failure.status === 503 ? `${t('chat.noModel')} ${detail}` : t('chat.error'))
+      setChatError(failure.status === 503 ? `${t('chat.noModel')} ${detail}` : `${t('chat.error')} ${detail}`)
     } finally {
       setChatBusy(false)
     }
@@ -250,8 +253,9 @@ export function GanttPage({ ctx }) {
       setAppliedProposalKey(index)
       refresh()
       setToast({ text: t('chat.applied'), kind: 'ok' })
-    } catch {
-      setChatError(t('chat.error'))
+    } catch (failure) {
+      const detail = failure instanceof Error ? failure.message : String(failure)
+      setChatError(`${t('chat.error')} ${detail}`)
     } finally {
       setChatBusy(false)
     }

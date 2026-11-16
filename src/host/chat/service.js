@@ -38,10 +38,17 @@ import { parseProposal, textLength } from './proposal.js'
  */
 
 /**
+ * The terminal reason of one model stream: the harness kind (`stop`,
+ * `max-tokens`, `tool-calls`, `error`, `aborted`) and the upstream failure when
+ * the adapter reported one.
+ * @typedef {{ kind?: string, failure?: { code?: string, message?: string } }} StreamFinish
+ */
+
+/**
  * One chunk of the harness stream vocabulary (only these shapes are read).
  * @typedef {{ type: 'text-delta', text: string } |
  * { type: 'reasoning-delta', text: string } |
- * { type: 'finish', reason: { kind?: string } } |
+ * { type: 'finish', reason: StreamFinish } |
  * { type: 'block-start' | 'block-end' | 'tool-call-delta' | 'usage' }} StreamChunk
  */
 
@@ -68,7 +75,10 @@ import { parseProposal, textLength } from './proposal.js'
 
 const MAX_MESSAGE_CHARS = 2000
 const MAX_HISTORY_TURNS = 8
-const MAX_TOKENS = 1500
+// Thinking models bill their reasoning to the same output budget, and the
+// provider reports only reasoning blocks when it runs out first. 1500 tokens
+// was enough to end a turn with no visible text and an empty chat bubble.
+const MAX_TOKENS = 8000
 const CHAT_TIMEOUT_MS = 60_000
 
 /**
@@ -134,41 +144,38 @@ function normalizeContext(value) {
   return /** @type {ChatContext} */ (record)
 }
 /**
- * @param {{ kind?: string }} reason
- * @returns {boolean}
- */
-function finishFailed(reason) {
-  return reason.kind === 'error' || reason.kind === 'aborted'
-}
-
-/**
- * Join only `text-delta` chunks; a failure finish or a broken stream is a 502.
+ * Join only `text-delta` chunks and keep the terminal finish reason. A broken
+ * stream or a failed finish is a 502; an empty reply is judged by the caller.
  * @param {AsyncIterable<StreamChunk>} stream
- * @returns {Promise<string>}
+ * @returns {Promise<{ reply: string, finish: StreamFinish | null }>}
  */
 async function consumeStream(stream) {
   let reply = ''
-  let failed = false
+  /** @type {StreamFinish | null} */
+  let finish = null
   try {
     for await (const chunk of stream) {
       if (chunk.type === 'text-delta') reply += chunk.text
-      else if (chunk.type === 'finish' && finishFailed(chunk.reason)) failed = true
+      else if (chunk.type === 'finish') finish = chunk.reason ?? null
     }
   } catch {
     throw new ChatError('model request failed', 502)
   }
-  if (failed) throw new ChatError('model request failed', 502)
-  return reply
+  if (finish !== null && (finish.kind === 'error' || finish.kind === 'aborted')) {
+    const code = finish.failure?.code
+    throw new ChatError(code === undefined ? 'model request failed' : `model request failed: ${code}`, 502)
+  }
+  return { reply, finish }
 }
 
 /**
  * Run one streamed model call, capping it at 60 s and forwarding the caller's
  * abort signal. Every upstream failure maps to a 502 `ChatError`.
  * @param {{ llm: LlmLike, selection: ChatSelection, system: string, messages: ChatMessage[],
- * signal?: AbortSignal }} input
- * @returns {Promise<string>}
+ * reasoningEffort?: string, signal?: AbortSignal }} input
+ * @returns {Promise<{ reply: string, finish: StreamFinish | null }>}
  */
-async function requestReply({ llm, selection, system, messages, signal }) {
+async function requestReply({ llm, selection, system, messages, reasoningEffort, signal }) {
   if (signal !== undefined && signal.aborted) throw new ChatError('model request aborted', 502)
   const controller = new AbortController()
   let timedOut = false
@@ -193,7 +200,8 @@ async function requestReply({ llm, selection, system, messages, signal }) {
     maxTokens: MAX_TOKENS,
     signal: controller.signal,
   }
-  if (selection.reasoningEffort !== undefined) options.reasoningEffort = selection.reasoningEffort
+  const effort = reasoningEffort ?? selection.reasoningEffort
+  if (effort !== undefined) options.reasoningEffort = effort
   try {
     return await Promise.race([consumeStream(llm.stream(options)), aborted])
   } catch (error) {
@@ -222,15 +230,24 @@ export async function runChat({ llm, selection, message, history, taskId, contex
   if (focusId !== null && focus === null) throw new ChatError(`task ${focusId} was not found`, 400)
   const system = buildSystemPrompt({ context: safeContext, dailyBrief: dailyBrief ?? null, taskId: focusId })
   const messages = buildChatMessages({ message: text, history: turns })
-  const model = { provider: /** @type {ChatSelection} */ (selection).provider, model: /** @type {ChatSelection} */ (selection).model }
-  const reply = await requestReply({
-    llm: /** @type {LlmLike} */ (llm),
-    selection: /** @type {ChatSelection} */ (selection),
-    system,
-    messages,
-    signal,
-  })
+  const chosen = /** @type {ChatSelection} */ (selection)
+  const model = { provider: chosen.provider, model: chosen.model }
+  const call = /** @type {LlmLike} */ (llm)
+  let outcome = await requestReply({ llm: call, selection: chosen, system, messages, signal })
+  if (outcome.reply === '' && chosen.reasoningEffort === undefined) {
+    // A thinking model can end at `max-tokens` on reasoning alone; retry the
+    // same turn with thinking disabled so the user gets text, not a blank box.
+    outcome = await requestReply({ llm: call, selection: chosen, system, messages, reasoningEffort: 'off', signal })
+  }
+  if (outcome.reply === '') {
+    throw new ChatError(
+      outcome.finish?.kind === 'max-tokens'
+        ? 'model stopped at max-tokens before writing a reply'
+        : 'model returned an empty reply',
+      502,
+    )
+  }
   const depth = focusId === null ? null : depthOf(safeContext.tasks, focusId)
-  const parsed = parseProposal(reply, { depth, maxDepth: DECOMPOSE_MAX_DEPTH })
+  const parsed = parseProposal(outcome.reply, { depth, maxDepth: DECOMPOSE_MAX_DEPTH })
   return { reply: parsed.reply, proposal: parsed.proposal, model }
 }

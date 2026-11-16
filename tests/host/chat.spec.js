@@ -14,6 +14,7 @@ import {
   finish,
   hangingLlm,
   reasoningDelta,
+  sequenceLlm,
   textDelta,
 } from '../helpers/llm.js'
 
@@ -406,7 +407,36 @@ describe('buildSystemPrompt', () => {
     const prompt = buildSystemPrompt({ context, taskId: 'manual' })
     expect(prompt).toContain('- 点号 id：7')
     expect(prompt).toContain('  - 7.1 子任务（完成标准：完成）')
-    expect(prompt).toContain('（暂无任务树）')
+    expect(prompt).toContain('- 7 手工任务（节点 · 待办 · 当前聚焦）')
+  })
+
+  it('renders an unknown kind and status with their raw fallbacks', () => {
+    const context = {
+      markdown: '',
+      tasks: [node({ id: 'odd', kind: 'mystery', status: 'weird', title: '怪任务' })],
+    }
+    const prompt = buildSystemPrompt({ context, taskId: 'odd' })
+    expect(prompt).toContain('- 1 怪任务（任务 · weird · 当前聚焦）')
+  })
+
+  it('renders the empty-tree note when a no-focus context has no markdown', () => {
+    expect(buildSystemPrompt({ context: { markdown: '', tasks: [] } })).toContain('（暂无任务树）')
+  })
+
+  it('renders the focus chain from the track root instead of the whole tree', () => {
+    const prompt = buildSystemPrompt({ context: sampleContext(), taskId: 'collect' })
+    expect(prompt).toContain('## 聚焦任务链路（从支线根到聚焦任务）')
+    expect(prompt).toContain('- 1 内容平台（支线 · 待办）')
+    expect(prompt).toContain('  - 1.1 写周报（节点 · 待办）')
+    expect(prompt).toContain('    - 1.1.1 收集数据（节点 · 待办 · 当前聚焦）')
+    expect(prompt).toContain('      完成标准：数据表齐全')
+    expect(prompt).not.toContain('1.2 复盘')
+    expect(prompt).not.toContain('# 个人任务树')
+  })
+
+  it('keeps the tree markdown only when no task is focused', () => {
+    expect(buildSystemPrompt({ context: sampleContext(), taskId: 'weekly' })).not.toContain('# 个人任务树')
+    expect(buildSystemPrompt({ context: sampleContext() })).toContain('# 个人任务树')
   })
 
   it('truncates the tree markdown to 9000 characters', () => {
@@ -455,7 +485,7 @@ describe('runChat', () => {
     const call = llm.calls[0]
     expect(call.provider).toBe('deepseek')
     expect(call.model).toBe('deepseek-chat')
-    expect(call.maxTokens).toBe(1500)
+    expect(call.maxTokens).toBe(8000)
     expect(call.reasoningEffort).toBeUndefined()
     expect(call.signal).toBeInstanceOf(AbortSignal)
     expect('tools' in call).toBe(false)
@@ -504,11 +534,61 @@ describe('runChat', () => {
     expect(result.model).toEqual({ provider: 'deepseek', model: 'deepseek-chat' })
   })
 
-  it('returns an empty reply when the model produces no text deltas', async () => {
-    const llm = fakeLlm([finish(), finish('max-tokens')])
+  it('retries once with thinking disabled when the first attempt writes no text', async () => {
+    const llm = sequenceLlm([
+      [finish('max-tokens')],
+      [textDelta('重试成功'), finish()],
+    ])
     const result = await runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() })
-    expect(result.reply).toBe('')
-    expect(result.proposal).toBeNull()
+    expect(result.reply).toBe('重试成功')
+    expect(llm.calls).toHaveLength(2)
+    expect(llm.calls[0].reasoningEffort).toBeUndefined()
+    expect(llm.calls[1].reasoningEffort).toBe('off')
+  })
+
+  it('treats a finish chunk without a reason as a normal end', async () => {
+    const llm = fakeLlm([textDelta('有文字'), /** @type {any} */ ({ type: 'finish' })])
+    const result = await runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() })
+    expect(result.reply).toBe('有文字')
+  })
+
+  it('maps a failed finish without an upstream code to the generic 502', async () => {
+    const llm = fakeLlm([/** @type {any} */ ({ type: 'finish', reason: { kind: 'error' } })])
+    const error = await rejectionOf(runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() }))
+    expect(error).toBeInstanceOf(ChatError)
+    expect(error.message).toBe('model request failed')
+    expect(error.status).toBe(502)
+  })
+
+  it('includes the upstream failure code in a failed finish', async () => {
+    const llm = fakeLlm([/** @type {any} */ ({ type: 'finish', reason: { kind: 'error', failure: { code: 'QUOTA_EXCEEDED' } } })])
+    const error = await rejectionOf(runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() }))
+    expect(error.message).toBe('model request failed: QUOTA_EXCEEDED')
+    expect(error.status).toBe(502)
+  })
+
+  it('maps a still-empty reply to a 502 ChatError instead of a blank bubble', async () => {
+    const llm = fakeLlm([finish('max-tokens')])
+    const error = await rejectionOf(runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() }))
+    expect(error).toBeInstanceOf(ChatError)
+    expect(error.status).toBe(502)
+    expect(error.message).toBe('model stopped at max-tokens before writing a reply')
+    expect(llm.calls).toHaveLength(2)
+    expect(llm.calls[1].reasoningEffort).toBe('off')
+  })
+
+  it('reports an empty reply with a stop finish as a 502', async () => {
+    const llm = fakeLlm([finish()])
+    const error = await rejectionOf(runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() }))
+    expect(error.status).toBe(502)
+    expect(error.message).toBe('model returned an empty reply')
+  })
+
+  it('keeps the text when a thinking turn also ends at max-tokens', async () => {
+    const llm = fakeLlm([reasoningDelta('想'), textDelta('先做一步'), finish('max-tokens')])
+    const result = await runChat({ llm, selection: SELECTION, message: 'hi', context: sampleContext() })
+    expect(result.reply).toBe('先做一步')
+    expect(llm.calls).toHaveLength(1)
   })
 
   it('maps a missing llm or selection to a 503 ChatError', async () => {

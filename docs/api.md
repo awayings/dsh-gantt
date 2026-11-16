@@ -889,14 +889,18 @@ Request fields:
 | `history` | no | At most 8 prior turns; each turn has `role` `user` or `assistant` and `content` of at most 2000 characters |
 
 Unknown request fields are ignored. The host builds the model request from:
-today's date, the daily 该动 windows, the full tree context markdown (truncated
-to 9000 characters), and — when `taskId` is set — the focused task's ref, title,
-depth, `doneWhen`, and direct children. The system prompt states the Hermes
+today's date, the daily 该动 windows, and — when `taskId` is set — the focused
+task's chain from its track root down to the task itself (ref, title, kind,
+status, and each `doneWhen`), plus the focused task's ref, title, depth,
+`doneWhen`, and direct children. Without a `taskId` the truncated tree context
+markdown (9000 characters) is the fallback. The system prompt states the Hermes
 decomposition discipline (4-level cap including the track root, a verifiable
 `doneWhen` per child, ≤30-minute A-class steps or a B-class definition task,
 siblings parallel with at most one `dep`, no invented tasks). The call uses
-`maxTokens: 1500` and a 60-second timeout; only `text-delta` stream chunks are
-joined into the reply.
+`maxTokens: 8000` and a 60-second timeout; only `text-delta` stream chunks are
+joined into the reply, and a thinking model that spends the whole budget on
+reasoning is retried once with `reasoningEffort: "off"`. An empty reply is a
+`502`, never an empty chat bubble.
 
 `200 OK`:
 

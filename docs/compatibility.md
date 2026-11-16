@@ -103,10 +103,15 @@ and was verified by the same gate. The manual GUI checklist is in
    dsh-llm/lib/types/types.d.ts:458`, join semantics at `dsh:
    dsh-llm/lib/types/assistant-stream.d.ts:150`); it sends no `tools` (the
    harness `GenerateOptions.tools` is optional, `dsh:
-   dsh-llm/lib/types/types.d.ts:556-557`), clamps the tree context to 9000
-   characters, and aborts the call after 60 seconds. This is a read-only model
-   call: the proposal it returns is applied by the normal decompose route, not
-   by the model.
+   dsh-llm/lib/types/types.d.ts:556-557`), sends the focused task's chain from
+   the track root (the full tree markdown, clamped to 9000 characters, is the
+   no-focus fallback), and aborts the call after 60 seconds. The reply budget is
+   8000 tokens because the configured thinking model bills reasoning to the
+   same budget; an empty reply is retried once with `reasoningEffort: "off"`
+   and otherwise answered `502 model stopped at max-tokens before writing a
+   reply` / `model returned an empty reply` instead of an empty bubble. This is
+   a read-only model call: the proposal it returns is applied by the normal
+   decompose route, not by the model.
 9. **Task-day clock.** This deployment's host process runs in UTC
    (`/etc/timezone` `Etc/UTC`), while the tracker's plan dates and the 08:00
    recompute are the user's wall clock. `src/host/clock.js` resolves "today" and the

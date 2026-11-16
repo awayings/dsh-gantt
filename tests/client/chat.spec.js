@@ -352,7 +352,7 @@ describe('applying a proposal', () => {
     click(buttonByText(view.container, 'Apply decomposition'))
     await flush()
 
-    expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed.')
+    expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed. decompose refused')
     expect(q(view.container, '.gantt-chat-applied')).toBeNull()
     expect(buttonByText(view.container, 'Apply decomposition')).not.toBeUndefined()
   })
@@ -378,14 +378,24 @@ describe('error handling', () => {
     })
     openChat(view)
     await sendMessage(view, '拆一下')
-    expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed.')
+    expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed. upstream exploded')
   })
 
   it('stringifies a non-Error chat rejection', async () => {
     const { view } = await renderPage({ [CHAT]: () => Promise.reject('socket closed') })
     openChat(view)
     await sendMessage(view, '拆一下')
+    expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed. socket closed')
+  })
+
+  it('shows an error instead of a blank bubble for an empty reply', async () => {
+    const { view } = await renderPage({
+      [CHAT]: () => jsonResponse({ ok: true, reply: '', proposal: null }),
+    })
+    openChat(view)
+    await sendMessage(view, '拆一下')
     expect(text(view.container, '.gantt-chat-error')).toBe('The chat request failed.')
+    expect(qa(view.container, '.gantt-chat-msg')).toHaveLength(1)
   })
 
   it('clears messages and the error banner from the clear button', async () => {

@@ -74,13 +74,24 @@ describe('POST /api/gantt/chat', () => {
 
     expect(llm.calls).toHaveLength(1)
     const options = llm.calls[0]
-    expect(options.maxTokens).toBe(1500)
+    expect(options.maxTokens).toBe(8000)
     expect(options.provider).toBe('deepseek-official')
     expect(options.model).toBe('fast')
     expect(/** @type {any} */ (options).tools).toBeUndefined()
     expect(options.system).toContain('父任务')
     expect(options.system).toContain('今日窗口')
     expect(options.messages.at(-1)).toEqual({ role: 'user', content: [{ type: 'text', text: '拆解父任务' }] })
+  })
+
+  it('does not return an empty reply to the client', async () => {
+    const llm = fakeLlm([finish('max-tokens')])
+    const { routes } = start({ services: services(llm) })
+    const parentId = await createTask(routes, '父任务')
+    const result = await invoke(routes, ROUTES.chat, { message: '拆解父任务', taskId: parentId })
+
+    expect(result.status).toBe(502)
+    expect(result.payload.ok).toBe(false)
+    expect(result.payload.error).toBe('model stopped at max-tokens before writing a reply')
   })
 
   it('passes validated history through as previous request messages', async () => {
