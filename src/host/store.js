@@ -8,6 +8,7 @@ export { GanttStore } from './store/gantt.js'
 export { PLAN_STATUSES } from './store/plan.js'
 export { STATUSES } from './store/tasks.js'
 export { addDays, buildTree, dayToIso, deriveSummaryStatus, isoToDay, summarize, todayIso } from './tree.js'
+export { DEFAULT_WORK_CWD, resolveWorkCwd } from './work.js'
 
 /** @typedef {import('./store/context.js').ContextOptions} ContextOptions */
 /** @typedef {import('./store/plan.js').BlockDraft} BlockDraft */

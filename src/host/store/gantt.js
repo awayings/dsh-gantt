@@ -252,6 +252,23 @@ export class GanttStore {
   create(input = {}) {
     const parentId = normalizeParent(input.parentId)
     if (parentId !== null) this.requireRow(parentId)
+    const kind = normalizeKind(input.kind)
+    const ref = normalizeRef(input.ref)
+    if (ref !== '') this.assertRefFree(kind, ref)
+    const fields = this.normalizeCreateFields(input)
+    const id = this.transaction(() => {
+      const created = this.insertTask({ parentId, ...fields, sortOrder: this.nextSortOrder(parentId), kind, ref, state: '', source: 'manual' })
+      this.recomputeAncestors(parentId)
+      return created
+    })
+    return this.getNode(id)
+  }
+
+  /** Validate the task fields shared by {@link create} and {@link createSibling}.
+   * @param {TaskInput} input @returns {{ title: string, description: string, status: TaskStatus,
+   * progress: number, startDate: string, endDate: string, lane: string, dep: string, doneWhen: string,
+   * landing: string, estimate: string, category: string, inspiration: string, links: TaskLink[] }} */
+  normalizeCreateFields(input) {
     const title = normalizeTitle(input.title)
     const description = normalizeDescription(input.description)
     const status = normalizeStatus(input.status ?? 'todo')
@@ -259,16 +276,37 @@ export class GanttStore {
     const startDate = assertDate(input.startDate ?? todayIso(), 'startDate')
     const endDate = assertDate(input.endDate ?? addDays(startDate, 3), 'endDate')
     assertRange(startDate, endDate)
-    const kind = normalizeKind(input.kind)
-    const ref = normalizeRef(input.ref)
-    if (ref !== '') this.assertRefFree(kind, ref)
-    const links = this.normalizeLinks(input.links)
+    return { title, description, status, progress, startDate, endDate, ...normalizeExtras(input), links: this.normalizeLinks(input.links) }
+  }
+
+  /** Create a task as the immediate next sibling of `referenceId`: same parent,
+   * inserted right after the reference, with later siblings shifted down. The
+   * reference task records a `track` event when the origin carries a session.
+   * @param {string} referenceId @param {TaskInput} [input] @param {TaskOrigin} [origin]
+   * @returns {TaskNode} */
+  createSibling(referenceId, input = {}, origin) {
+    const reference = this.requireRow(referenceId)
+    const fields = this.normalizeCreateFields(input)
+    const referenceLabel = taskLabel(/** @type {TaskNode} */ (this.getNode(reference.id)))
+    const parentId = reference.parentId
     const id = this.transaction(() => {
-      const created = this.insertTask({ parentId, title, description, status, progress, startDate, endDate, sortOrder: this.nextSortOrder(parentId), kind, ref, state: '', ...normalizeExtras(input), links, source: 'manual' })
+      const sortOrder = reference.sortOrder + 1
+      this.db.prepare('UPDATE tasks SET sort_order = sort_order + 1 WHERE parent_id IS ? AND sort_order >= ?').run(parentId, sortOrder)
+      const created = this.insertTask({ parentId, ...fields, sortOrder, kind: 'task', ref: '', state: '', source: 'manual' })
       this.recomputeAncestors(parentId)
+      this.recordOrigin(created, 'create', origin, `在 ${referenceLabel} 后创建`)
+      const sessionId = origin === undefined ? '' : textValue(origin.sessionId)
+      if (origin !== undefined && sessionId !== '') {
+        this.recordTrack({
+          taskId: reference.id,
+          sessionId,
+          turn: origin.turn,
+          detail: `sibling task ${referenceLabel} ${fields.title}`,
+        })
+      }
       return created
     })
-    return this.getNode(id)
+    return /** @type {TaskNode} */ (this.getNode(id))
   }
 
   /** @param {string} id @param {TaskPatch} [patch] @param {TaskOrigin} [origin] @returns {TaskNode | null} */
@@ -547,6 +585,46 @@ export class GanttStore {
     return row?.taskId ?? null
   }
 
+  /** Bind one task to its content-dedicated main conversation. Rebinding a task
+   * replaces its session; binding a session that already belongs to another task
+   * moves it. Both happen in one transaction.
+   * @param {unknown} taskId @param {unknown} sessionId @returns {{ taskId: string, sessionId: string }} */
+  bindWorkSession(taskId, sessionId) {
+    return this.transaction(() => this.upsertWorkSession(taskId, sessionId))
+  }
+
+  /** Write the task ⇄ conversation mapping inside the caller's transaction.
+   * The bind route uses it to set the focus atomically with the mapping.
+   * @param {unknown} taskId @param {unknown} sessionId @returns {{ taskId: string, sessionId: string }} */
+  upsertWorkSession(taskId, sessionId) {
+    const row = this.requireRow(/** @type {string} */ (taskId))
+    const session = normalizeSessionId(sessionId)
+    const now = new Date().toISOString()
+    this.db.prepare('DELETE FROM work_sessions WHERE session_id = ? OR task_id = ?').run(session, row.id)
+    this.db.prepare('INSERT INTO work_sessions (task_id, session_id, created_at, updated_at) VALUES (?, ?, ?, ?)')
+      .run(row.id, session, now, now)
+    return { taskId: row.id, sessionId: session }
+  }
+
+  /** The content-dedicated conversation bound to one task, or null.
+   * @param {unknown} taskId @returns {string | null} */
+  workSessionOf(taskId) {
+    const row = /** @type {{ sessionId?: string } | undefined} */ (
+      this.db.prepare('SELECT session_id AS sessionId FROM work_sessions WHERE task_id = ?').get(/** @type {string} */ (taskId))
+    )
+    return row?.sessionId ?? null
+  }
+
+  /** The task one conversation is the content-dedicated conversation for, or null.
+   * @param {string} sessionId @returns {string | null} */
+  workTaskOf(sessionId) {
+    const session = normalizeSessionId(sessionId)
+    const row = /** @type {{ taskId?: string } | undefined} */ (
+      this.db.prepare('SELECT task_id AS taskId FROM work_sessions WHERE session_id = ?').get(session)
+    )
+    return row?.taskId ?? null
+  }
+
   /** Record one trajectory event that links a task to a conversation turn.
    * Callers that write the task in the same atomic unit pass their transaction
    * through this method; the event then commits or rolls back with the write.
@@ -562,6 +640,15 @@ export class GanttStore {
     const id = randomUUID()
     this.db.prepare(INSERT_EVENT).run(id, taskId, sessionId, turn, action, detail, at)
     return { id, taskId, sessionId, turn, action, detail, at }
+  }
+
+  /** Record one round-association `track` event (no task write happened this
+   * round). A blank session is allowed for manual callers; assistant callers
+   * pass the calling conversation.
+   * @param {{ taskId: unknown, sessionId?: unknown, turn?: unknown, detail?: unknown }} entry
+   * @returns {TaskEvent} */
+  recordTrack(entry) {
+    return this.recordEvent({ ...entry, action: 'track' })
   }
 
   /** Record an assistant write; a write without a conversation id is skipped so
@@ -642,4 +729,12 @@ function normalizeTurn(value) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw new GanttError('turn must be a non-negative integer')
   return value
+}
+
+/** Rendered label of one task: its external ref, else its point number.
+ * @param {TaskNode} node
+ * @returns {string}
+ */
+function taskLabel(node) {
+  return node.ref === '' ? node.number : node.ref
 }

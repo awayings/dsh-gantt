@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 /** Columns added by schema v3/v4; the migration appends whichever is missing. @type {Record<string, string>} */
 const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'" }
@@ -52,12 +52,19 @@ const CREATE_SCHEMA = `
     task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     session_id TEXT NOT NULL DEFAULT '',
     turn INTEGER,
-    action TEXT NOT NULL CHECK (action IN ('create', 'update', 'complete', 'decompose')),
+    action TEXT NOT NULL CHECK (action IN ('create', 'update', 'complete', 'decompose', 'track')),
     detail TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id, created_at);
+  CREATE TABLE IF NOT EXISTS work_sessions (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_work_sessions_session ON work_sessions(session_id);
 `
 
 /**
@@ -110,6 +117,28 @@ export function migrateDatabase(db, transaction, syncTrackerTree) {
       const tracks = /** @type {SnapshotTrack[]} */ (db.prepare('SELECT id, name, lane, state, blocker, sort_order AS sortOrder FROM tracks ORDER BY sort_order, id').all())
       const nodes = /** @type {SnapshotNode[]} */ (db.prepare('SELECT id, track_id AS trackId, title, state, start_date AS startDate, end_date AS endDate, dep, done_when AS doneWhen FROM nodes ORDER BY id').all())
       syncTrackerTree(tracks, nodes)
+    }
+    // SQLite cannot widen a CHECK constraint in place: rebuild task_events with
+    // the `track` action vocabulary, preserving every recorded row.
+    if (version < 6) {
+      db.exec(`
+        DROP TABLE IF EXISTS task_events_v6;
+        CREATE TABLE task_events_v6 (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL DEFAULT '',
+          turn INTEGER,
+          action TEXT NOT NULL CHECK (action IN ('create', 'update', 'complete', 'decompose', 'track')),
+          detail TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO task_events_v6 (id, task_id, session_id, turn, action, detail, created_at)
+          SELECT id, task_id, session_id, turn, action, detail, created_at FROM task_events;
+        DROP TABLE task_events;
+        ALTER TABLE task_events_v6 RENAME TO task_events;
+        CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id, created_at);
+      `)
     }
     if (version < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
