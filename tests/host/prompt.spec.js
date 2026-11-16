@@ -17,7 +17,7 @@ afterEach(() => {
 function focusTask() {
   const track = store.create({ title: 'Content platform', kind: 'track', ref: 'T1' })
   const node = store.create({ title: 'Weekly report', parentId: track.id })
-  const task = store.create({ title: 'Collect data', parentId: node.id, doneWhen: 'Data table ready' })
+  const task = store.create({ title: 'Collect data', parentId: node.id, doneWhen: 'Data table ready', description: 'Pull the weekly rows.' })
   store.setFocus('session-a', task.id)
   return { track, node, task }
 }
@@ -40,6 +40,7 @@ describe('focused task prompt context', () => {
     expect(text).toContain(`${task.number} Collect data`)
     expect(text).toContain('## 当前聚焦任务（拆解对象）')
     expect(text).toContain('完成标准：Data table ready')
+    expect(text).toContain('描述：Pull the weekly rows.')
     expect(text).toContain('## 任务轨迹（会话与轮次）')
     expect(text).toContain('（暂无会话记录）')
   })

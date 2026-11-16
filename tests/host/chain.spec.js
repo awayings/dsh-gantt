@@ -86,6 +86,20 @@ describe('focus chain helpers', () => {
     expect(lines).toContain('- 直接子任务：无')
   })
 
+  it('renders the focus description and skips the line when it is empty', () => {
+    const described = store.create({ title: 'Explained task', description: 'First line\nSecond line' })
+    const tasks = /** @type {TreeTaskNode[]} */ (store.tree())
+    const lines = renderFocusDetail(tasks, /** @type {TreeTaskNode} */ (findFocus(tasks, described.id)))
+    expect(lines).toContain('- 描述：First line\n  Second line')
+    expect(lines.filter(line => line === '')).toHaveLength(1)
+
+    const plain = store.create({ title: 'Unexplained task' })
+    const grown = /** @type {TreeTaskNode[]} */ (store.tree())
+    const plainLines = renderFocusDetail(grown, /** @type {TreeTaskNode} */ (findFocus(grown, plain.id)))
+    expect(plainLines.some(line => line.startsWith('- 描述'))).toBe(false)
+    expect(plainLines.filter(line => line === '')).toHaveLength(1)
+  })
+
   it('renders children with their standards and marks the depth cap', () => {
     store.create({ title: 'Root', kind: 'track' })
     const level2 = store.create({ title: 'Node', parentId: store.tree()[0].id })

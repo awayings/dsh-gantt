@@ -92,12 +92,17 @@ export function renderFocusChain(tasks, focus) {
 export function renderFocusDetail(tasks, focus) {
   const depth = depthOf(tasks, focus.id)
   const ref = focus.ref === '' ? focus.number : focus.ref
+  // The description is optional user text; a multi-line value keeps its line
+  // breaks under one list item, and an absent value adds no line at all (an
+  // empty field must not leave a blank line in the rendered context).
+  const description = typeof focus.description === 'string' ? focus.description : ''
   const lines = [
     '',
     '## 当前聚焦任务（拆解对象）',
     `- 点号 id：${ref}`,
     `- 内部 id：${focus.id}`,
     `- 标题：${focus.title}`,
+    ...(description === '' ? [] : [`- 描述：${description.split(/\r?\n/).join('\n  ')}`]),
     `- 层级：第 ${depth} 层（上限 ${DECOMPOSE_MAX_DEPTH} 层）`,
     `- 状态：${STATUS_LABELS[focus.status] ?? focus.status}`,
     `- 完成标准：${focus.doneWhen === '' ? '（未填写）' : focus.doneWhen}`,
