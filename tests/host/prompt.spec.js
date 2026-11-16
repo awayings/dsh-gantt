@@ -60,6 +60,25 @@ describe('focused task prompt context', () => {
   })
 })
 
+describe('task protocol section', () => {
+  it('makes one round-closing tool call mandatory', () => {
+    expect(PROTOCOL_SECTION).toContain('## 甘特图任务协议')
+    expect(PROTOCOL_SECTION).toContain('内容专用主会话')
+    expect(PROTOCOL_SECTION).toContain('每一轮都必须以下面四个工具调用之一收尾')
+    expect(PROTOCOL_SECTION).toContain('只回复文字、不以这四个工具之一收尾是不允许的')
+    for (const tool of ['gantt_track', 'gantt_update_task', 'gantt_decompose', 'gantt_create_task']) {
+      expect(PROTOCOL_SECTION).toContain(tool)
+    }
+  })
+
+  it('records provenance automatically and keeps the completion guidance', () => {
+    expect(PROTOCOL_SECTION).toContain('不要把这些值写进标题、描述或完成标准')
+    expect(PROTOCOL_SECTION).toContain('status 设为 `done`')
+    expect(PROTOCOL_SECTION).toContain('gantt_decompose` 拆成可独立验证的子任务')
+    expect(PROTOCOL_SECTION).toContain('`blocked`')
+  })
+})
+
 describe('prompt registration', () => {
   /** @returns {{ ctx: any, sections: any[], contexts: any[], effects: any[] }} */
   function fakeContext() {
