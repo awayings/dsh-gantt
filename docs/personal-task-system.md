@@ -81,6 +81,7 @@ Every row in `tasks` is a node of the tree. `kind` says where it came from:
 | `daily_briefs` | The persisted daily 该动 report, one morning snapshot per date |
 | `focus` | One focused task per conversation, for the right-rail tab and assistant tools |
 | `task_events` | Append-only task trajectory: action, DSH session, turn, detail, timestamp |
+| `work_sessions` | One content-dedicated main conversation per task: task id, session id, timestamps; the conversation id is unique and the mapping is deleted with its task |
 
 The importer writes the snapshots first, then materializes them into `tasks` in
 the same `BEGIN IMMEDIATE` transaction. A v2 database is backfilled once during
@@ -468,8 +469,9 @@ still deferred; see [Not adopted](#not-adopted--deferred).
 
 The AI workflow lives in the native DSH conversation, not in the Gantt page.
 The plugin contributes a compact **甘特** tab to the conversation sidebar and
-three assistant tools to the host; a conversation model reads the focused task
-through the tools and writes decomposition results straight into the tree.
+five assistant tools to the host; a conversation model reads the focused task
+through the tools and writes track associations, siblings, and decomposition
+results straight into the tree.
 
 - **Right-rail tab.** With the optional `dsh-better-sidebar` plugin installed,
   the conversation sidebar shows one `gantt` tab per conversation (`single:
@@ -486,7 +488,20 @@ through the tools and writes decomposition results straight into the tree.
 - **Focus.** A conversation can focus one task; the focus is stored per session
   in the `focus` table, survives a host restart, and is cleared automatically
   when the task is deleted. It is the context handshake between the tab and the
-  tools.
+  tools. The focus is per conversation and independent of the work-session
+  mapping below.
+- **Work mode.** A task owns one dedicated main conversation (a real DSH
+  session, never a subagent) recorded in the `work_sessions` table. The Gantt
+  page's work-mode toggle turns a row click into "open that task's work
+  conversation": `GET api/gantt/work` reports the task, its bound conversation,
+  and the work directory (`DSH_GANTT_WORK_CWD`, default `/data/home/ws-plugin`),
+  `POST api/gantt/work/session` binds a newly created session and focuses it in
+  one transaction. Because the mapping is durable, reopening a task after a host
+  restart reuses the same conversation instead of creating another one. The
+  conversation's right-rail **Workbench** tab reads the task trajectory, the
+  conversation identity, the host skills (`GET api/gantt/work/skills`), and the
+  conversation's agent team (`GET api/gantt/work/team?sessionId=`); both service
+  reads degrade to `available: false` when the host has no such service.
 - **Context for the model.** `gantt_context` resolves the conversation id from
   the tool execution context and renders the chain from the track root to the
   focused task (kind, status, `doneWhen` per row), the task's dotted id,
@@ -494,16 +509,20 @@ through the tools and writes decomposition results straight into the tree.
   focus it falls back to the whole-tree context document capped at 6000
   characters.
 - **Writes.** `gantt_decompose` creates children (`id`, `children`, optional
-  `planDate`) and `gantt_update_task` changes `status`/`progress`/`title`/
-  `doneWhen`. There is no proposal card and no apply button: the model calls the
-  tool in the conversation, the tool calls the store, and the normal validation
-  (depth cap, status vocabulary, dates, one transaction) applies. Tool writes
-  are ordinary SQLite store calls, so they need no shell/filesystem approval;
-  the store is the guard.
+  `planDate`), `gantt_update_task` changes `status`/`progress`/`title`/
+  `doneWhen`, and `gantt_create_task` inserts a new sibling right after the
+  reference (focused) task with later siblings shifted down. There is no
+  proposal card and no apply button: the model calls the tool in the
+  conversation, the tool calls the store, and the normal validation (depth cap,
+  status vocabulary, dates, one transaction) applies. Tool writes are ordinary
+  SQLite store calls, so they need no shell/filesystem approval; the store is
+  the guard.
 - **Provenance.** Each tool write records a `task_events` row (session id, turn,
   action, detail, timestamp): `gantt_update_task` records `update`/`complete`,
   `gantt_decompose` records `decompose` on the parent and `create` on each
-  child. The panel shows the focused task's five most recent events, and
+  child, `gantt_create_task` records `create` on the new sibling plus a `track`
+  event on the reference, and `gantt_track` records `track` for a round with no
+  task write. The panel shows the focused task's five most recent events, and
   `gantt_context` includes a `## 任务轨迹（会话与轮次）` section.
 - **Optional services.** The host `tools` service is optional — without it the
   plugin registers no tools and everything else works. The plugin never calls an
@@ -516,18 +535,22 @@ The route contracts are in [api.md](api.md#focus-one-task),
 ## Task trajectory and protocol context
 
 A conversation should advance the Gantt, and every advanced task should be
-traceable back to the conversation that did it. Schema version 5 adds
+traceable back to the conversation that did it. Schema version 5 added
 `task_events` for that: an append-only row per affected task with `id`,
 `task_id` (foreign key, `ON DELETE CASCADE`), `session_id`, `turn`, `action`,
 `detail`, and `created_at`, indexed by `(task_id, created_at)` and
-`(session_id, created_at)`. There is no backfill: history starts when the feature
-first records an event, so tasks changed before that have an empty trajectory.
+`(session_id, created_at)`. Schema version 6 widens the action vocabulary with
+`track` (a round association with no task write) by rebuilding the table, and
+adds `work_sessions` for the task ⇄ dedicated-conversation mapping. There is no
+backfill: history starts when the feature first records an event, so tasks
+changed before that have an empty trajectory.
 
 Recording is automatic, not a separate tool argument surface: the assistant
 tools derive the session id and turn from the tool execution context, and add
 the optional `summary` argument as the event detail. The action vocabulary is
-`create`, `update`, `complete`, and `decompose`; a completed task and a merely
-updated task are distinguishable. `GET /api/gantt/trajectory` reads the events
+`create`, `update`, `complete`, `decompose`, and `track`; a completed task and a
+merely updated task are distinguishable, and a round that only reviewed work is
+still visible. `GET /api/gantt/trajectory` reads the events
 newest first, filterable by task and/or session, default limit 20 (integer
 1–100). The right-rail panel shows five recent entries for the focused task
 (action, turn, time, detail, with the full session id in the row tooltip). The
@@ -536,9 +559,12 @@ API shape is in [api.md](api.md#task-trajectory).
 The host also feeds the protocol into the conversation automatically when the
 optional `systemPrompt` service is present:
 
-- a static prompt section, `gantt:protocol`, order `700`, explains the
-  completion / partial-decompose / decompose-only protocol and that provenance
-  is recorded automatically;
+- a static prompt section, `gantt:protocol`, order `700`, explains that the
+  conversation is its task's content-dedicated main conversation, that the
+  session id and turn are recorded automatically, and that every round must
+  close with exactly one of `gantt_track`, `gantt_update_task`,
+  `gantt_decompose`, or `gantt_create_task` — a text-only round ending is not
+  allowed;
 - a dynamic runtime context, `gantt:focus`, order `530`, is emitted only while
   the conversation has a focused task and contains the focused ancestor chain
   (ref, title, kind, status, `doneWhen`), the focus detail, and the recent
