@@ -14,12 +14,46 @@ import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
 import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, taskPath, visibleRows } from '../view.js'
+import { canOpenWorkTask, openWorkTask } from '../work-nav.js'
 import { h } from '../dom.js'
+
+const WORK_MODE_KEY = 'gantt.workMode'
+
+/**
+ * Read the persisted work-mode switch. Storage can be disabled or throwing
+ * (private-mode browsers), in which case the switch starts off.
+ * @returns {boolean}
+ */
+function readWorkMode() {
+  try {
+    return globalThis.localStorage.getItem(WORK_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Persist the work-mode switch. A rejected storage write keeps the switch
+ * usable for the session instead of failing the click.
+ * @param {boolean} on
+ * @returns {void}
+ */
+function writeWorkMode(on) {
+  try {
+    if (on) globalThis.localStorage.setItem(WORK_MODE_KEY, '1')
+    else globalThis.localStorage.removeItem(WORK_MODE_KEY)
+  } catch {
+    // Keep the in-memory switch when the browser refuses storage.
+  }
+}
 
 /** The Gantt tree page: brief strip, filter and timeline. */
 export function GanttPage({ ctx }) {
   const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData()
+  const workAvailable = canOpenWorkTask(ctx)
+  const [workMode, setWorkMode] = useState(readWorkMode)
+  const workOn = workMode && workAvailable
   const [scale, setScale] = useState('week')
   const [anchor, setAnchor] = useState(() => todayIso())
   const [collapsed, setCollapsed] = useState(() => new Set())
@@ -205,6 +239,21 @@ export function GanttPage({ ctx }) {
     setSelectedId(task.id)
     setDialog({ type: 'schedule', id: task.id })
   }, [])
+  const toggleWorkMode = useCallback(() => {
+    const next = !workMode
+    writeWorkMode(next)
+    setWorkMode(next)
+  }, [workMode])
+  const openWork = useCallback(async (task) => {
+    setSelectedId(task.id)
+    try {
+      const { created } = await openWorkTask(ctx, task)
+      setToast({ text: created ? t('work.notice.created') : t('work.notice.opened'), kind: 'ok' })
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : String(failure)
+      setToast({ text: `${t('work.error')} ${message}`, kind: 'error' })
+    }
+  }, [ctx, t])
   const shift = useCallback((direction) => {
     setAnchor(current => (scale === 'week'
       ? addDays(current, direction * 14)
@@ -326,7 +375,9 @@ export function GanttPage({ ctx }) {
             selected: task.id === selectedId,
             collapsed: collapsed.has(task.id),
             t,
-            onSelect: openEdit,
+            work: workOn,
+            onSelect: workOn ? openWork : openEdit,
+            onEdit: openEdit,
             onToggle: toggleCollapse,
             onAddChild: openCreate,
             onCycleStatus: cycleStatus,
@@ -362,6 +413,16 @@ export function GanttPage({ ctx }) {
         ),
       ),
       h('div', { className: 'gantt-actions' },
+        h('button', {
+          className: 'gantt-btn',
+          type: 'button',
+          'data-action': 'work-mode',
+          'data-active': workOn ? 'true' : undefined,
+          'aria-pressed': workOn ? 'true' : 'false',
+          disabled: !workAvailable,
+          title: t('actions.workModeHint'),
+          onClick: toggleWorkMode,
+        }, t('actions.workMode')),
         h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('scale.label') },
           h('button', {
             className: 'gantt-seg-btn',
