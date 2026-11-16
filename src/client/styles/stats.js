@@ -1,6 +1,7 @@
 /** Stats bar, progress bar and error banner. */
 export const CSS_STATS = `
   .gantt-stats {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     flex-wrap: wrap;

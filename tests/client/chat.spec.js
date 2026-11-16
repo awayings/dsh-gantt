@@ -157,6 +157,20 @@ describe('panel open and close', () => {
     expect(panel(view)).not.toBeNull()
     expect(text(view.container, '.gantt-chat-focus-none')).toBe('Focus a task first to apply the decomposition.')
   })
+
+  it('keeps the stats row on the page column above the work area', async () => {
+    const { view } = await renderPage()
+    const stats = q(view.container, '.gantt-stats')
+    expect(stats).not.toBeNull()
+    expect(stats.parentElement.className).toBe('gantt-page')
+    expect(q(view.container, '.gantt-work-main > .gantt-stats')).toBeNull()
+    expect(q(view.container, '.gantt-page > .gantt-stats + .gantt-work')).not.toBeNull()
+
+    openChat(view)
+    expect(q(view.container, '.gantt-work > .gantt-chat')).not.toBeNull()
+    expect(q(view.container, '.gantt-work-main .gantt-chat')).toBeNull()
+    expect(q(view.container, '.gantt-page > .gantt-stats')).toBe(stats)
+  })
 })
 
 describe('sending a message', () => {
