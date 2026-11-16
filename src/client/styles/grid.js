@@ -258,4 +258,22 @@ export const CSS_GRID = `
     text-overflow: ellipsis;
     pointer-events: none;
   }
+  /* Work mode: the header toggle reads as pressed, and the row keeps an
+     explicit edit affordance because a row click now opens the conversation. */
+  .gantt-actions .gantt-btn[data-action="work-mode"][data-active="true"] {
+    color: var(--gantt-accent);
+    border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--gantt-accent) 13%, transparent);
+  }
+  .gantt-row[data-work="true"]:hover .gantt-task-title { color: var(--gantt-accent); }
+  .gantt-row[data-work="true"] .gantt-row-action[data-action="edit"] {
+    opacity: 1;
+    color: var(--gantt-accent);
+  }
+  /* The narrow task cell cannot hold four actions beside a title: fold the two
+     organize actions and keep edit plus add-child reachable. */
+  @container (max-width: 720px) {
+    .gantt-row[data-work="true"] .gantt-row-action[data-action="decompose"],
+    .gantt-row[data-work="true"] .gantt-row-action[data-action="schedule"] { display: none; }
+  }
 `

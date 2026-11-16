@@ -77,6 +77,8 @@ export function GanttRow({
   onCycleStatus,
   onDecompose,
   onSchedule,
+  work = false,
+  onEdit,
 }) {
   const hasChildren = task.hasChildren
   const number = rowNumber(task)
@@ -87,6 +89,7 @@ export function GanttRow({
     'data-depth': depth,
     'data-kind': task.kind,
     'data-task-id': task.id,
+    'data-work': work ? 'true' : undefined,
     onClick: () => onSelect(task),
     onKeyDown: (event) => {
       if (event.target !== event.currentTarget) return
@@ -123,6 +126,17 @@ export function GanttRow({
         onClick: () => onCycleStatus(task),
       }),
       h('div', { className: 'gantt-row-actions' },
+        work ? h('button', {
+          className: 'gantt-row-action',
+          type: 'button',
+          'data-action': 'edit',
+          title: t('dialog.editTitle'),
+          'aria-label': t('dialog.editTitle'),
+          onClick: (event) => {
+            event.stopPropagation()
+            onEdit(task)
+          },
+        }, '✎') : null,
         isTrack ? null : h('button', {
           className: 'gantt-row-action',
           type: 'button',
