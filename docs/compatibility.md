@@ -17,7 +17,9 @@ assistant tools with per-conversation focus); the previous round added the
 schema-v5 `task_events` trajectory, automatic session/turn provenance, and the
 background assistant protocol context; the work-mode round adds schema-v6
 `work_sessions`, the `gantt_track`/`gantt_create_task` round-closing tools, and
-the `gantt-work` workbench tab, covered by the same gate. The manual GUI
+the `gantt-work` workbench tab; the cancelled-status round adds schema-v7
+(`tasks.status` widened with `cancelled`, excluded from rollups/stats) and
+conversation titles on trajectory rows, covered by the same gate. The manual GUI
 checklist is in `docs/development.md` and had not been run at that date.
 
 ## 1 · Supported set
@@ -217,12 +219,20 @@ checklist is in `docs/development.md` and had not been run at that date.
 
 ## 4 · Data model layering and migration
 
-Schema version 6 adds the task ⇄ content-dedicated conversation mapping and
-the `track` trajectory action; version 5 had added the append-only task
-trajectory; version 4 had added the persisted daily brief report; version 3
+Schema version 7 widens the task status vocabulary with `cancelled`; version 6
+adds the task ⇄ content-dedicated conversation mapping and the `track`
+trajectory action; version 5 had added the append-only task trajectory; version 4 had added the persisted daily brief report; version 3
 had already unified the plugin's two previous datasets into one working tree. `tracks`/`nodes` remain as import
 snapshots, and the importer materializes them into `tasks` in the same
 transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v6 → v7 upgrade:** the migration rebuilds `tasks` with the status CHECK
+widened to `todo`/`in_progress`/`blocked`/`done`/`cancelled`, copying every
+column and row and recreating the `(parent_id, sort_order, created_at)` and
+`(kind, ref)` indexes. Foreign keys are disabled only for the rebuild so the
+`focus`, `task_events`, and `work_sessions` rows that reference `tasks` are not
+cascade-deleted; re-enabling them leaves `PRAGMA foreign_key_check` empty. The
+migration bumps `PRAGMA user_version` to 7; no status or event backfill runs.
 
 **v5 → v6 upgrade:** the base schema adds `work_sessions` (`task_id` primary
 key with `ON DELETE CASCADE`, unique `session_id`, `created_at`, `updated_at`,
@@ -379,7 +389,7 @@ the task they point at.
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
 - **Check — schema migration:** open a copy of a v2, v3, v4, or v5 database with
-  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 6`.
+  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 7`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
   unchanged and only gain `daily_briefs`; a v4 copy must keep the tree and

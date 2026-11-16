@@ -124,7 +124,7 @@ describe('decompose', () => {
     expectGanttError(() => store.decompose(parent.id, []), 'children must be a non-empty array')
     expectGanttError(() => store.decompose(parent.id, [/** @type {any} */ (null)]), 'children[0] must be an object')
     expectGanttError(() => store.decompose(parent.id, [{}]), 'title is required')
-    expectGanttError(() => store.decompose(parent.id, [{ title: 'c', status: 'nope' }]), 'status must be one of todo, in_progress, blocked, done')
+    expectGanttError(() => store.decompose(parent.id, [{ title: 'c', status: 'nope' }]), 'status must be one of todo, in_progress, blocked, done, cancelled')
     expectGanttError(() => store.decompose(parent.id, [{ title: 'c', progress: 'x' }]), 'progress must be a number from 0 to 100')
     expectGanttError(() => store.decompose(parent.id, [{ title: 'c', startDate: 'nope' }]), 'children[0].startDate must be a YYYY-MM-DD date')
     expectGanttError(

@@ -3,8 +3,10 @@ import { STATUS_COLOR } from '../constants.js'
 import { localeTag } from '../dates.js'
 import { h } from '../dom.js'
 import { requestJson, useGanttData, useLocale } from '../hooks.js'
+import { sessionDisplay } from '../../shared/session.js'
 import { CSS_PANEL } from '../styles/panel.js'
 import { flattenTree, rowNumber } from '../view.js'
+import { workServices } from '../work-nav.js'
 
 function failureMessage(failure) {
   return failure instanceof Error ? failure.message : String(failure)
@@ -37,6 +39,7 @@ export function GanttPanel({ ctx, scope, visible = true }) {
   const [trajectory, setTrajectory] = useState({ taskId: null, events: [], error: null })
   const [trajectoryRevision, setTrajectoryRevision] = useState(0)
   const sessionId = scope?.sessionId ?? ''
+  const { uiWorkspace } = workServices(ctx)
 
   useEffect(() => {
     if (sessionId === '' || !visible) return undefined
@@ -178,6 +181,20 @@ export function GanttPanel({ ctx, scope, visible = true }) {
       ? h('span', { className: 'gantt-panel-trajectory-turn' }, t('panel.turn').replace('{n}', String(event.turn)))
       : null,
     h('span', { className: 'gantt-panel-trajectory-time' }, shortTime(event.at, locale)),
+    event.sessionId === ''
+      ? null
+      : uiWorkspace
+        ? h('button', {
+          type: 'button',
+          className: 'gantt-panel-trajectory-session',
+          title: t('panel.openSession'),
+          'aria-label': t('panel.openSession'),
+          onClick: () => uiWorkspace.openSession(event.sessionId),
+        }, sessionDisplay(event.sessionId, event.sessionTitle))
+        : h('span', {
+          className: 'gantt-panel-trajectory-session',
+          title: event.sessionId,
+        }, sessionDisplay(event.sessionId, event.sessionTitle)),
     event.detail
       ? h('span', { className: 'gantt-panel-trajectory-detail', title: event.detail }, event.detail)
       : null,

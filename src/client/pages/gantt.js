@@ -163,7 +163,7 @@ export function GanttPage({ ctx }) {
     setToast({ text: message, kind: 'ok' })
   }, [refresh])
   const cycleStatus = useCallback(async (task) => {
-    const base = task.status === 'blocked' ? 'todo' : task.status
+    const base = task.status === 'blocked' || task.status === 'cancelled' ? 'todo' : task.status
     const next = base === 'todo' ? 'in_progress' : base === 'in_progress' ? 'done' : 'todo'
     try {
       await requestJson('api/gantt/task/status', {
@@ -484,6 +484,12 @@ export function GanttPage({ ctx }) {
         h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.blocked } }),
         t('stats.overdue'), h('b', null, stats.overdue),
       ),
+      stats.cancelled > 0
+        ? h('div', { className: 'gantt-stat' },
+          h('span', { className: 'gantt-dot', style: { '--st': STATUS_COLOR.cancelled } }),
+          t('stats.cancelled'), h('b', null, stats.cancelled),
+        )
+        : null,
       h('div', { className: 'gantt-stat-progress' },
         h('span', null, `${t('stats.progress')} ${stats.progress}%`),
         h('div', { className: 'gantt-progress' }, h('span', { style: { width: `${stats.progress}%` } })),

@@ -34,6 +34,7 @@ const TRAJECTORY_EVENTS = [
     taskId: 'n1',
     action: 'complete',
     sessionId: 'session-abcdef-long',
+    sessionTitle: 'Merged PR',
     turn: 12,
     detail: 'merged to main',
     at: '2026-11-16T06:05:00.000Z',
@@ -519,6 +520,28 @@ describe('focused task trajectory', () => {
     expect(text(rows[2], '.gantt-panel-trajectory-detail')).toBe('split into 3')
     expect(rows[0].getAttribute('title')).toBe('session-abcdef-long')
     expect(text(rows[3], '.gantt-panel-trajectory-time')).toBe('22:00')
+    expect(text(rows[0], '.gantt-panel-trajectory-session')).toBe('Merged PR（abcdef-l）')
+    expect(text(rows[1], '.gantt-panel-trajectory-session')).toBe('1')
+  })
+
+  it('opens the recorded conversation from a trajectory row', async () => {
+    const opened = []
+    const { view } = await renderPanel({
+      [FOCUS]: () => jsonResponse({ ok: true, taskId: 'n1' }),
+      [TRAJECTORY]: () => jsonResponse({ ok: true, events: TRAJECTORY_EVENTS }),
+    }, {
+      services: {
+        betterSidebar: fakeSidebarService(),
+        uiWorkspace: { openSession: sessionId => opened.push(sessionId) },
+      },
+    })
+    await flush()
+
+    const buttons = qa(view.container, 'button.gantt-panel-trajectory-session')
+    expect(buttons).toHaveLength(5)
+    expect(buttons[0].getAttribute('aria-label')).toBe('Open conversation')
+    click(buttons[0])
+    expect(opened).toEqual(['session-abcdef-long'])
   })
 
   it('hides the section when the focused task has no events', async () => {

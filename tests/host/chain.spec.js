@@ -112,9 +112,9 @@ describe('focus chain helpers', () => {
       { action: 'update', sessionId: '', turn: null, detail: '', at: '2026-11-16T06:00:00.000Z' },
       { action: 'odd', sessionId: 'session-b', turn: 1, detail: 'x', at: '2026-11-16T05:00:00.000Z' },
     ])
-    expect(lines[0]).toBe('- 完成 · 会话 session-a · 第 4 轮 · 2026-11-16T07:00:00.000Z：shipped')
+    expect(lines[0]).toBe('- 完成 · 会话 a · 第 4 轮 · 2026-11-16T07:00:00.000Z：shipped')
     expect(lines[1]).toBe('- 更新 · 由手动接口写入 · 轮次未知 · 2026-11-16T06:00:00.000Z')
-    expect(lines[2]).toBe('- odd · 会话 session-b · 第 1 轮 · 2026-11-16T05:00:00.000Z：x')
+    expect(lines[2]).toBe('- odd · 会话 b · 第 1 轮 · 2026-11-16T05:00:00.000Z：x')
     expect(renderTrajectory([])).toEqual([])
   })
 })

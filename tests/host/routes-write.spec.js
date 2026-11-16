@@ -129,6 +129,8 @@ describe('POST /api/gantt/task/status', () => {
     const blocked = await invoke(routes, ROUTES.status, { id: task.id, status: 'blocked', progress: 30 })
     expect(blocked.payload.task.status).toBe('blocked')
     expect(blocked.payload.task.progress).toBe(30)
+    const cancelled = await invoke(routes, ROUTES.status, { id: task.id, status: 'cancelled' })
+    expect(cancelled.payload.task.status).toBe('cancelled')
   })
 
   it('requires an id and a valid status', async () => {

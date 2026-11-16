@@ -3,12 +3,13 @@
 // assistant tools read the same lines the old chat prompt used, so the model
 // sees exactly the context the user selected in the sidebar panel.
 
+import { sessionDisplay } from '../../shared/session.js'
 import { DECOMPOSE_MAX_DEPTH, flattenTree } from '../tree.js'
 
 /** @typedef {import('../tree.js').TreeTaskNode} TreeTaskNode */
 
 /** Human labels for the task status vocabulary. @type {Record<string, string>} */
-export const STATUS_LABELS = { todo: '待办', in_progress: '进行中', blocked: '阻塞', done: '已完成' }
+export const STATUS_LABELS = { todo: '待办', in_progress: '进行中', blocked: '阻塞', done: '已完成', cancelled: '已废弃' }
 
 /** Human labels for the task-kind vocabulary. @type {Record<string, string>} */
 export const KIND_LABELS = { track: '支线', node: '节点', task: '任务' }
@@ -16,13 +17,18 @@ export const KIND_LABELS = { track: '支线', node: '节点', task: '任务' }
 /** Human labels for the recorded trajectory actions. @type {Record<string, string>} */
 export const ACTION_LABELS = { create: '创建', update: '更新', complete: '完成', decompose: '拆解', track: '记录' }
 
-/** Render recorded trajectory events as markdown lines, newest first.
+/** Render recorded trajectory events as markdown lines, newest first. `titles`
+ * optionally maps a session id to the conversation title the host resolved;
+ * without it the line keeps the compact id so a UUID never dominates the text.
  * @param {{ action: string, sessionId: string, turn: number | null, detail: string, at: string }[]} events
+ * @param {Map<string, string> | null} [titles]
  * @returns {string[]} */
-export function renderTrajectory(events) {
+export function renderTrajectory(events, titles = null) {
   return events.map((event) => {
     const action = ACTION_LABELS[event.action] ?? event.action
-    const session = event.sessionId === '' ? '由手动接口写入' : `会话 ${event.sessionId}`
+    const session = event.sessionId === ''
+      ? '由手动接口写入'
+      : `会话 ${sessionDisplay(event.sessionId, titles?.get(event.sessionId))}`
     const turn = event.turn === null ? '轮次未知' : `第 ${event.turn} 轮`
     const detail = event.detail === '' ? '' : `：${event.detail}`
     return `- ${action} · ${session} · ${turn} · ${event.at}${detail}`

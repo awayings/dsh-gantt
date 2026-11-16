@@ -148,7 +148,7 @@ The full JSON shape and the writable subset are in
 The tracker is hand-written and its state words drift, so the parser normalises
 aliases before storing (`render_tree.py:44-52` defines the same aliases). The
 stored `state` keeps the normalised tracker word — `撤销` stays `撤销` — while
-`status` is the plugin's four-value vocabulary:
+`status` is the plugin's five-value vocabulary:
 
 | Tracker state | Stored `state` | `status` | `progress` |
 | --- | --- | --- | --- |
@@ -162,6 +162,13 @@ stored `state` keeps the normalised tracker word — `撤销` stays `撤销` —
 rule in the tracker counts it as done. A state word outside this table is kept
 verbatim in `state` (the vocabulary is allowed to evolve) and maps to `todo`
 unless it is one of the aliases above.
+
+`cancelled` is the one status the tracker vocabulary does not produce: the user
+or an assistant marks a task `废弃` when it is dropped on purpose. The row stays
+in the tree with its trajectory so the decision remains visible, but it no
+longer holds its parent open: rollups, stats progress, the ready list, and the
+overdue count all skip it. A parent whose children are all cancelled reads
+`cancelled` itself.
 
 ### Rollups on imported parents
 
@@ -181,7 +188,8 @@ while all of its children are 未开始, because the track itself carries
 `进行`. A manual parent (`state` empty) keeps the child-derived rule the v1 tree
 always had: every child done → `done`, any blocked → `blocked`, any in progress
 or progress > 0 → `in_progress`, otherwise `todo`. Parent dates and progress
-are still the child min/max and mean.
+are still the min/max and mean of the **active** children; cancelled children
+are ignored, and a parent left with none reads `cancelled` with progress 0.
 
 Re-import is careful with user edits: content fields (title, description, state,
 lane, dep, doneWhen, parent, sort order, dates) always follow the markdown, but

@@ -117,7 +117,7 @@ export function treePayload(overrides = {}) {
   return {
     ok: true,
     today: TODAY,
-    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     tasks: makeTree(),
     stats: makeStats(),
     ...overrides,
@@ -129,7 +129,7 @@ export function emptyTreePayload(today = TODAY) {
   return {
     ok: true,
     today,
-    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     tasks: [],
     stats: { total: 0, done: 0, inProgress: 0, blocked: 0, overdue: 0, progress: 0 },
   }
@@ -141,7 +141,7 @@ export function metaPayload(overrides = {}) {
     ok: true,
     dbPath: '/data/home/ws-plugin/dsh-gantt/.tmp/gantt.db',
     engine: 'node:sqlite',
-    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     schemaVersion: 1,
     taskCount: 6,
     endpoints: [
@@ -358,7 +358,7 @@ export function unifiedTreePayload(overrides = {}) {
   return {
     ok: true,
     today: TODAY,
-    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     tasks: makeUnifiedTree(),
     stats: makeUnifiedStats(),
     brief: makeBrief(),
@@ -436,7 +436,7 @@ export function filterTreePayload(overrides = {}) {
   return {
     ok: true,
     today: TODAY,
-    statuses: ['todo', 'in_progress', 'blocked', 'done'],
+    statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     tasks: makeFilterTree(),
     stats: { total: 8, done: 0, inProgress: 3, blocked: 2, overdue: 0, progress: 20 },
     brief: makeBrief(),

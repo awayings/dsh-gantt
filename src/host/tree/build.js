@@ -56,22 +56,26 @@ export const DECOMPOSE_MAX_DEPTH = 4
  * done → in_progress; otherwise todo. Manual parents (state === '') keep the
  * child-only rule: every child done → done, any blocked child → blocked, any
  * in_progress child or positive rolled-up progress → in_progress, else todo.
- * `progress` is always the mean of the children's progress.
+ * Cancelled children are dropped before the rule: they neither hold a parent
+ * open nor count towards its progress, and a parent whose children are all
+ * cancelled is itself cancelled. `progress` is the mean of the active children.
  * @param {{ status: TaskStatus }[]} children
  * @param {number} progress
  * @param {string} [state] the parent's own normalized tracker state ('' for manual)
  * @returns {TaskStatus}
  */
 export function deriveSummaryStatus(children, progress, state = '') {
-  if (children.length > 0 && children.every(child => child.status === 'done')) return 'done'
+  const active = children.filter(child => child.status !== 'cancelled')
+  if (children.length > 0 && active.length === 0) return 'cancelled'
+  if (children.length > 0 && active.every(child => child.status === 'done')) return 'done'
   if (state !== '') {
     if (state === '进行') return 'in_progress'
-    if (children.some(child => child.status === 'blocked')) return 'blocked'
-    if (children.some(child => child.status === 'in_progress' || child.status === 'done')) return 'in_progress'
+    if (active.some(child => child.status === 'blocked')) return 'blocked'
+    if (active.some(child => child.status === 'in_progress' || child.status === 'done')) return 'in_progress'
     return 'todo'
   }
-  if (children.some(child => child.status === 'blocked')) return 'blocked'
-  if (children.some(child => child.status === 'in_progress') || progress > 0) return 'in_progress'
+  if (active.some(child => child.status === 'blocked')) return 'blocked'
+  if (active.some(child => child.status === 'in_progress') || progress > 0) return 'in_progress'
   return 'todo'
 }
 
@@ -109,9 +113,11 @@ export function buildTree(rows) {
     /** @type {TreeTaskNode} */
     const node = { ...row, number, hasChildren: children.length > 0, children }
     if (children.length > 0) {
-      node.startDate = children.reduce((min, child) => (child.startDate < min ? child.startDate : min), children[0].startDate)
-      node.endDate = children.reduce((max, child) => (child.endDate > max ? child.endDate : max), children[0].endDate)
-      node.progress = Math.round(children.reduce((sum, child) => sum + child.progress, 0) / children.length)
+      const active = children.filter(child => child.status !== 'cancelled')
+      const rollup = active.length > 0 ? active : children
+      node.startDate = rollup.reduce((min, child) => (child.startDate < min ? child.startDate : min), rollup[0].startDate)
+      node.endDate = rollup.reduce((max, child) => (child.endDate > max ? child.endDate : max), rollup[0].endDate)
+      node.progress = active.length === 0 ? 0 : Math.round(active.reduce((sum, child) => sum + child.progress, 0) / active.length)
       node.status = deriveSummaryStatus(children, node.progress, node.state)
     }
     return node
@@ -140,6 +146,7 @@ export function flattenTree(nodes, output = []) {
  * @property {number} done
  * @property {number} inProgress
  * @property {number} blocked
+ * @property {number} cancelled
  * @property {number} overdue
  * @property {number} progress
  */
@@ -155,21 +162,25 @@ export function summarize(nodes) {
   let done = 0
   let inProgress = 0
   let blocked = 0
+  let cancelled = 0
   let overdue = 0
   for (const task of flat) {
     if (task.status === 'done') done += 1
+    else if (task.status === 'cancelled') cancelled += 1
     else {
       if (task.status === 'in_progress') inProgress += 1
       if (task.status === 'blocked') blocked += 1
       if (task.endDate < today) overdue += 1
     }
   }
+  const active = flat.length - cancelled
   return {
     total: flat.length,
     done,
     inProgress,
     blocked,
+    cancelled,
     overdue,
-    progress: flat.length === 0 ? 0 : Math.round((done / flat.length) * 100),
+    progress: active === 0 ? 0 : Math.round((done / active) * 100),
   }
 }

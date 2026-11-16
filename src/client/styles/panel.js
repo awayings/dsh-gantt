@@ -157,6 +157,21 @@ export const CSS_PANEL = `
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  .gantt-panel-trajectory-session {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--gantt-muted);
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    text-align: left;
+  }
+  button.gantt-panel-trajectory-session { cursor: pointer; }
+  button.gantt-panel-trajectory-session:hover { color: var(--gantt-text); text-decoration: underline; }
   .gantt-panel-trajectory-detail {
     min-width: 0;
     overflow: hidden;

@@ -142,7 +142,7 @@ or v5 database is migrated to schema version 6 on open (the append-only
 migration, the one-time tree backfill for v2, and the
 `daily_briefs`/`focus`/`task_events`/`work_sessions` additions are in
 [docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
-task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`;
+task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`, `cancelled`;
 plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
 Schema version 6 keeps one working tree in `tasks`: `kind='track'` roots (the

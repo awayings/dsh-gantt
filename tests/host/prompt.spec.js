@@ -48,10 +48,10 @@ describe('focused task prompt context', () => {
     const { task } = focusTask()
     await store.update(task.id, { status: 'in_progress', progress: 60 }, { sessionId: 'session-old', turn: 3, summary: 'rows pulled' })
     const text = renderFocusContext(store, 'session-a')
-    expect(text).toContain('会话 session-old')
+    expect(text).toContain('会话 old')
     expect(text).toContain('第 3 轮')
     expect(text).toContain('rows pulled')
-    expect(text).toContain('更新 · 会话 session-old')
+    expect(text).toContain('更新 · 会话 old')
   })
 
   it('never fails prompt assembly for a malformed conversation id', () => {

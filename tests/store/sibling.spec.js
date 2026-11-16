@@ -103,7 +103,7 @@ describe('createSibling', () => {
     expectGanttError(() => store.createSibling(reference.id, {}), 'title is required', 400)
     expectGanttError(() => store.createSibling(reference.id, { title: 'X', startDate: 'nope' }), 'startDate must be a YYYY-MM-DD date', 400)
     expectGanttError(() => store.createSibling(reference.id, { title: 'X', startDate: '2024-02-02', endDate: '2024-02-01' }), 'endDate must not be before startDate', 400)
-    expectGanttError(() => store.createSibling(reference.id, { title: 'X', status: 'odd' }), 'status must be one of todo, in_progress, blocked, done', 400)
+    expectGanttError(() => store.createSibling(reference.id, { title: 'X', status: 'odd' }), 'status must be one of todo, in_progress, blocked, done, cancelled', 400)
     expectGanttError(() => store.createSibling(reference.id, { title: 'X', progress: 'half' }), 'progress must be a number from 0 to 100', 400)
     expectGanttError(() => store.createSibling(reference.id, { title: 'X', links: 'nope' }), 'links must be an array', 400)
   })

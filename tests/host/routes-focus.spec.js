@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { registerRoutes } from '../../src/host/routes/index.js'
+import { createSessionTitles } from '../../src/host/session-titles.js'
+import { GanttStore } from '../../src/host/store.js'
 import { ROUTES, bootPlugin, invoke } from '../helpers/host.js'
 
 let routes
@@ -53,5 +56,56 @@ describe('focus routes', () => {
     const unknown = await invoke(routes, `${ROUTES.trajectory}?taskId=missing`)
     expect(unknown.status).toBe(404)
     expect(unknown.payload).toEqual({ ok: false, error: 'task missing was not found' })
+  })
+})
+
+describe('trajectory conversation titles', () => {
+  it('attaches the resolved title and falls back to an empty string', async () => {
+    const query = {
+      seen: [],
+      async readTitleSnapshots(ids) {
+        this.seen.push([...ids])
+        return ids.map(id => id === 'session-a'
+          ? { sessionId: id, status: 'fulfilled', value: { title: { title: 'Polish the plan' } } }
+          : { sessionId: id, status: 'rejected', reason: new Error('missing') })
+      },
+    }
+    const store = new GanttStore(':memory:')
+    const routes = new Map()
+    const ctx = {
+      connection: { fetch: { register(definition) { routes.set(definition.path, definition) } } },
+      get: name => (name === 'sessionQuery' ? query : undefined),
+      effect() {},
+    }
+    registerRoutes(ctx, store, createSessionTitles(name => (name === 'sessionQuery' ? query : undefined)))
+    const task = store.create({ title: 'Data table' })
+    store.update(task.id, { status: 'done' }, { sessionId: 'session-a', turn: 4, summary: 'shipped' })
+    store.update(task.id, { status: 'in_progress' }, { sessionId: 'session-b', turn: 5, summary: 'again' })
+
+    const response = await invoke(routes, `${ROUTES.trajectory}?taskId=${task.id}`)
+    expect(response.status).toBe(200)
+    expect(response.payload.events.map(event => [event.sessionId, event.sessionTitle])).toEqual([
+      ['session-b', ''],
+      ['session-a', 'Polish the plan'],
+    ])
+    expect(query.seen).toEqual([['session-b', 'session-a']])
+    store.close()
+  })
+
+  it('falls back to an empty title when the resolver returns no entry', async () => {
+    const store = new GanttStore(':memory:')
+    const routes = new Map()
+    const ctx = {
+      connection: { fetch: { register(definition) { routes.set(definition.path, definition) } } },
+      get: () => undefined,
+      effect() {},
+    }
+    registerRoutes(ctx, store, { resolve: async () => new Map() })
+    const task = store.create({ title: 'Data table' })
+    store.update(task.id, { status: 'done' }, { sessionId: 'session-a', turn: 1 })
+
+    const response = await invoke(routes, `${ROUTES.trajectory}?taskId=${task.id}`)
+    expect(response.payload.events[0]).toMatchObject({ sessionId: 'session-a', sessionTitle: '' })
+    store.close()
   })
 })

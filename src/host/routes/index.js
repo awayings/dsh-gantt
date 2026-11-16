@@ -2,6 +2,7 @@
 // composed from the per-resource modules and registered on the connection
 // service.
 
+import { createSessionTitles } from '../session-titles.js'
 import { briefComputeRoute, briefRoute } from './brief.js'
 import { registerRoute } from './http.js'
 import { focusRoute, setFocusRoute, trajectoryRoute } from './focus.js'
@@ -48,10 +49,11 @@ export const ENDPOINTS = ROUTES.map(({ method, path, description }) => ({ method
  * Register every host route on the connection service.
  * @param {GanttContext} ctx
  * @param {GanttStore} store
+ * @param {import('../session-titles.js').SessionTitles} [titles]
  * @returns {void}
  */
-export function registerRoutes(ctx, store) {
+export function registerRoutes(ctx, store, titles = createSessionTitles()) {
   /** @type {import('./http.js').RouteDeps} */
-  const deps = { store, endpoints: ENDPOINTS, get: name => ctx.get?.(name) }
+  const deps = { store, endpoints: ENDPOINTS, get: name => ctx.get?.(name), titles }
   for (const spec of ROUTES) registerRoute(ctx, spec, deps)
 }

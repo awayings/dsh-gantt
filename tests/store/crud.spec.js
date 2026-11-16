@@ -87,7 +87,7 @@ describe('create validation', () => {
   it('rejects an unknown status', () => {
     expectGanttError(
       () => store.create({ title: 'T', status: 'pending' }),
-      'status must be one of todo, in_progress, blocked, done',
+      'status must be one of todo, in_progress, blocked, done, cancelled',
     )
   })
 
@@ -186,7 +186,7 @@ describe('update', () => {
 
   it('rejects an unknown status or invalid progress', () => {
     const task = store.create({ title: 'Task' })
-    expectGanttError(() => store.update(task.id, { status: 'nope' }), 'status must be one of todo, in_progress, blocked, done')
+    expectGanttError(() => store.update(task.id, { status: 'nope' }), 'status must be one of todo, in_progress, blocked, done, cancelled')
     expectGanttError(() => store.update(task.id, { progress: 'x' }), 'progress must be a number from 0 to 100')
   })
 
@@ -301,7 +301,7 @@ describe('setStatus', () => {
     const updated = store.setStatus(task.id, 'blocked', 42)
     expect(updated.status).toBe('blocked')
     expect(updated.progress).toBe(42)
-    expectGanttError(() => store.setStatus(task.id, 'later'), 'status must be one of todo, in_progress, blocked, done')
+    expectGanttError(() => store.setStatus(task.id, 'later'), 'status must be one of todo, in_progress, blocked, done, cancelled')
     expectGanttError(() => store.setStatus('ghost', 'done'), 'task ghost was not found', 404)
   })
 })

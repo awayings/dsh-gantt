@@ -69,15 +69,19 @@ task ⇄ dedicated-conversation mapping; the plugin itself never calls a model.
   to `task`. The create route technically accepts all three, but only a caller
   writing its own importer should create `track`/`node` rows — the UI never
   offers them.
-- **Status** is one of `todo`, `in_progress`, `blocked`, `done` (the vocabulary
-  is also returned by `/tree` and `/meta`).
+- **Status** is one of `todo`, `in_progress`, `blocked`, `done`, `cancelled`
+  (the vocabulary is also returned by `/tree` and `/meta`). `cancelled` marks an
+  abandoned task: it keeps the row and its trajectory, but it is dropped from
+  parent rollups, the stats ratio, the ready list, and the overdue count.
 - **Progress** is a number from 0 to 100; it is rounded and clamped.
 - **Title** is trimmed and whitespace-collapsed, 1–200 characters.
 - **Description** is an optional string of at most 4000 characters; absent or
   `null` becomes `''`.
 - **Numbers** (`1`, `1.1`, …) are derived from sibling order at read time.
 - **Rollups**: when a task has children, its `startDate`/`endDate` cover them
-  and `progress` is the mean of the children's progress. Status follows the
+  and `progress` is the mean of the children's progress; cancelled children are
+  ignored, and a parent whose children are all cancelled reads `cancelled` with
+  progress 0. Status follows the
   tracker rule, not a plain child average:
   - every child `done` → `done`;
   - otherwise, for a row that carries a tracker `state` (an imported track or
@@ -195,8 +199,8 @@ curl -s http://127.0.0.1:3080/api/gantt/tree
 {
   "ok": true,
   "today": "2026-11-15",
-  "statuses": ["todo", "in_progress", "blocked", "done"],
-  "stats": { "total": 54, "done": 12, "inProgress": 9, "blocked": 3, "overdue": 4, "progress": 22 },
+  "statuses": ["todo", "in_progress", "blocked", "done", "cancelled"],
+  "stats": { "total": 54, "done": 12, "inProgress": 9, "blocked": 3, "cancelled": 2, "overdue": 4, "progress": 23 },
   "brief": {
     "pending": 20,
     "frontier": [
@@ -416,6 +420,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
       "id": "…",
       "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
       "sessionId": "session-abc",
+      "sessionTitle": "Polish the plan",
       "turn": 7,
       "action": "complete",
       "detail": "已收口，读数表进日报",
@@ -442,6 +447,11 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
   durable turn index); `at` is the event's ISO timestamp. Events are created
   only by assistant-tool writes; they are not editable and are deleted with
   their task (`ON DELETE CASCADE`).
+- `sessionTitle` is the conversation's latest log-backed title, resolved
+  best-effort through `sessionQuery.readTitleSnapshots`; it is `''` when the
+  host has no such service, the conversation is gone, or the read timed out.
+  Clients fall back to a compact session id (`session-b1f72425-…` → `b1f72425`)
+  and use the title only as a readable prefix.
 - An invalid `limit` is a `400`; an unknown `taskId` is a `404`.
 
 ## Work mode
@@ -540,10 +550,10 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 {
   "ok": true,
   "dbPath": "/home/you/.dsh/gantt/tasks.db",
-  "statuses": ["todo", "in_progress", "blocked", "done"],
+  "statuses": ["todo", "in_progress", "blocked", "done", "cancelled"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -1095,7 +1105,7 @@ Create child tasks under one task.
 | `children[].title` | yes | 1–200 characters |
 | `children[].doneWhen` | yes | Verifiable completion standard |
 | `children[].estimate`, `category`, `landing`, `inspiration` | no | Optional metadata strings |
-| `children[].status` | no | `todo` (default), `in_progress`, `blocked`, or `done` |
+| `children[].status` | no | `todo` (default), `in_progress`, `blocked`, `done`, or `cancelled` |
 
 Returns `{ ok: true, message: string }` listing the created children with their
 dotted ids and `doneWhen`. The store enforces the same rules as
@@ -1147,7 +1157,7 @@ Create a task as the immediate next sibling of the reference task.
 | `title` | yes | 1–200 characters |
 | `doneWhen` | no | Verifiable completion standard |
 | `description` | no | Optional note |
-| `status` | no | `todo` (default), `in_progress`, `blocked`, or `done` |
+| `status` | no | `todo` (default), `in_progress`, `blocked`, `done`, or `cancelled` |
 | `startDate`, `endDate` | no | `YYYY-MM-DD`; default today and today + 3 days |
 
 Returns `{ ok: true, message: string }` naming the reference and the new
@@ -1198,7 +1208,7 @@ All failures are JSON with a `4xx`/`5xx` status:
 | --- | --- | --- |
 | `400` | malformed JSON body | `request body must be valid JSON` |
 | `400` | body is not a JSON object | `request body must be a JSON object` |
-| `400` | missing/invalid field | `title is required`, `status must be one of todo, in_progress, blocked, done`, `endDate must not be before startDate` |
+| `400` | missing/invalid field | `title is required`, `status must be one of todo, in_progress, blocked, done, cancelled`, `endDate must not be before startDate` |
 | `400` | invalid links | `links must be an array`, `links[0].type must be one of memory, file, url, task, note` |
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |

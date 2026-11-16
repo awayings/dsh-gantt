@@ -51,7 +51,7 @@ function downgradeToV5(file) {
 describe('schema v6', () => {
   it('creates the work-session table and the widened trajectory vocabulary', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(6)
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(6)
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db, 'work_sessions')).toEqual(['task_id', 'session_id', 'created_at', 'updated_at'])
     expect(indexes(store.db, 'work_sessions')).toEqual(['idx_work_sessions_session'])

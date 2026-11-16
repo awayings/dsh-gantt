@@ -113,6 +113,7 @@ describe('meta and snapshot', () => {
         done: 0,
         inProgress: 0,
         blocked: 0,
+        cancelled: 0,
         overdue: 0,
         progress: 0,
       },

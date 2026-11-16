@@ -213,9 +213,13 @@ export class GanttStore {
       if (!row) break
       const children = /** @type {ChildSummaryRow[]} */ (this.db.prepare('SELECT status, progress, start_date, end_date FROM tasks WHERE parent_id = ?').all(current))
       if (children.length > 0) {
-        const startDate = children.reduce((min, child) => (child.start_date < min ? child.start_date : min), children[0].start_date)
-        const endDate = children.reduce((max, child) => (child.end_date > max ? child.end_date : max), children[0].end_date)
-        const progress = Math.round(children.reduce((sum, child) => sum + child.progress, 0) / children.length)
+        // Cancelled children are dropped from the rollup: they neither stretch
+        // the parent's dates nor count towards its progress.
+        const active = children.filter(child => child.status !== 'cancelled')
+        const rollup = active.length > 0 ? active : children
+        const startDate = rollup.reduce((min, child) => (child.start_date < min ? child.start_date : min), rollup[0].start_date)
+        const endDate = rollup.reduce((max, child) => (child.end_date > max ? child.end_date : max), rollup[0].end_date)
+        const progress = active.length === 0 ? 0 : Math.round(active.reduce((sum, child) => sum + child.progress, 0) / active.length)
         this.db.prepare('UPDATE tasks SET start_date = ?, end_date = ?, progress = ?, status = ?, updated_at = ? WHERE id = ?')
           .run(startDate, endDate, progress, deriveSummaryStatus(children, progress, row.state), now, current)
       }

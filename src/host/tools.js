@@ -80,9 +80,10 @@ export function resolveTaskId(store, value) {
 /**
  * @param {GanttStore} store
  * @param {unknown} sessionId
- * @returns {string}
+ * @param {import('./session-titles.js').SessionTitles | null} titles
+ * @returns {Promise<string>}
  */
-function contextMarkdown(store, sessionId) {
+async function contextMarkdown(store, sessionId, titles) {
   const snapshot = store.snapshot()
   const tasks = snapshot.tasks
   const focus = findFocus(tasks, typeof sessionId === 'string' ? store.focusOf(sessionId) : null)
@@ -94,7 +95,8 @@ function contextMarkdown(store, sessionId) {
   if (focus !== null) {
     lines.push('', ...renderFocusChain(tasks, focus), ...renderFocusDetail(tasks, focus), '', '## 任务轨迹（会话与轮次）')
     const events = store.trajectory({ taskId: focus.id, limit: 8 })
-    lines.push(...(events.length === 0 ? ['（暂无会话记录）'] : renderTrajectory(events)))
+    const resolved = titles === null ? new Map() : await titles.resolve(events.map(event => event.sessionId))
+    lines.push(...(events.length === 0 ? ['（暂无会话记录）'] : renderTrajectory(events, resolved)))
   } else {
     lines.push(
       '',
@@ -220,9 +222,10 @@ function createTask(store, args, exec) {
  * Build the tool definitions. Kept pure so the host tests can call each tool
  * without a live tools service.
  * @param {GanttStore} store
+ * @param {import('./session-titles.js').SessionTitles | null} [titles]
  * @returns {GanttTool[]}
  */
-export function toolDefinitions(store) {
+export function toolDefinitions(store, titles = null) {
   return [
     {
       name: TOOL_NAMES.context,
@@ -238,7 +241,7 @@ export function toolDefinitions(store) {
         render: (_args, value) => [{ type: 'text', text: value.markdown }],
       },
       async execute(_args, exec) {
-        return { ok: true, markdown: contextMarkdown(store, exec?.agent?.session?.id) }
+        return { ok: true, markdown: await contextMarkdown(store, exec?.agent?.session?.id, titles) }
       },
     },
     {
@@ -264,7 +267,7 @@ export function toolDefinitions(store) {
                 category: { type: 'string', description: '可选，A/B 类或自定义分类。' },
                 landing: { type: 'string', description: '可选，落点。' },
                 inspiration: { type: 'string', description: '可选，灵感来源。' },
-                status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'], description: '可选，默认 todo。' },
+                status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: '可选，默认 todo。' },
               },
               required: ['title', 'doneWhen'],
             },
@@ -293,7 +296,7 @@ export function toolDefinitions(store) {
         additionalProperties: false,
         properties: {
           id: { type: 'string', description: '任务：内部 id、点号 id 或编号（如 1.1.1）。' },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'], description: '可选，新状态。' },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: '可选，新状态；cancelled 表示废弃，不计入父任务进度。' },
           progress: { type: 'integer', description: '可选，0–100 的进度。' },
           title: { type: 'string', description: '可选，新标题。' },
           doneWhen: { type: 'string', description: '可选，新的完成标准。' },
@@ -350,7 +353,7 @@ export function toolDefinitions(store) {
           title: { type: 'string', description: '新同级任务的标题。' },
           doneWhen: { type: 'string', description: '可选，可验证的完成标准：做完了吗？怎么证明？' },
           description: { type: 'string', description: '可选，说明或备注。' },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'], description: '可选，默认 todo。' },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: '可选，默认 todo。' },
           startDate: { type: 'string', description: '可选，YYYY-MM-DD。' },
           endDate: { type: 'string', description: '可选，YYYY-MM-DD。' },
         },
@@ -378,9 +381,10 @@ export function toolDefinitions(store) {
  * missing service is not an error.
  * @param {{ get?: (name: string) => unknown, effect?: (fn: () => () => void, hint?: string) => unknown }} ctx
  * @param {GanttStore} store
+ * @param {import('./session-titles.js').SessionTitles | null} [titles]
  * @returns {void}
  */
-export function registerTools(ctx, store) {
+export function registerTools(ctx, store, titles = null) {
   const tools = /** @type {{ register?: (definition: GanttTool) => () => void } | undefined} */ (
     typeof ctx.get === 'function' ? ctx.get('tools') : undefined
   )
@@ -389,7 +393,7 @@ export function registerTools(ctx, store) {
   // service as the receiver instead of detaching the method.
   const register = tools.register.bind(tools)
   /** @type {Array<() => void>} */
-  const disposers = toolDefinitions(store).map(definition => register(definition))
+  const disposers = toolDefinitions(store, titles).map(definition => register(definition))
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => {
       for (const dispose of disposers) dispose()

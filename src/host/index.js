@@ -7,6 +7,7 @@
 import { GanttStore, resolveDatabasePath } from './store.js'
 import { installPrompt } from './prompt.js'
 import { registerRoutes } from './routes/index.js'
+import { createSessionTitles } from './session-titles.js'
 import { registerTools } from './tools.js'
 
 /** @typedef {import('./routes/http.js').GanttContext} GanttContext */
@@ -31,7 +32,8 @@ export function apply(ctx) {
   const store = new GanttStore(resolveDatabasePath())
   ctx.effect(() => () => store.close(), 'gantt: close SQLite database')
   ctx.effect(() => store.startScheduler(), 'gantt: recompute the daily brief at 08:00')
-  registerRoutes(ctx, store)
+  const titles = createSessionTitles(name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined))
+  registerRoutes(ctx, store, titles)
   // The prompt and tools services may mount after this plugin, so wait for them
   // explicitly. Unit harnesses and headless profiles have no inject seam; they
   // register against whatever the context already exposes.
@@ -40,9 +42,9 @@ export function apply(ctx) {
     const onPrompt = promptCtx => installPrompt(promptCtx, store)
     ctx.inject(['systemPrompt'], onPrompt)
     /** @param {GanttContext} toolsCtx */
-    const onTools = toolsCtx => registerTools(toolsCtx, store)
+    const onTools = toolsCtx => registerTools(toolsCtx, store, titles)
     ctx.inject(['tools'], onTools)
   } else {
-    registerTools(ctx, store)
+    registerTools(ctx, store, titles)
   }
 }

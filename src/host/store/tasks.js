@@ -109,7 +109,7 @@ export function normalizeParent(value) {
 export function defaultProgress(status, current = 0) {
   if (status === 'done') return 100
   if (status === 'todo') return 0
-  if (status === 'blocked') return current
+  if (status === 'blocked' || status === 'cancelled') return current
   return current > 0 && current < 100 ? current : 50
 }
 /** @param {number} progress @param {TaskStatus} current @returns {TaskStatus} */

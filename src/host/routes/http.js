@@ -37,6 +37,7 @@ import { todayIso } from '../tree.js'
  * @property {GanttStore} store
  * @property {GanttEndpoint[]} endpoints
  * @property {(name: string) => unknown} get
+ * @property {import('../session-titles.js').SessionTitles} titles
  */
 
 /**

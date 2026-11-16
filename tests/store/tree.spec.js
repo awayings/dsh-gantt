@@ -120,6 +120,31 @@ describe('buildTree rollups', () => {
     expect(nodes.get('1').progress).toBe(10)
   })
 
+  it('drops cancelled children from the parent dates, progress, and state', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'Done child', sortOrder: 0, status: 'done', progress: 100, startDate: '2024-01-05', endDate: '2024-01-10' },
+      { id: 'c2', parentId: 'p', title: 'Dropped child', sortOrder: 1, status: 'cancelled', progress: 0, startDate: '2023-01-01', endDate: '2025-12-31' },
+    )))
+    const parent = nodes.get('1')
+    expect(parent.startDate).toBe('2024-01-05')
+    expect(parent.endDate).toBe('2024-01-10')
+    expect(parent.progress).toBe(100)
+    expect(parent.status).toBe('done')
+  })
+
+  it('reports a fully cancelled parent as cancelled with zero progress', () => {
+    const nodes = byNumber(buildTree(makeRows(
+      { id: 'p', title: 'Parent', sortOrder: 0 },
+      { id: 'c1', parentId: 'p', title: 'Dropped one', sortOrder: 0, status: 'cancelled', progress: 0, startDate: '2024-01-02', endDate: '2024-01-03' },
+      { id: 'c2', parentId: 'p', title: 'Dropped two', sortOrder: 1, status: 'cancelled', progress: 0, startDate: '2024-01-01', endDate: '2024-01-09' },
+    )))
+    expect(nodes.get('1').status).toBe('cancelled')
+    expect(nodes.get('1').progress).toBe(0)
+    expect(nodes.get('1').startDate).toBe('2024-01-01')
+    expect(nodes.get('1').endDate).toBe('2024-01-09')
+  })
+
   it('rolls up nested grandchildren before rolling up the root', () => {
     const nodes = byNumber(buildTree(makeRows(
       { id: 'p', title: 'Parent', sortOrder: 0 },

@@ -8,6 +8,7 @@ export const STATUS_COLOR = {
   in_progress: 'var(--dsw-alias-brand-primary)',
   blocked: 'var(--dsw-alias-state-error-primary)',
   done: 'var(--dsw-alias-state-success-primary)',
+  cancelled: 'var(--dsw-alias-label-secondary)',
   skipped: 'var(--dsw-alias-label-secondary)',
 }
 

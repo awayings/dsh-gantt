@@ -1,7 +1,7 @@
 // Dotted tracker ids, calendar-day arithmetic, and the slot vocabulary shared by
 // the tree helpers, the store, and the importer.
 
-/** @typedef {'todo' | 'in_progress' | 'blocked' | 'done'} TaskStatus */
+/** @typedef {'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled'} TaskStatus */
 /** @typedef {'track' | 'node' | 'task'} TaskKind */
 /** Allowed `tasks.kind` values. @type {TaskKind[]} */
 export const TASK_KINDS = ['track', 'node', 'task']

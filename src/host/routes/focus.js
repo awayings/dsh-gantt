@@ -34,11 +34,13 @@ export const trajectoryRoute = {
   method: 'GET',
   path: '/api/gantt/trajectory',
   description: 'List task trajectory events (action, conversation id, turn) filtered by task and/or conversation. Query: taskId?, sessionId?, limit?.',
-  fetch: async (request, { store }) => {
+  fetch: async (request, { store, titles }) => {
     const params = new URL(request.url, 'http://localhost').searchParams
+    const events = store.trajectory({ taskId: params.get('taskId'), sessionId: params.get('sessionId'), limit: params.get('limit') })
+    const resolved = await titles.resolve(events.map(event => event.sessionId))
     return json({
       ok: true,
-      events: store.trajectory({ taskId: params.get('taskId'), sessionId: params.get('sessionId'), limit: params.get('limit') }),
+      events: events.map(event => ({ ...event, sessionTitle: resolved.get(event.sessionId) ?? '' })),
     })
   },
 }

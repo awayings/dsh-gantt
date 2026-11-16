@@ -38,7 +38,7 @@ function MetaChips({ task, t }) {
 function TaskBar({ task, timeline, onSelect }) {
   const range = barRange(task, timeline)
   if (range === null) return null
-  const overdue = task.status !== 'done' && task.endDate < timeline.today
+  const overdue = task.status !== 'done' && task.status !== 'cancelled' && task.endDate < timeline.today
   return h('button', {
     type: 'button',
     className: 'gantt-bar',

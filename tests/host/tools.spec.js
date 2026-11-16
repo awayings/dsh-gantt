@@ -281,9 +281,18 @@ describe('gantt assistant tools', () => {
     const context = tool(toolDefinitions(store), TOOL_NAMES.context)
     const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-a' } } }))
     expect(value.markdown).toContain('## 任务轨迹（会话与轮次）')
-    expect(value.markdown).toContain('会话 session-old')
+    expect(value.markdown).toContain('会话 old')
     expect(value.markdown).toContain('第 2 轮')
     expect(value.markdown).toContain('shipped')
+  })
+
+  it('renders resolved conversation titles in the trajectory', async () => {
+    const { task } = focusTask()
+    store.update(task.id, { status: 'done' }, { sessionId: 'session-old', turn: 2, summary: 'shipped' })
+    const titles = { resolve: async ids => new Map(ids.map(id => [id, 'Polish the plan'])) }
+    const context = tool(toolDefinitions(store, titles), TOOL_NAMES.context)
+    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-a' } } }))
+    expect(value.markdown).toContain('会话 Polish the plan（old）')
   })
 
   it('renders an empty trajectory for a focused task without events', async () => {

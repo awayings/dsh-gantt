@@ -9,6 +9,7 @@ describe('summarize', () => {
       done: 0,
       inProgress: 0,
       blocked: 0,
+      cancelled: 0,
       overdue: 0,
       progress: 0,
     })
@@ -28,8 +29,26 @@ describe('summarize', () => {
       done: 1,
       inProgress: 1,
       blocked: 2,
+      cancelled: 0,
       overdue: 2,
       progress: 17,
+    })
+  })
+
+  it('counts cancelled rows without letting them inflate overdue or lower the ratio', () => {
+    const tree = buildTree(makeRows(
+      { id: 'done', title: 'Done', sortOrder: 0, status: 'done', progress: 100, endDate: '2999-01-01' },
+      { id: 'dropped', title: 'Dropped', sortOrder: 1, status: 'cancelled', progress: 0, endDate: '2000-01-01' },
+      { id: 'todo', title: 'Todo', sortOrder: 2, status: 'todo', progress: 0, endDate: '2999-01-01' },
+    ))
+    expect(summarize(tree)).toEqual({
+      total: 3,
+      done: 1,
+      inProgress: 0,
+      blocked: 0,
+      cancelled: 1,
+      overdue: 0,
+      progress: 50,
     })
   })
 

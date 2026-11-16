@@ -104,7 +104,7 @@ describe('split', () => {
     expectGanttError(() => store.split(parent.id, [{ title: 'c', description: 5 }]), 'description must be a string')
     expectGanttError(
       () => store.split(parent.id, [{ title: 'c', status: 'nope' }]),
-      'status must be one of todo, in_progress, blocked, done',
+      'status must be one of todo, in_progress, blocked, done, cancelled',
     )
     expectGanttError(
       () => store.split(parent.id, [{ title: 'c', progress: 'x' }]),
