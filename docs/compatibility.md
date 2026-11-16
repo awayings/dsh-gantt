@@ -13,9 +13,11 @@ the automated gate plus the real-database migration check; the `1.4.0` daily
 brief and perspectives add the schema-v4 migration; the `1.5.0` round refactors
 the source into `src/host/` + `src/client/` (rolldown bundle into `lib/client.js`)
 and moves the AI workflow to native conversations (right-rail tab + host
-assistant tools with per-conversation focus); the current round adds the
+assistant tools with per-conversation focus); the previous round added the
 schema-v5 `task_events` trajectory, automatic session/turn provenance, and the
-background assistant protocol context, covered by the same gate. The manual GUI
+background assistant protocol context; the work-mode round adds schema-v6
+`work_sessions`, the `gantt_track`/`gantt_create_task` round-closing tools, and
+the `gantt-work` workbench tab, covered by the same gate. The manual GUI
 checklist is in `docs/development.md` and had not been run at that date.
 
 ## 1 · Supported set
@@ -57,7 +59,7 @@ checklist is in `docs/development.md` and had not been run at that date.
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `src/host/routes/` registers nineteen exact paths this
+   returns a `Response`. `src/host/routes/` registers twenty-three exact paths this
    way via `src/host/routes/http.js`.
 3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
    `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
@@ -203,8 +205,9 @@ checklist is in `docs/development.md` and had not been run at that date.
    child moves away"). A fix needs a schema/design change and is not scheduled;
    do not rely on authored parent values surviving their first child.
 9. **Assistant tools write, and the store is the guard.** The conversation
-   model can create children (`gantt_decompose`) and change a task
-   (`gantt_update_task`) directly. The guard is not an approval prompt but the
+   model can create children (`gantt_decompose`), open a sibling
+   (`gantt_create_task`), record a round association without a tree write
+   (`gantt_track`), and change a task (`gantt_update_task`) directly. The guard is not an approval prompt but the
    store: depth cap, status vocabulary, date ranges, hierarchy rules, and one
    transaction per write all still apply, and tools return the resulting message
    to the model. Each write also appends a `task_events` row with the session id
@@ -214,11 +217,19 @@ checklist is in `docs/development.md` and had not been run at that date.
 
 ## 4 · Data model layering and migration
 
-Schema version 5 adds the append-only task trajectory; version 4 had added the
-persisted daily brief report; version 3 had already unified the plugin's two
-previous datasets into one working tree. `tracks`/`nodes` remain as import
+Schema version 6 adds the task ⇄ content-dedicated conversation mapping and
+the `track` trajectory action; version 5 had added the append-only task
+trajectory; version 4 had added the persisted daily brief report; version 3
+had already unified the plugin's two previous datasets into one working tree. `tracks`/`nodes` remain as import
 snapshots, and the importer materializes them into `tasks` in the same
 transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v5 → v6 upgrade:** the base schema adds `work_sessions` (`task_id` primary
+key with `ON DELETE CASCADE`, unique `session_id`, `created_at`, `updated_at`,
+indexed by session) and recreates `task_events` with the widened `action`
+CHECK (`create`/`update`/`complete`/`decompose`/`track`), copying every row and
+recreating both indexes; the migration bumps `PRAGMA user_version` to 6. It
+touches neither `tasks` nor the snapshot tables, and there is no backfill.
 
 **v4 → v5 upgrade:** the base schema creates `task_events` (`id`, `task_id`
 foreign key with `ON DELETE CASCADE`, `session_id`, `turn`, `action`, `detail`,
@@ -367,13 +378,14 @@ the task they point at.
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
-- **Check — schema migration:** open a copy of a v2, v3, or v4 database with
-  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 5`.
+- **Check — schema migration:** open a copy of a v2, v3, v4, or v5 database with
+  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 6`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
   unchanged and only gain `daily_briefs`; a v4 copy must keep the tree and
-  reports and only gain `task_events` plus its two indexes. All also gain the
-  additive `focus` table. Then read `/api/gantt/brief` and assert the report is
+  reports and only gain `task_events` plus its two indexes; a v5 copy must keep
+  every row and gain `work_sessions` plus the rebuilt `task_events` with the
+  `track` action. All also gain the additive `focus` table. Then read `/api/gantt/brief` and assert the report is
   computed and cached for today, `/api/gantt/focus?sessionId=…` returns
   `taskId: null` on a fresh database, and `/api/gantt/trajectory` returns an
   empty `events` array before any assistant-tool write.
@@ -387,20 +399,24 @@ the task they point at.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 5, nineteen endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 6, twenty-three endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,
   `/api/gantt/context` (including `## 今日窗口`), `/api/gantt/brief`,
-  `/api/gantt/brief/compute`, `/api/gantt/trajectory`, plus a focus round trip:
+  `/api/gantt/brief/compute`, `/api/gantt/trajectory`, a work round trip
+  (`GET /api/gantt/work?taskId=…` returns `cwd` and a null `sessionId`, then
+  `POST /api/gantt/work/session` binds one and a repeated GET returns it),
+  `/api/gantt/work/skills`, `/api/gantt/work/team`, plus a focus round trip:
   `POST /api/gantt/focus/set` with a task id, then `GET /api/gantt/focus` for
   the same `sessionId` returns it and clearing returns `taskId: null`).
-- **Check — assistant tools:** `tests/host/tools.spec.js` covers the three
-  definitions, reference resolution, per-session context, and registration
-  no-op; the live check is a native conversation: focus a task in the right-rail
-  tab, ask the model to decompose it, and confirm the children appear in the
-  tree and the parent/child events appear in `/api/gantt/trajectory` with the
-  conversation's session id and turn.
+- **Check — assistant tools:** `tests/host/tools.spec.js` covers the five
+  definitions, reference resolution, per-session context, round tracking,
+  sibling creation, and registration no-op; the live check is a native
+  conversation: focus a task in the right-rail tab, ask the model to decompose
+  it, and confirm the children appear in the tree and the parent/child events
+  appear in `/api/gantt/trajectory` with the conversation's session id and
+  turn; a round with no tree write must record a `track` event.
 - **Check — background context:** with `systemPrompt` present, a focused
   conversation should show the `gantt:protocol` section and a
   `gantt:focus` runtime-context snapshot containing the ancestor chain and

@@ -47,17 +47,19 @@ script because the DSH client loader fetches a single artifact per package.
 | Path | Half | Role |
 | --- | --- | --- |
 | `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, route/tool/prompt registration |
-| `src/host/routes/` | host | The nineteen `/api/gantt/*` route specs split by resource (including focus and trajectory); `http.js` is shared plumbing |
+| `src/host/routes/` | host | The twenty-three `/api/gantt/*` route specs split by resource (including focus, trajectory, and work mode); `http.js` is shared plumbing |
 | `src/host/routes/focus.js` | host | `GET /focus` and `POST /focus/set`: per-conversation task focus |
-| `src/host/store/` | host | SQLite schema/migrations, task/tree writes, task-event trajectory, brief persistence, context document, 08:00 scheduler |
+| `src/host/routes/work.js` | host | `GET /work`, `POST /work/session`, `GET /work/skills`, `GET /work/team`: task ⇄ work-conversation mapping, work directory, optional skills and agent-team reads |
+| `src/host/store/` | host | SQLite schema/migrations, task/tree writes, task-event trajectory, work-session mapping, brief persistence, context document, 08:00 scheduler |
+| `src/host/work.js` | host | The work directory (`DSH_GANTT_WORK_CWD`, documented default) a dedicated conversation runs in |
 | `src/host/tracker/` | host | Task-tracker markdown parsers and importer |
 | `src/host/tree/` | host | Pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
 | `src/host/tree/chain.js` | host | Focus-chain rendering for the assistant tools (track root → focus, task detail) |
 | `src/host/clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/tools.js` | host | Assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`), task-reference resolution, and automatic provenance recording |
+| `src/host/tools.js` | host | Five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
 | `src/host/prompt.js` | host | Static task-protocol section and dynamic focus trajectory context (optional `systemPrompt`) |
-| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab, brief strip, dialogs, and stylesheet modules (ESM) |
+| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), brief strip, dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
 
@@ -182,11 +184,11 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v5 migration and the additive `focus`/`task_events` tables, conversation focus persistence/cascade, task-event trajectory, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
-| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all nineteen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, `decompose`/`schedule`/`context`, the day/plan routes, assistant tool definitions/reference resolution/execution, per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v6 migration and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-three routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries, loading/error/empty), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 5, and a SQLite file that survives a restart |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries, loading/error/empty), the Gantt page work mode (persisted toggle, row click opens the dedicated conversation, edit affordance, failure toast), the workbench tab (four sub-pages, conversation overview, skills and agent-team states), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 6, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 New in the native-conversation round: `tests/store/focus.spec.js`,
@@ -197,8 +199,12 @@ the fake `llm` helper were removed. The trajectory round adds
 `tests/store/events.spec.js` and `tests/host/prompt.spec.js` and extends the
 store, host, client, and e2e suites with task-event/provenance, trajectory-route,
 and prompt-context cases (`task_events` migration, tool session/turn recording,
-`gantt_context` 任务轨迹, right-rail five-entry view). Earlier daily-brief /
-clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
+`gantt_context` 任务轨迹, right-rail five-entry view). The work-mode round adds
+`tests/store/schema-v6.spec.js`, `tests/store/work-sessions.spec.js`,
+`tests/store/sibling.spec.js`, `tests/host/work.spec.js`,
+`tests/host/routes-work.spec.js`, `tests/e2e/work.spec.js`,
+`tests/client/work-mode.spec.js`, and `tests/client/workbench.spec.js`, and
+replaces the stale v5 schema spec. Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
 
@@ -261,7 +267,7 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
-### Schema version 5: one working tree plus daily reports and trajectory
+### Schema version 6: one working tree plus daily reports, trajectory, and work sessions
 
 The tree data lives in `tasks`, one row per node, with `kind` marking the layer:
 
@@ -285,7 +291,13 @@ host restarts, and is cleared when its task is deleted. Schema version 5 adds
 `task_events` (`id`, `task_id` foreign key with `ON DELETE CASCADE`,
 `session_id`, `turn`, `action`, `detail`, `created_at`) with indexes on
 `(task_id, created_at)` and `(session_id, created_at)`; it is created on every
-open and has no data backfill. The rationale is in
+open and has no data backfill. Schema version 6 adds `work_sessions`
+(`task_id` primary key with `ON DELETE CASCADE`, unique `session_id`,
+`created_at`, `updated_at`, indexed by session) for the task ⇄ content-dedicated
+conversation mapping, and rebuilds `task_events` with the widened `action`
+vocabulary (`create`/`update`/`complete`/`decompose`/`track`) because SQLite
+cannot alter a CHECK constraint in place. Both are idempotent and keep existing
+rows. The rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
@@ -293,21 +305,23 @@ The host also starts an in-process scheduler: a `setTimeout` to the next 08:00
 in the task-day zone recomputes today's report with `source: 'auto'`; the timer
 is unref'ed and disposed with the plugin, so it only runs while `dsh web` is up.
 
-#### Migrate a v2, v3, or v4 database
+#### Migrate a v2–v5 database
 
 The host runs the append-only migration when it opens a database whose
-`PRAGMA user_version` is below 5. A v2 database additionally gets the twelve
+`PRAGMA user_version` is below 6. A v2 database additionally gets the twelve
 `tasks` columns, the `(kind, ref)` index, and the one-time backfill of
 `tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and gains
 `daily_briefs`; a v4 database keeps the tree and reports and gains only
-`task_events` (plus its indexes). No event backfill runs.
+`task_events` (plus its indexes); a v5 database keeps every row and gains
+`work_sessions` plus the rebuilt `task_events` with the `track` action. No event
+backfill runs.
 
 1. Stop `dsh web`, then copy the database aside:
    `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v3.db` (also copy `-wal`/`-shm` if
    present, or run `sqlite3 tasks.db 'PRAGMA wal_checkpoint(TRUNCATE)'` first).
 2. Start the new build / restart `dsh web`. No separate migration command
    exists; opening the store performs it.
-3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `5` and `taskCount`
+3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `6` and `taskCount`
    is unchanged on a v3/v4 upgrade. `GET /api/gantt/tree` still has the same
    tree and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
    today's report; `GET /api/gantt/trajectory` returns an empty `events` array
@@ -461,12 +475,20 @@ curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   -d '{"sessionId":"demo","taskId":null}'
 # Task trajectory (empty until an assistant tool writes):
 curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/trajectory?taskId=<task-id>&limit=5"
+# Work mode: the work directory, the task's dedicated conversation, and the
+# optional host services behind the workbench tab:
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/work?taskId=<task-id>"
+curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
+  http://127.0.0.1:3080/api/gantt/work/session \
+  -d '{"taskId":"<task-id>","sessionId":"<dedicated-session-id>"}'
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/work/skills"
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/work/team?sessionId=<dedicated-session-id>"
 ```
 
 Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
 `DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
 returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
-schemaVersion:5, kinds:[…], linkTypes:[…], endpoints:[…19 routes…]}`; `seed`
+schemaVersion:6, kinds:[…], linkTypes:[…], endpoints:[…23 routes…]}`; `seed`
 on an empty database inserts 13 demo tasks and returns
 `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry
@@ -483,7 +505,11 @@ with `cached` and the report's `slots`/`items`/`tracks`, and
 returns `{ok:true,taskId:null}` before the set, the set returns the canonical
 task id, a second GET returns it, and clearing returns `taskId:null`;
 `trajectory` returns `{ok:true,events:[]}` until an assistant tool records an
-event, and `{ok:true,events:[…]}` newest-first afterwards. The assistant tools
+event, and `{ok:true,events:[…]}` newest-first afterwards (including `track`
+round associations). `work?taskId=` returns `{ok:true,cwd,task,sessionId}`; the
+bind POST returns the canonical `{ok:true,taskId,sessionId}` and focuses that
+conversation; `work/skills` and `work/team` report `available:false` when the
+host does not expose the optional services. The assistant tools
 are not HTTP routes: they are verified through a native conversation in the
 manual checklist below, and by `tests/host/tools.spec.js`.
 An invalid JSON body returns HTTP 400 with
@@ -588,6 +614,20 @@ Open the page in the connected Web GUI and check:
       full session id and turn; a new conversation focused on the same task
       receives the ancestor chain, focus detail, and recent trajectory via the
       `gantt:focus` runtime context.
+- [ ] **工作模式** on the Gantt page: the header toggle stays pressed after a
+      reload; clicking a row no longer opens the edit dialog but opens (or
+      reuses) that task's dedicated main conversation in the work workspace with
+      its focus set, and the workbench tab opens in the right rail; the row's
+      edit button still opens the edit dialog.
+- [ ] The **工作台** right-rail tab shows the focused-task chip and four
+      sub-pages: 轨迹 (task events including `track`), 对话 (the dedicated
+      conversation's title/state plus open/create), 技能 (available host skills
+      or the unavailable hint), 编队 (the conversation's subagents, each
+      openable).
+- [ ] In a work conversation a round that changes no task still ends with
+      `gantt_track`; a round that opens a sibling ends with
+      `gantt_create_task`, and the new sibling sits immediately after the
+      focused task.
 - [ ] With `systemPrompt` absent, the plugin still starts and the tools/API keep
       working; with it present, repeated turns on an unchanged focus do not
       append a new runtime-context snapshot.
@@ -664,6 +704,17 @@ the injection never resolves and no tab appears — the full `/gantt` page and
 every API route still work. Enable/install the sidebar plugin, reload the page,
 and confirm the tab in the conversation sidebar (it is not a
 `main`/`sidebar.panellist` slot, so it is not in `Slots.listSubTree`).
+
+### The workbench tab or work mode is missing or disabled
+
+Work mode needs the client session services (`ctx.get('sessions')`,
+`ctx.get('uiWorkspace')`); without them the Gantt page toggle renders disabled
+and rows keep opening the edit dialog. The workbench tab needs
+`dsh-better-sidebar` exactly like the 甘特 tab. A dedicated conversation is
+created in `DSH_GANTT_WORK_CWD` (default `/data/home/ws-plugin`); when that path
+is not a registered Workspace the session is created by `cwd` instead. The
+技能/编队 sub-pages degrade to explicit hints when the host has no
+`skills`/`subagents` service.
 
 ### Assistant tools do nothing
 

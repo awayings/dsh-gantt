@@ -17,7 +17,13 @@ sidebar:
   assistant tools let that conversation read the focused chain and write
   decompositions straight into the tree. Every tool write records the DSH
   session and turn in a task trajectory that the tab, the tools, and
-  `GET /api/gantt/trajectory` can read back.
+  `GET /api/gantt/trajectory` can read back. **Work mode** turns a row click
+  into "open this task's dedicated main conversation" (one conversation per
+  task, created in the work workspace and reused afterwards); a **工作台** tab
+  in the same right rail shows that task's trajectory, work conversation,
+  available skills, and subagent team, and each round is required to close with
+  `gantt_track` / `gantt_update_task` / `gantt_decompose` /
+  `gantt_create_task` so the trajectory stays exact.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
   one-click status, the tree nodes in play, the day's core goal, and integrity
   warnings for missing landing targets or a missing evening slot. Blocks created
@@ -45,6 +51,7 @@ optional (it needs `dsh-better-sidebar`) and the assistant tools are optional
 | Left sidebar icon | `sidebar.panellist` | id `today` |
 | Central page | `main` | key `today` |
 | Conversation sidebar tab | `dsh-better-sidebar` | `registerTab` id `gantt`, `single: true` |
+| Workbench tab | `dsh-better-sidebar` | `registerTab` id `gantt-work`, `single: true` |
 
 Clicking a sidebar icon selects its page exactly like the built-in Plugins or
 Schedules pages: the sidebar entry id is the keyed `main` page selection.
@@ -130,14 +137,15 @@ DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 08:00 brief recompute; it defaults to `Asia/Shanghai` (this deployment's host
 process runs in UTC). An invalid IANA zone falls back to the default.
 
-The schema is created on first activation and upgraded in place; a v2, v3, or
-v4 database is migrated to schema version 5 on open (the append-only migration,
-the one-time tree backfill for v2, and the `daily_briefs`/`focus`/`task_events`
-additions are in [docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
+The schema is created on first activation and upgraded in place; a v2, v3, v4,
+or v5 database is migrated to schema version 6 on open (the append-only
+migration, the one-time tree backfill for v2, and the
+`daily_briefs`/`focus`/`task_events`/`work_sessions` additions are in
+[docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
 task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`;
 plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
-Schema version 5 keeps one working tree in `tasks`: `kind='track'` roots (the
+Schema version 6 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
 manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
 `lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
@@ -178,7 +186,7 @@ axis changes.
 
 ## JSON API
 
-All nineteen routes are mounted on the harness's existing authenticated `/api` channel.
+All twenty-three routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
@@ -189,6 +197,10 @@ status.
 | `GET` | `/api/gantt/focus` | The task a conversation is focused on (`?sessionId=`) |
 | `POST` | `/api/gantt/focus/set` | Focus one task for a conversation, or clear it |
 | `GET` | `/api/gantt/trajectory` | Newest-first task provenance events (`?taskId=&sessionId=&limit=`) |
+| `GET` | `/api/gantt/work` | Work directory, focused/requested task, and its dedicated conversation (`?taskId=&sessionId=`) |
+| `POST` | `/api/gantt/work/session` | Bind a task to its dedicated conversation and focus it (`{taskId, sessionId}`) |
+| `GET` | `/api/gantt/work/skills` | The optional host skill catalog for the workbench tab |
+| `GET` | `/api/gantt/work/team` | The dedicated conversation's subagents (`?sessionId=`) |
 | `GET` | `/api/gantt/meta` | Database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | Create a task (including the tracker metadata fields) |
 | `POST` | `/api/gantt/task/update` | Update any writable task fields |
@@ -212,7 +224,8 @@ authenticated request in DevTools. Treat that cookie as a credential.
 
 The plugin does not call an LLM itself: a native conversation model reads and
 writes tasks through the host assistant tools (`gantt_context`,
-`gantt_decompose`, `gantt_update_task`) described in [docs/api.md](docs/api.md).
+`gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`)
+described in [docs/api.md](docs/api.md).
 Full request/response examples, field tables, focus, tool parameters, and error
 codes: [docs/api.md](docs/api.md).
 
@@ -265,14 +278,15 @@ one concern per file, and every source file stays under 1000 lines.
 | Path | Role |
 | --- | --- |
 | `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, route and assistant-tool registration |
-| `src/host/routes/` | the nineteen `/api/gantt/*` route specs split by resource (including `focus.js` and the trajectory read); `http.js` holds shared plumbing |
-| `src/host/store/` | SQLite schema and migrations, task/tree writes, task-event trajectory, daily-brief persistence, context document |
+| `src/host/routes/` | the twenty-three `/api/gantt/*` route specs split by resource (including `focus.js`, the trajectory read, and `work.js`); `http.js` holds shared plumbing |
+| `src/host/store/` | SQLite schema and migrations, task/tree writes, task-event trajectory, work-session mapping, daily-brief persistence, context document |
+| `src/host/work.js` | work directory for dedicated conversations (`DSH_GANTT_WORK_CWD`) |
 | `src/host/tracker/` | tracker markdown parsers and importer |
 | `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown, `chain.js` focus rendering |
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/tools.js` | assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`), task-reference resolution, and automatic provenance recording |
-| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`), brief strip, dialogs, styles |
+| `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, `workbench`), work-mode navigation, brief strip, dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 

@@ -6,14 +6,15 @@ by a local SQLite database and an authenticated JSON API.
 ## Shape
 
 - Host `src/host/`: `index.js` owns the store lifecycle, the 08:00 scheduler, and
-  route/tool/prompt registration; `routes/` holds nineteen route specs incl.
-  `focus.js`/trajectory (plumbing in `http.js`); `store/` owns SQLite, briefs,
-  and `task_events`; `tracker/` parses the tracker markdown; `tree/` holds pure
+  route/tool/prompt registration; `routes/` holds twenty-three route specs incl.
+  `focus.js`/trajectory and `work.js` (plumbing in `http.js`); `store/` owns
+  SQLite, briefs, `task_events`, and the task ⇄ work-conversation mapping; `tracker/` parses the tracker markdown; `tree/` holds pure
   tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
-  builds the daily report; `tools.js` declares the assistant tools and records
+  builds the daily report; `tools.js` declares the five assistant tools and records
   provenance. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
-  right-rail `panel` tab, brief strip, dialogs, styles) bundled by
+  right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation,
+  brief strip, dialogs, styles) bundled by
   `scripts/build-client.mjs` (rolldown) into gitignored `lib/client.js` — one
   classic script registered through `window.__ModuleLoader__.load`, React from
   the factory `require`. DSH derives the artifact revision from
@@ -21,8 +22,9 @@ by a local SQLite database and an authenticated JSON API.
   `lib/`.
 - One working tree: imported tracks/nodes, manual tasks, and decomposed tasks
   live in `tasks`; `tracks`/`nodes` are import snapshots only. `daily_briefs` is
-  a morning snapshot; `focus` stores one task per conversation; `task_events` is
-  the append-only session/turn trajectory. Details in
+  a morning snapshot; `focus` stores one task per conversation; `work_sessions` maps a task to its
+  content-dedicated main conversation; `task_events` is the append-only
+  session/turn trajectory (`create`/`update`/`complete`/`decompose`/`track`). Details in
   `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`) before deciding
