@@ -3,6 +3,7 @@ export const DICT_ZH = {
   'nav.label': '任务甘特图',
   'page.title': '任务甘特图',
   'page.subtitle': '在周/月时间线上规划、拆分和跟踪层级任务，数据保存在本地 SQLite 数据库。',
+  'page.info': '页面说明',
   'actions.new': '新建任务',
   'actions.today': '今天',
   'actions.prev': '上一段',

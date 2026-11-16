@@ -3,6 +3,7 @@ export const DICT_EN = {
   'nav.label': 'Task Gantt',
   'page.title': 'Task Gantt',
   'page.subtitle': 'Plan, split, and track hierarchical work on a weekly or monthly timeline.',
+  'page.info': 'About this page',
   'actions.new': 'New task',
   'actions.today': 'Today',
   'actions.prev': 'Previous window',

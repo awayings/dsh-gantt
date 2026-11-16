@@ -10,7 +10,7 @@ import { ScheduleDialog } from '../dialogs/schedule.js'
 import { SplitDialog } from '../dialogs/split.js'
 import { TaskDialog } from '../dialogs/task.js'
 import { requestJson, useGanttData, useLocale } from '../hooks.js'
-import { GanttGlyph } from '../icons.js'
+import { GanttGlyph, InfoGlyph } from '../icons.js'
 import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
@@ -30,6 +30,7 @@ export function GanttPage({ ctx }) {
   const [selectedId, setSelectedId] = useState(null)
   const [focusId, setFocusId] = useState(null)
   const [dialog, setDialog] = useState(null)
+  const [infoOpen, setInfoOpen] = useState(false)
   const [toast, setToast] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatFocusId, setChatFocusId] = useState(null)
@@ -50,6 +51,22 @@ export function GanttPage({ ctx }) {
     const timer = setTimeout(() => setToast(null), 2800)
     return () => clearTimeout(timer)
   }, [toast])
+  useEffect(() => {
+    if (!infoOpen) return undefined
+    const onPointerDown = (event) => {
+      if (event.target instanceof Element && event.target.closest('.gantt-info-wrap')) return
+      setInfoOpen(false)
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setInfoOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [infoOpen])
   useEffect(() => {
     const onFocus = () => refresh()
     window.addEventListener('focus', onFocus)
@@ -381,8 +398,24 @@ export function GanttPage({ ctx }) {
       h('div', { className: 'gantt-brand' },
         h('span', { className: 'gantt-brand-mark' }, h(GanttGlyph, { size: 22 })),
         h('div', { className: 'gantt-brand-text' },
-          h('h1', { className: 'gantt-title' }, t('page.title')),
-          h('p', { className: 'gantt-subtitle' }, t('page.subtitle')),
+          h('div', { className: 'gantt-title-row' },
+            h('h1', { className: 'gantt-title' }, t('page.title')),
+            h('span', { className: 'gantt-info-wrap' },
+              h('button', {
+                className: 'gantt-info-btn',
+                type: 'button',
+                title: t('page.info'),
+                'aria-label': t('page.info'),
+                'aria-expanded': infoOpen,
+                'aria-controls': 'gantt-info-pop',
+                'data-active': infoOpen ? 'true' : undefined,
+                onClick: () => setInfoOpen(current => !current),
+              }, h(InfoGlyph)),
+              infoOpen
+                ? h('div', { id: 'gantt-info-pop', className: 'gantt-info-pop', role: 'tooltip' }, t('page.subtitle'))
+                : null,
+            ),
+          ),
         ),
       ),
       h('div', { className: 'gantt-actions' },

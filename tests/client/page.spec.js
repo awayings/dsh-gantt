@@ -13,6 +13,7 @@ import {
   jsonResponse,
   keydown,
   mount,
+  mouseEvent,
   q,
   qa,
   requestBody,
@@ -127,6 +128,70 @@ describe('initial states', () => {
     const toast = q(view.container, '.gantt-toast')
     expect(toast.textContent).toBe('seed refused')
     expect(toast.getAttribute('data-error')).toBe('true')
+  })
+})
+
+describe('page info popover', () => {
+  it('hides the subtitle behind a closed info button', async () => {
+    const { view } = await renderPage({})
+
+    expect(q(view.container, '.gantt-subtitle')).toBeNull()
+    const button = q(view.container, 'button.gantt-info-btn')
+    expect(button.getAttribute('title')).toBe('About this page')
+    expect(button.getAttribute('aria-label')).toBe('About this page')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
+  })
+
+  it('toggles the intro popover from the info button', async () => {
+    const { view } = await renderPage({})
+
+    click(q(view.container, 'button[aria-label="About this page"]'))
+    expect(text(view.container, '.gantt-info-pop')).toContain('Plan, split, and track')
+    expect(q(view.container, 'button[aria-label="About this page"]').getAttribute('aria-expanded')).toBe('true')
+
+    click(q(view.container, 'button[aria-label="About this page"]'))
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
+    expect(q(view.container, 'button[aria-label="About this page"]').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('closes on an outside pointerdown but keeps the popover on an inside one', async () => {
+    const { view } = await renderPage({})
+    click(q(view.container, '.gantt-info-btn'))
+
+    mouseEvent(q(view.container, '.gantt-info-pop'), 'pointerdown')
+    expect(q(view.container, '.gantt-info-pop')).not.toBeNull()
+
+    mouseEvent(document.body, 'pointerdown')
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
+  })
+
+  it('closes when a pointerdown does not land on an element', async () => {
+    const { view } = await renderPage({})
+    click(q(view.container, '.gantt-info-btn'))
+    expect(q(view.container, '.gantt-info-pop')).not.toBeNull()
+
+    mouseEvent(document, 'pointerdown')
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
+  })
+
+  it('stays open on other keys and closes on Escape', async () => {
+    const { view } = await renderPage({})
+    click(q(view.container, '.gantt-info-btn'))
+
+    keydown(document, 'a')
+    expect(q(view.container, '.gantt-info-pop')).not.toBeNull()
+
+    keydown(document, 'Escape')
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
+  })
+
+  it('unmounts cleanly while the popover is open', async () => {
+    const { view } = await renderPage({})
+    click(q(view.container, '.gantt-info-btn'))
+    expect(q(view.container, '.gantt-info-pop')).not.toBeNull()
+
+    expect(() => view.unmount()).not.toThrow()
   })
 })
 

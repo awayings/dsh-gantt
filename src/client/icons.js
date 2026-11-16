@@ -16,6 +16,24 @@ export function GanttGlyph({ size = 22 }) {
   )
 }
 
+/** Info glyph for the page intro popover; fixed 14px. */
+export function InfoGlyph() {
+  return h('svg', {
+    width: 14,
+    height: 14,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    'aria-hidden': 'true',
+    style: { display: 'block' },
+  },
+  h('circle', { cx: 12, cy: 12, r: 9 }),
+  h('path', { d: 'M12 11v6', strokeLinecap: 'round' }),
+  h('circle', { cx: 12, cy: 7.6, r: 1.1, fill: 'currentColor', stroke: 'none' }),
+  )
+}
+
 /** Sidebar icon for the Gantt panel. */
 export function SidebarIcon({ size = 18, active = false }) {
   return h('svg', {

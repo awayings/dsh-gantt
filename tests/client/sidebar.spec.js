@@ -127,7 +127,10 @@ describe('zh locale', () => {
 
     expect(app.listeners.size).toBe(1)
     expect(text(view.container, '.gantt-title')).toBe('任务甘特图')
-    expect(text(view.container, '.gantt-subtitle')).toContain('在周/月时间线上')
+    click(q(view.container, 'button[aria-label="页面说明"]'))
+    expect(text(view.container, '.gantt-info-pop')).toContain('在周/月时间线上')
+    click(q(view.container, 'button[aria-label="页面说明"]'))
+    expect(q(view.container, '.gantt-info-pop')).toBeNull()
     expect(text(view.container, '.gantt-window-scale')).toBe('周视图')
     expect(text(view.container, '.gantt-window-label')).toContain('11月')
     expect(text(view.container, '.gantt-group-cell')).toContain('2026年11月')

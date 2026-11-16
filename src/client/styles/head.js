@@ -20,6 +20,44 @@ export const CSS_HEAD = `
   }
   .gantt-title { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
   .gantt-subtitle { margin: 2px 0 0; font-size: 12px; color: var(--gantt-muted); }
+  .gantt-brand-text { min-width: 0; }
+  .gantt-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .gantt-info-wrap { position: relative; display: inline-flex; }
+  .gantt-info-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--gantt-muted);
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .gantt-info-btn:hover { color: var(--gantt-accent); opacity: 1; }
+  .gantt-info-btn[data-active="true"] {
+    color: var(--gantt-accent);
+    opacity: 1;
+    background: color-mix(in srgb, var(--gantt-accent) 14%, transparent);
+  }
+  .gantt-info-pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: -4px;
+    z-index: 40;
+    width: max-content;
+    max-width: min(320px, calc(100cqw - 44px));
+    padding: 9px 11px;
+    border: 1px solid var(--gantt-line-strong);
+    border-radius: 10px;
+    background: var(--gantt-surface-2);
+    color: var(--gantt-muted);
+    font-size: 12px;
+    line-height: 1.55;
+    box-shadow: 0 10px 26px color-mix(in srgb, #000 18%, transparent);
+  }
   .gantt-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .gantt-btn {
     height: 32px;
