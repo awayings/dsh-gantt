@@ -204,4 +204,11 @@ export const DICT_EN = {
   'panel.kind.track': 'Track',
   'panel.kind.node': 'Node',
   'panel.kind.task': 'Task',
+  'panel.trajectory': 'Trajectory',
+  'panel.trajectoryError': 'Could not load the trajectory.',
+  'panel.action.create': 'Created',
+  'panel.action.update': 'Updated',
+  'panel.action.complete': 'Completed',
+  'panel.action.decompose': 'Decomposed',
+  'panel.turn': 'Turn {n}',
 }

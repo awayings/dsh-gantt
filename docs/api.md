@@ -13,11 +13,11 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 4: one working tree in `tasks` (track roots, imported
-  nodes, decomposed and manual tasks), the persisted daily brief report, and
-  per-conversation `focus` rows. The domain model is in
-  [personal-task-system.md](personal-task-system.md); the migration in
-  [compatibility.md](compatibility.md).
+- The schema is version 5: one working tree in `tasks` (track roots, imported
+  nodes, decomposed and manual tasks), the persisted daily brief report,
+  per-conversation `focus` rows, and the append-only `task_events` trajectory.
+  The domain model is in [personal-task-system.md](personal-task-system.md);
+  the migration in [compatibility.md](compatibility.md).
 
 Base URL: the origin printed by your own `dsh web` launch, for example
 `http://127.0.0.1:3080`.
@@ -29,6 +29,7 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/tree` | — | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats |
 | `GET` | `/api/gantt/focus` | `?sessionId=<id>` | `200 { ok, taskId }` |
 | `POST` | `/api/gantt/focus/set` | `{ sessionId, taskId? }` | `200 { ok, taskId }` |
+| `GET` | `/api/gantt/trajectory` | `?taskId=&sessionId=&limit=` | `200 { ok, events }` |
 | `GET` | `/api/gantt/meta` | — | `200` database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `201` created task |
 | `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `200` updated task |
@@ -45,7 +46,7 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/brief` | `?date=YYYY-MM-DD` | `200 { ok, today, date, brief, cached }` |
 | `POST` | `/api/gantt/brief/compute` | `{ date? }` | `200 { ok, today, date, brief, cached: false }` |
 
-Eighteen routes are registered. Routes that read a body require a JSON object;
+Nineteen routes are registered. Routes that read a body require a JSON object;
 any other JSON value is rejected with `400`. `GET` routes and `seed` do not read
 a body. The focus routes and the assistant tools share one per-conversation
 focus; the plugin itself never calls a model.
@@ -388,6 +389,55 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/focus/set \
 - Focus is per conversation, survives a host restart (it lives in the
   `focus` table), and does not affect other conversations.
 
+## Task trajectory
+
+Every task keeps an append-only provenance trail in `task_events`: which DSH
+conversation and turn created, updated, completed, or decomposed it. The
+assistant tools write these events automatically; this read route exposes them
+for dashboards and follow-up conversations.
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?taskId=<task-id>'
+curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?sessionId=<session-id>&limit=5'
+curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
+```
+
+```json
+{
+  "ok": true,
+  "events": [
+    {
+      "id": "…",
+      "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
+      "sessionId": "session-abc",
+      "turn": 7,
+      "action": "complete",
+      "detail": "已收口，读数表进日报",
+      "at": "2026-11-16T07:12:00.000Z"
+    }
+  ]
+}
+```
+
+| Query | Meaning |
+| --- | --- |
+| `taskId` | Only events for one task. An unknown task id is a `404`. |
+| `sessionId` | Only events recorded by one conversation |
+| `limit` | Maximum events; default `20`, integer 1–100 (blank uses the default); anything else is a `400` |
+
+- Events are newest first.
+- With no filter the route returns the most recent events across all tasks;
+  filters may be combined to narrow the result.
+- `action` is `create`, `update`, `complete`, or `decompose`; `detail` carries
+  the tool's optional `summary` when supplied, otherwise a short generated
+  description of the write.
+- `sessionId` and `turn` identify the DSH conversation and the tool-call turn
+  that produced the change (`turn` can be `null` when the host cannot read the
+  durable turn index); `at` is the event's ISO timestamp. Events are created
+  only by assistant-tool writes; they are not editable and are deleted with
+  their task (`ON DELETE CASCADE`).
+- An invalid `limit` is a `400`; an unknown `taskId` is a `404`.
+
 ## Read metadata
 
 ```sh
@@ -401,7 +451,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "statuses": ["todo", "in_progress", "blocked", "done"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -411,7 +461,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own eighteen-entry route catalog (abbreviated above);
+`endpoints` is the host's own nineteen-entry route catalog (abbreviated above);
 `taskCount` counts every row of the unified tree.
 
 ## Create a task
@@ -908,8 +958,11 @@ The host registers three tools on the DSH **tools service** so a native
 conversation can read the task tree and write task changes directly. The plugin
 does not call an LLM itself: the model is the normal DSH conversation, the tool
 schemas are the ones below, and every write goes through the store's validation
-and transaction path. If the host has no tools service, registration is a no-op
-and the rest of the plugin keeps working.
+and transaction path. Each tool write also records provenance automatically —
+one `task_events` row per affected task, carrying the DSH session id, the turn
+index of the tool call, the action, and the optional `summary`. If the host has
+no tools service, registration is a no-op and the rest of the plugin keeps
+working.
 
 Every tool resolves a task reference the same way: the internal task id, the
 external `ref` (`node:1.8.1`, `track:1`), or the rendered dotted number
@@ -931,9 +984,11 @@ The conversation id comes from the tool execution context, not from an
 argument. When the conversation has a focused task the markdown contains the
 chain from the track root to that task (kind, status, `doneWhen` per row), the
 task's dotted id, internal id, title, depth (and whether the 4-level cap has
-been reached), its status and `doneWhen`, and its direct children. With no
-focus, the tool falls back to the whole-tree context document, capped at 6000
-characters.
+been reached), its status and `doneWhen`, and its direct children. It also
+includes a `## 任务轨迹（会话与轮次）` section listing recent trajectory events
+newest first, each with the full session id and turn, so the model can see how
+the task reached its current state. With no focus, the tool falls back to the whole-tree
+context document, capped at 6000 characters.
 
 ### `gantt_decompose`
 
@@ -943,6 +998,7 @@ Create child tasks under one task.
 | --- | --- | --- |
 | `id` | yes | Parent task: internal id, `ref`, or dotted number |
 | `planDate` | no | `YYYY-MM-DD`; only a default for the children's start/end dates |
+| `summary` | no | Short note stored as the event detail |
 | `children` | yes | 1–100 child objects |
 | `children[].title` | yes | 1–200 characters |
 | `children[].doneWhen` | yes | Verifiable completion standard |
@@ -952,7 +1008,8 @@ Create child tasks under one task.
 Returns `{ ok: true, message: string }` listing the created children with their
 dotted ids and `doneWhen`. The store enforces the same rules as
 `POST /api/gantt/task/decompose`: the 4-level cap, at most 100 children, valid
-dates/status, and one atomic transaction.
+dates/status, and one atomic transaction. The call records a `decompose` event
+on the parent and a `create` event on each child.
 
 ### `gantt_update_task`
 
@@ -965,17 +1022,38 @@ Update one task's fields.
 | `progress` | no | 0–100 |
 | `title` | no | New title |
 | `doneWhen` | no | New completion standard |
+| `summary` | no | Short note stored as the event detail |
 
 Returns `{ ok: true, message: string }` with the updated task's ref/number,
 title, status label, and progress. At least one of `status`/`progress`/`title`/
 `doneWhen` is required (`400 nothing to update`); an unknown task is a `404`.
-Status/progress follow the same pairing rules as the HTTP update route.
+Status/progress follow the same pairing rules as the HTTP update route. The call
+records an `update` event, or a `complete` event when the task is marked done.
 
 The tools are registered globally on the host, but the context they read is
 per conversation: the focus row keyed by the conversation id is what
 `gantt_context` resolves, and it is what the right-rail tab writes when a row is
 clicked. Writes do not trigger an approval prompt: they are ordinary store
 calls over SQLite, not shell or filesystem work.
+
+### Background context
+
+When the host has the optional `systemPrompt` service, the plugin contributes two
+prompt pieces so a conversation knows how to advance tasks without being asked:
+
+- a **static section** named `gantt:protocol` at order `700`, describing
+  the completion / partial-decompose / decompose-only protocol and stating that
+  provenance is recorded automatically;
+- a **dynamic runtime context** named `gantt:focus` at order `530`, emitted only
+  when the conversation has a focused task. It carries the focused task's
+  ancestor chain (ref, title, kind, status, `doneWhen`), the focus detail, and
+  the task's recent trajectory.
+
+The plugin declares the dependency lazily through `ctx.inject(['systemPrompt'],
+…)`; without that service it registers nothing and the tools/API keep working.
+The runtime context is a durable context snapshot: DSH appends a new snapshot
+only when the rendered text changes, so an unchanged focus keeps the prompt
+cache prefix stable.
 
 ## Errors
 
@@ -995,6 +1073,7 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |
 | `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |
 | `400` | invalid focus input | `sessionId is required`, `sessionId must be at most 200 characters` |
+| `400` | invalid trajectory input | `limit must be an integer from 1 to 100`, `sessionId must be at most 200 characters` |
 | `404` | unknown task id | `task <id> was not found` |
 | `404` | unknown plan block id | `plan block <id> was not found` |
 | `409` | duplicate `(kind, ref)` | `task with kind node and ref node:1.8.1 already exists` |

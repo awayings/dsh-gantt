@@ -36,4 +36,22 @@ describe('focus routes', () => {
     expect(unknown.status).toBe(404)
     expect(unknown.payload).toEqual({ ok: false, error: 'task missing was not found' })
   })
+
+  it('lists task trajectory events and validates the query', async () => {
+    const created = await invoke(routes, ROUTES.tasks, { title: 'Data table' })
+    const taskId = created.payload.task.id
+    const empty = await invoke(routes, `${ROUTES.trajectory}?taskId=${taskId}`)
+    expect(empty.status).toBe(200)
+    expect(empty.payload).toEqual({ ok: true, events: [] })
+    const all = await invoke(routes, ROUTES.trajectory)
+    expect(all.payload).toEqual({ ok: true, events: [] })
+    const bySession = await invoke(routes, `${ROUTES.trajectory}?sessionId=session-a&limit=5`)
+    expect(bySession.payload).toEqual({ ok: true, events: [] })
+    const badLimit = await invoke(routes, `${ROUTES.trajectory}?limit=0`)
+    expect(badLimit.status).toBe(400)
+    expect(badLimit.payload).toEqual({ ok: false, error: 'limit must be an integer from 1 to 100' })
+    const unknown = await invoke(routes, `${ROUTES.trajectory}?taskId=missing`)
+    expect(unknown.status).toBe(404)
+    expect(unknown.payload).toEqual({ ok: false, error: 'task missing was not found' })
+  })
 })

@@ -22,6 +22,12 @@ export const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description
 export const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, source = ?, updated_at = ? WHERE id = ?'
 export const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, updated_at = ? WHERE id = ?'
 
+/** Recorded trajectory actions; the closed vocabulary of `task_events.action`. */
+export const EVENT_ACTIONS = /** @type {const} */ (['create', 'update', 'complete', 'decompose'])
+export const EVENT_SELECT = 'SELECT id, task_id AS taskId, session_id AS sessionId, turn, action, detail, created_at AS at FROM task_events'
+export const INSERT_EVENT = 'INSERT INTO task_events (id, task_id, session_id, turn, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+
+
 /** Demo tasks for `seed()`: parent index, title, description, status, progress, start offset, end offset, sibling order.
  * @type {[number | null, string, string, TaskStatus, number, number, number, number][]} */
 export const SEED_TASKS = [

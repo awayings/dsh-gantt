@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GanttStore } from '../../src/host/store.js'
-import { findFocus, depthOf, renderFocusChain, renderFocusDetail } from '../../src/host/tree/chain.js'
+import { findFocus, depthOf, renderFocusChain, renderFocusDetail, renderTrajectory } from '../../src/host/tree/chain.js'
 
 /** @typedef {import('../../src/host/tree.js').TreeTaskNode} TreeTaskNode */
 
@@ -104,5 +104,17 @@ describe('focus chain helpers', () => {
     expect(renderFocusDetail([fake], fake)).toContain('- 状态：odd')
     const withRef = /** @type {any} */ ({ id: 'r', title: 'With ref', kind: 'task', status: 'todo', ref: 'F1', number: '5', doneWhen: '', parentId: null, children: [] })
     expect(renderFocusDetail([withRef], withRef)).toContain('- 点号 id：F1')
+  })
+
+  it('renders trajectory events with their conversation, turn, and detail', () => {
+    const lines = renderTrajectory([
+      { action: 'complete', sessionId: 'session-a', turn: 4, detail: 'shipped', at: '2026-11-16T07:00:00.000Z' },
+      { action: 'update', sessionId: '', turn: null, detail: '', at: '2026-11-16T06:00:00.000Z' },
+      { action: 'odd', sessionId: 'session-b', turn: 1, detail: 'x', at: '2026-11-16T05:00:00.000Z' },
+    ])
+    expect(lines[0]).toBe('- 完成 · 会话 session-a · 第 4 轮 · 2026-11-16T07:00:00.000Z：shipped')
+    expect(lines[1]).toBe('- 更新 · 由手动接口写入 · 轮次未知 · 2026-11-16T06:00:00.000Z')
+    expect(lines[2]).toBe('- odd · 会话 session-b · 第 1 轮 · 2026-11-16T05:00:00.000Z：x')
+    expect(renderTrajectory([])).toEqual([])
   })
 })

@@ -10,7 +10,7 @@ import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
 import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
 import { startScheduler } from './scheduler.js'
-import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, assertDate, assertRange, defaultProgress, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
+import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
 
 /** @typedef {import('../daily.js').DailyReport} DailyReport */
 /** @typedef {import('../tree.js').Brief} Brief */
@@ -44,6 +44,13 @@ import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MAT
  * brief: Brief, dailyBrief: DailyReport }} GanttSnapshot */
 /** @typedef {{ dbPath: string, statuses: TaskStatus[], schemaVersion: number, taskCount: number,
  * engine: string, kinds: TaskKind[], linkTypes: LinkType[] }} GanttMeta */
+/** One recorded trajectory event linking a task to the conversation that wrote it.
+ * @typedef {{ id: string, taskId: string, sessionId: string, turn: number | null,
+ * action: string, detail: string, at: string }} TaskEvent */
+/** Where one write came from: the DSH conversation, its turn, and an optional summary.
+ * @typedef {{ sessionId?: string, turn?: number | null, summary?: string }} TaskOrigin */
+/** Filters accepted by {@link GanttStore.trajectory}.
+ * @typedef {{ taskId?: unknown, sessionId?: unknown, limit?: unknown }} TrajectoryQuery */
 
 /**
  * SQLite-backed task store. Hierarchical numbers and rollups are derived at
@@ -264,8 +271,8 @@ export class GanttStore {
     return this.getNode(id)
   }
 
-  /** @param {string} id @param {TaskPatch} [patch] @returns {TaskNode | null} */
-  update(id, patch = {}) {
+  /** @param {string} id @param {TaskPatch} [patch] @param {TaskOrigin} [origin] @returns {TaskNode | null} */
+  update(id, patch = {}, origin) {
     const row = this.requireRow(id)
     const next = { ...row }
     if (patch.title !== undefined) next.title = normalizeTitle(patch.title)
@@ -302,6 +309,7 @@ export class GanttStore {
       )
       this.recomputeAncestors(row.parentId)
       if (next.parentId !== row.parentId) this.recomputeAncestors(next.parentId)
+      this.recordOrigin(id, status === 'done' ? 'complete' : 'update', origin, `状态 ${status}，进度 ${progress}%`)
     })
     return this.getNode(id)
   }
@@ -433,10 +441,12 @@ export class GanttStore {
    * @param {string} id
    * @param {DecomposeChildInput[]} children
    * @param {unknown} [planDate]
+   * @param {TaskOrigin} [origin]
    * @returns {{ parent: TaskNode | null, children: TaskNode[], blocks: PlanBlock[] }} */
-  decompose(id, children, planDate) {
+  decompose(id, children, planDate, origin) {
     const parent = this.requireRow(id)
     const parentNode = /** @type {TaskNode} */ (this.getNode(id))
+    const parentRef = parentNode.ref === '' ? parentNode.number : parentNode.ref
     if (parentNode.number.split('.').length >= DECOMPOSE_MAX_DEPTH) throw new GanttError('decompose would exceed 4 levels')
     if (!Array.isArray(children) || children.length === 0) throw new GanttError('children must be a non-empty array')
     if (children.length > 100) throw new GanttError('a decompose may create at most 100 children')
@@ -472,6 +482,9 @@ export class GanttStore {
         return childId
       })
       this.recomputeAncestors(id)
+      this.recordOrigin(id, 'decompose', origin, `拆解为 ${normalized.length} 个子任务`)
+      const childOrigin = origin === undefined ? undefined : { ...origin, summary: '' }
+      for (const childId of childIds) this.recordOrigin(childId, 'create', childOrigin, `在 ${parentRef} 下创建`)
       return { childIds, blockIds }
     })
     return {
@@ -534,6 +547,61 @@ export class GanttStore {
     return row?.taskId ?? null
   }
 
+  /** Record one trajectory event that links a task to a conversation turn.
+   * Callers that write the task in the same atomic unit pass their transaction
+   * through this method; the event then commits or rolls back with the write.
+   * @param {{ taskId: unknown, action: unknown, sessionId?: unknown, turn?: unknown, detail?: unknown }} entry
+   * @returns {TaskEvent} */
+  recordEvent(entry) {
+    const taskId = this.requireRow(/** @type {string} */ (entry.taskId)).id
+    const action = oneOf(entry.action, 'action', EVENT_ACTIONS)
+    const sessionId = entry.sessionId === undefined || entry.sessionId === null ? '' : textValue(entry.sessionId)
+    const detail = entry.detail === undefined || entry.detail === null ? '' : textValue(entry.detail)
+    const turn = normalizeTurn(entry.turn)
+    const at = new Date().toISOString()
+    const id = randomUUID()
+    this.db.prepare(INSERT_EVENT).run(id, taskId, sessionId, turn, action, detail, at)
+    return { id, taskId, sessionId, turn, action, detail, at }
+  }
+
+  /** Record an assistant write; a write without a conversation id is skipped so
+   * manual routes never fabricate a session. The summary, when given, replaces
+   * the mechanical fallback detail.
+   * @param {string} taskId @param {string} action @param {TaskOrigin | undefined} origin
+   * @param {string} fallbackDetail @returns {void} */
+  recordOrigin(taskId, action, origin, fallbackDetail) {
+    if (origin === undefined) return
+    const sessionId = origin.sessionId === undefined ? '' : textValue(origin.sessionId)
+    if (sessionId === '') return
+    const summary = origin.summary === undefined ? '' : textValue(origin.summary)
+    this.recordEvent({ taskId, action, sessionId, turn: origin.turn, detail: summary === '' ? fallbackDetail : summary })
+  }
+
+  /** Recent trajectory events, newest first, filtered by task and/or conversation.
+   * An unknown task id is a 404; an unknown conversation is an empty list.
+   * @param {TrajectoryQuery} [query] @returns {TaskEvent[]} */
+  trajectory(query = {}) {
+    const taskId = typeof query.taskId === 'string' && query.taskId.trim() !== '' ? this.requireRow(query.taskId.trim()).id : null
+    const blankSession = query.sessionId === undefined || query.sessionId === null
+      || (typeof query.sessionId === 'string' && query.sessionId.trim() === '')
+    const sessionId = blankSession ? '' : normalizeSessionId(query.sessionId)
+    const limit = normalizeLimit(query.limit)
+    /** @type {string[]} */
+    const clauses = []
+    /** @type {string[]} */
+    const params = []
+    if (taskId !== null) {
+      clauses.push('task_id = ?')
+      params.push(taskId)
+    }
+    if (sessionId !== '') {
+      clauses.push('session_id = ?')
+      params.push(sessionId)
+    }
+    const where = clauses.length === 0 ? '' : ` WHERE ${clauses.join(' AND ')}`
+    return /** @type {TaskEvent[]} */ (this.db.prepare(`${EVENT_SELECT}${where} ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(...params, limit))
+  }
+
   /** Export the unified tree plus one day plan as a stable markdown context document.
    * @param {ContextOptions} [input]
    * @returns {{ ok: boolean, date: string, markdown: string, chars: number, truncated: boolean,
@@ -553,4 +621,25 @@ function normalizeSessionId(value) {
   if (session === '') throw new GanttError('sessionId is required')
   if (session.length > 200) throw new GanttError('sessionId must be at most 200 characters')
   return session
+}
+
+/** Validate a trajectory page size; omitted means the documented default.
+ * @param {unknown} value
+ * @returns {number}
+ */
+function normalizeLimit(value) {
+  if (value === undefined || value === null || value === '') return 20
+  const limit = typeof value === 'string' ? Number(value) : value
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new GanttError('limit must be an integer from 1 to 100')
+  return limit
+}
+
+/** Validate the durable turn index of a conversation write.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function normalizeTurn(value) {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw new GanttError('turn must be a non-negative integer')
+  return value
 }

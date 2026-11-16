@@ -13,6 +13,22 @@ export const STATUS_LABELS = { todo: '待办', in_progress: '进行中', blocked
 /** Human labels for the task-kind vocabulary. @type {Record<string, string>} */
 export const KIND_LABELS = { track: '支线', node: '节点', task: '任务' }
 
+/** Human labels for the recorded trajectory actions. @type {Record<string, string>} */
+export const ACTION_LABELS = { create: '创建', update: '更新', complete: '完成', decompose: '拆解' }
+
+/** Render recorded trajectory events as markdown lines, newest first.
+ * @param {{ action: string, sessionId: string, turn: number | null, detail: string, at: string }[]} events
+ * @returns {string[]} */
+export function renderTrajectory(events) {
+  return events.map((event) => {
+    const action = ACTION_LABELS[event.action] ?? event.action
+    const session = event.sessionId === '' ? '由手动接口写入' : `会话 ${event.sessionId}`
+    const turn = event.turn === null ? '轮次未知' : `第 ${event.turn} 轮`
+    const detail = event.detail === '' ? '' : `：${event.detail}`
+    return `- ${action} · ${session} · ${turn} · ${event.at}${detail}`
+  })
+}
+
 /** Resolve one task in the rendered tree by id.
  * @param {TreeTaskNode[]} tasks @param {string | null} taskId
  * @returns {TreeTaskNode | null} */

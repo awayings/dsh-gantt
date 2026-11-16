@@ -8,17 +8,18 @@ artifact. The
 Gantt page and the Today page render one unified tree
 imported from an external task-tracker workspace; the Gantt page adds the brief
 strip and perspectives, and a native conversation gets a right-rail **甘特** tab
-plus host assistant tools for focused-task context and decomposition. Start with
-the [README](../README.md) for installation and a feature tour.
+plus host assistant tools for focused-task context, decomposition, and automatic
+session/turn provenance. Start with the [README](../README.md) for installation
+and a feature tour.
 
 ## Guides
 
 | Document | Audience | Contents |
 | --- | --- | --- |
 | [development.md](development.md) | contributors | Prerequisites, setup, install, toolchain, quality gates, test layout, database, task-day clock, schema migration and import runbooks, dev loop, verification, troubleshooting |
-| [api.md](api.md) | integrators | Complete JSON API reference: eighteen routes, auth, the extended task shape, frontier `brief` and the daily report, decompose/schedule/context, brief read/recompute, conversation focus, assistant tools, request/response examples, errors |
-| [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence (optional tools service and right-rail sidebar), rules, v2→v4 migration and data layering, limitations, verification |
-| [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The unified task tree and the system built on it: tracks/nodes/decomposed tasks, refs and provenance, state mapping, decomposition discipline, frontier/next, the daily 该动 report algorithm, perspectives, native-conversation assistant tools, links, context export, deferred work |
+| [api.md](api.md) | integrators | Complete JSON API reference: nineteen routes, auth, the extended task shape, frontier `brief` and the daily report, decompose/schedule/context, brief read/recompute, conversation focus, task trajectory, assistant tools and background prompt context, request/response examples, errors |
+| [compatibility.md](compatibility.md) | maintainers | Supported DSH/Node set, harness seams with evidence (optional tools, right-rail sidebar, and systemPrompt services), rules, v2→v5 migration and data layering, limitations, verification |
+| [personal-task-system.md](personal-task-system.md) | integrators, maintainers | The unified task tree and the system built on it: tracks/nodes/decomposed tasks, refs and provenance, state mapping, decomposition discipline, frontier/next, the daily 该动 report algorithm, perspectives, native-conversation assistant tools, task trajectory/protocol context, links, context export, deferred work |
 
 ## Reference notes
 

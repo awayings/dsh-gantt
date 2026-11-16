@@ -25,6 +25,8 @@ import { todayIso } from '../tree.js'
  * @typedef {object} GanttContext
  * @property {{ fetch: { register: (route: GanttRoute) => unknown } }} connection
  * @property {(effect: () => () => void, hint?: string) => unknown} effect
+ * @property {{ section: (section: unknown) => () => void, context: (context: unknown) => () => void }} [systemPrompt]
+ * @property {{ register: (tool: unknown) => unknown }} [tools]
  * @property {(name: string) => unknown} [get]
  * @property {(deps: string[], callback: (ctx: GanttContext) => unknown) => unknown} [inject]
  */

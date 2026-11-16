@@ -93,4 +93,5 @@ export const ROUTES = {
   briefCompute: '/api/gantt/brief/compute',
   focus: '/api/gantt/focus',
   focusSet: '/api/gantt/focus/set',
+  trajectory: '/api/gantt/trajectory',
 }

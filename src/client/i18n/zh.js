@@ -204,4 +204,11 @@ export const DICT_ZH = {
   'panel.kind.track': '支线',
   'panel.kind.node': '节点',
   'panel.kind.task': '任务',
+  'panel.trajectory': '推进轨迹',
+  'panel.trajectoryError': '轨迹加载失败。',
+  'panel.action.create': '创建',
+  'panel.action.update': '更新',
+  'panel.action.complete': '完成',
+  'panel.action.decompose': '拆解',
+  'panel.turn': '轮次 {n}',
 }

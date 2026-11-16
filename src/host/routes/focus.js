@@ -28,3 +28,17 @@ export const setFocusRoute = {
     return json({ ok: true, taskId: store.setFocus(/** @type {string} */ (body.sessionId), /** @type {string | null} */ (taskId)) })
   },
 }
+
+/** @type {RouteSpec} */
+export const trajectoryRoute = {
+  method: 'GET',
+  path: '/api/gantt/trajectory',
+  description: 'List task trajectory events (action, conversation id, turn) filtered by task and/or conversation. Query: taskId?, sessionId?, limit?.',
+  fetch: async (request, { store }) => {
+    const params = new URL(request.url, 'http://localhost').searchParams
+    return json({
+      ok: true,
+      events: store.trajectory({ taskId: params.get('taskId'), sessionId: params.get('sessionId'), limit: params.get('limit') }),
+    })
+  },
+}

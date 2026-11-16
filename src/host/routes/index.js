@@ -4,7 +4,7 @@
 
 import { briefComputeRoute, briefRoute } from './brief.js'
 import { registerRoute } from './http.js'
-import { focusRoute, setFocusRoute } from './focus.js'
+import { focusRoute, setFocusRoute, trajectoryRoute } from './focus.js'
 import { contextRoute, metaRoute, seedRoute } from './meta.js'
 import { dayRoute, planImportRoute, planStatusRoute } from './plan.js'
 import { createTaskRoute, decomposeRoute, deleteTaskRoute, scheduleTaskRoute, splitTaskRoute, statusRoute, treeRoute, updateTaskRoute } from './tasks.js'
@@ -18,6 +18,7 @@ const ROUTES = [
   treeRoute,
   focusRoute,
   setFocusRoute,
+  trajectoryRoute,
   metaRoute,
   createTaskRoute,
   updateTaskRoute,

@@ -1,8 +1,10 @@
 // The gantt plugin's host entry: one SQLite store, its task-day 08:00 daily
-// recompute, the eighteen authenticated `/api/gantt/*` JSON routes, and the
-// assistant tools a DSH conversation uses to read and decompose tasks.
+// recompute, the nineteen authenticated `/api/gantt/*` JSON routes, the
+// assistant tools a DSH conversation uses to read and decompose tasks, and the
+// background context that puts the focused task chain into each conversation.
 
 import { GanttStore, resolveDatabasePath } from './store.js'
+import { installPrompt } from './prompt.js'
 import { registerRoutes } from './routes/index.js'
 import { registerTools } from './tools.js'
 
@@ -29,10 +31,13 @@ export function apply(ctx) {
   ctx.effect(() => () => store.close(), 'gantt: close SQLite database')
   ctx.effect(() => store.startScheduler(), 'gantt: recompute the daily brief at 08:00')
   registerRoutes(ctx, store)
-  // The tools service may mount after this plugin, so wait for it explicitly.
-  // Unit harnesses and headless profiles have no inject seam; they register
-  // against whatever the context already exposes.
+  // The prompt and tools services may mount after this plugin, so wait for them
+  // explicitly. Unit harnesses and headless profiles have no inject seam; they
+  // register against whatever the context already exposes.
   if (typeof ctx.inject === 'function') {
+    /** @param {GanttContext} promptCtx */
+    const onPrompt = promptCtx => installPrompt(promptCtx, store)
+    ctx.inject(['systemPrompt'], onPrompt)
     /** @param {GanttContext} toolsCtx */
     const onTools = toolsCtx => registerTools(toolsCtx, store)
     ctx.inject(['tools'], onTools)

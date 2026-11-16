@@ -6,7 +6,7 @@
 
 import { GanttError } from './errors.js'
 import { flattenTree } from './tree.js'
-import { STATUS_LABELS, findFocus, renderFocusChain, renderFocusDetail } from './tree/chain.js'
+import { STATUS_LABELS, findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from './tree/chain.js'
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
 /** @typedef {{ name: string, description: string, parameters: Record<string, unknown>,
@@ -21,6 +21,42 @@ export const TOOL_NAMES = {
 }
 
 const MAX_CONTEXT_CHARS = 6000
+
+/**
+ * Session id of the conversation driving one tool call, or '' when the call has
+ * no agent session (unit harness, direct invocation).
+ * @param {any} exec
+ * @returns {string}
+ */
+function sessionIdOf(exec) {
+  const id = exec?.agent?.session?.id
+  return typeof id === 'string' ? id : ''
+}
+
+/** Turn index that owns the current tool call, read from the durable log so it
+ * survives a resume; null when the session is unavailable.
+ * @param {any} exec
+ * @returns {number | null}
+ */
+function currentTurn(exec) {
+  const session = exec?.agent?.session
+  if (typeof session?.snapshotEvents !== 'function') return null
+  const start = session.snapshotEvents().findLast(/** @param {any} event */ event => event?.type === 'turn/start')
+  return start?.data?.turn ?? null
+}
+
+/** Provenance for one assistant write: the calling conversation and turn plus
+ * the model-supplied summary. Undefined when there is no conversation, so the
+ * manual routes never fabricate a session.
+ * @param {any} exec
+ * @param {unknown} summary
+ * @returns {{ sessionId: string, turn: number | null, summary: string } | undefined}
+ */
+function originOf(exec, summary) {
+  const sessionId = sessionIdOf(exec)
+  if (sessionId === '') return undefined
+  return { sessionId, turn: currentTurn(exec), summary: typeof summary === 'string' ? summary : '' }
+}
 
 /**
  * Resolve a model-supplied task reference to the internal id: the exact id, a
@@ -53,7 +89,9 @@ function contextMarkdown(store, sessionId) {
     `- 任务总数：${stats.total}，进行中 ${stats.inProgress}，已完成 ${stats.done}，逾期 ${stats.overdue}`,
   ]
   if (focus !== null) {
-    lines.push('', ...renderFocusChain(tasks, focus), ...renderFocusDetail(tasks, focus))
+    lines.push('', ...renderFocusChain(tasks, focus), ...renderFocusDetail(tasks, focus), '', '## 任务轨迹（会话与轮次）')
+    const events = store.trajectory({ taskId: focus.id, limit: 8 })
+    lines.push(...(events.length === 0 ? ['（暂无会话记录）'] : renderTrajectory(events)))
   } else {
     lines.push(
       '',
@@ -69,26 +107,30 @@ function contextMarkdown(store, sessionId) {
 /**
  * @param {GanttStore} store
  * @param {any} args
+ * @param {any} exec
  * @returns {{ ok: boolean, message: string }}
  */
-function decompose(store, args) {
+function decompose(store, args, exec) {
   const parentId = resolveTaskId(store, args.id)
-  const result = store.decompose(parentId, Array.isArray(args.children) ? args.children : [], args.planDate)
+  const origin = originOf(exec, args.summary)
+  const result = store.decompose(parentId, Array.isArray(args.children) ? args.children : [], args.planDate, origin)
   const parent = result.parent
   const parentRef = parent === null ? args.id : (parent.ref === '' ? parent.number : parent.ref)
   const created = result.children.map(node => `- ${node.ref === '' ? node.number : node.ref} ${node.title}（完成标准：${node.doneWhen}）`)
+  const recorded = origin === undefined ? '' : '\n已自动记录会话与轮次索引。'
   return {
     ok: true,
-    message: [`已在 ${parentRef} ${parent === null ? '' : parent.title} 下创建 ${result.children.length} 个子任务：`, ...created].join('\n'),
+    message: [`已在 ${parentRef} ${parent === null ? '' : parent.title} 下创建 ${result.children.length} 个子任务：`, ...created].join('\n') + recorded,
   }
 }
 
 /**
  * @param {GanttStore} store
  * @param {any} args
+ * @param {any} exec
  * @returns {{ ok: boolean, message: string }}
  */
-function updateTask(store, args) {
+function updateTask(store, args, exec) {
   const id = resolveTaskId(store, args.id)
   /** @type {Record<string, unknown>} */
   const patch = {}
@@ -96,9 +138,11 @@ function updateTask(store, args) {
     if (args[field] !== undefined) patch[field] = args[field]
   }
   if (Object.keys(patch).length === 0) throw new GanttError('nothing to update')
-  const task = store.update(id, patch)
+  const origin = originOf(exec, args.summary)
+  const task = store.update(id, patch, origin)
   if (task === null) throw new GanttError(`task ${id} was not found`, 404)
-  return { ok: true, message: `已更新 ${task.ref === '' ? task.number : task.ref} ${task.title}：状态 ${STATUS_LABELS[task.status] ?? task.status}，进度 ${task.progress}%。` }
+  const recorded = origin === undefined ? '' : ' 已自动记录会话与轮次索引。'
+  return { ok: true, message: `已更新 ${task.ref === '' ? task.number : task.ref} ${task.title}：状态 ${STATUS_LABELS[task.status] ?? task.status}，进度 ${task.progress}%。${recorded}` }
 }
 
 /**
@@ -111,7 +155,7 @@ export function toolDefinitions(store) {
   return [
     {
       name: TOOL_NAMES.context,
-      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务，或（未聚焦时）整棵树。拆解任务或回答任务问题前先调用它。',
+      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务、最近的会话与轮次轨迹，或（未聚焦时）整棵树。拆解任务或回答任务问题前先调用它。',
       parameters: { type: 'object', additionalProperties: false, properties: {} },
       output: {
         schema: {
@@ -128,13 +172,14 @@ export function toolDefinitions(store) {
     },
     {
       name: TOOL_NAMES.decompose,
-      description: '把一个甘特图任务拆成子任务并写入任务树。父任务用 gantt_context 返回的聚焦任务；每个子任务必须有可验证的完成标准（doneWhen），最多 4 层、单次最多 100 个。',
+      description: '把一个甘特图任务拆成子任务并写入任务树。父任务用 gantt_context 返回的聚焦任务；每个子任务必须有可验证的完成标准（doneWhen），最多 4 层、单次最多 100 个。写入会自动记录本会话 id 与轮次索引。',
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
           id: { type: 'string', description: '父任务：内部 id、点号 id 或编号（如 1.1.1）。' },
           planDate: { type: 'string', description: '可选，YYYY-MM-DD，只作为子任务默认起止日期。' },
+          summary: { type: 'string', description: '可选，这次拆解的说明（写入任务轨迹）。' },
           children: {
             type: 'array',
             description: '要创建的子任务（1–100 个）。',
@@ -165,13 +210,13 @@ export function toolDefinitions(store) {
         },
         render: (_args, value) => [{ type: 'text', text: value.message }],
       },
-      async execute(args) {
-        return decompose(store, args)
+      async execute(args, exec) {
+        return decompose(store, args, exec)
       },
     },
     {
       name: TOOL_NAMES.update,
-      description: '更新一个甘特图任务的状态、进度、标题或完成标准。',
+      description: '更新一个甘特图任务的状态、进度、标题或完成标准。标记 done 会自动记录完成它的会话与轮次；用 summary 写完成证据或更新说明。',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -181,6 +226,7 @@ export function toolDefinitions(store) {
           progress: { type: 'integer', description: '可选，0–100 的进度。' },
           title: { type: 'string', description: '可选，新标题。' },
           doneWhen: { type: 'string', description: '可选，新的完成标准。' },
+          summary: { type: 'string', description: '可选，完成证据或更新说明（写入任务轨迹）。' },
         },
         required: ['id'],
       },
@@ -193,8 +239,8 @@ export function toolDefinitions(store) {
         },
         render: (_args, value) => [{ type: 'text', text: value.message }],
       },
-      async execute(args) {
-        return updateTask(store, args)
+      async execute(args, exec) {
+        return updateTask(store, args, exec)
       },
     },
   ]

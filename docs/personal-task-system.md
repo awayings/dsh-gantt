@@ -72,12 +72,15 @@ Every row in `tasks` is a node of the tree. `kind` says where it came from:
 
 ### The snapshot tables are import provenance
 
-| Table | Role after v3 |
+| Table | Role after v5 |
 | --- | --- |
 | `tasks` | The one working tree: tracks, imported nodes, decomposed and manual tasks |
 | `tracks`, `nodes` | Import snapshots. They preserve what the markdown said, make re-import idempotent, and are not rendered as a tree |
 | `plan_blocks` | The time grid: imported blocks plus blocks created by scheduling |
 | `day_plans` | One row per planned day: weekday, day kind, market flag, label, core goal |
+| `daily_briefs` | The persisted daily 该动 report, one morning snapshot per date |
+| `focus` | One focused task per conversation, for the right-rail tab and assistant tools |
+| `task_events` | Append-only task trajectory: action, DSH session, turn, detail, timestamp |
 
 The importer writes the snapshots first, then materializes them into `tasks` in
 the same `BEGIN IMMEDIATE` transaction. A v2 database is backfilled once during
@@ -497,13 +500,55 @@ through the tools and writes decomposition results straight into the tree.
   (depth cap, status vocabulary, dates, one transaction) applies. Tool writes
   are ordinary SQLite store calls, so they need no shell/filesystem approval;
   the store is the guard.
+- **Provenance.** Each tool write records a `task_events` row (session id, turn,
+  action, detail, timestamp): `gantt_update_task` records `update`/`complete`,
+  `gantt_decompose` records `decompose` on the parent and `create` on each
+  child. The panel shows the focused task's five most recent events, and
+  `gantt_context` includes a `## 任务轨迹（会话与轮次）` section.
 - **Optional services.** The host `tools` service is optional — without it the
   plugin registers no tools and everything else works. The plugin never calls an
   LLM itself and ships no prompt; model availability and tool permissions belong
   to the harness and the conversation.
 
-The route contracts are in [api.md](api.md#focus-one-task) and
-[api.md](api.md#assistant-tools).
+The route contracts are in [api.md](api.md#focus-one-task),
+[api.md](api.md#task-trajectory), and [api.md](api.md#assistant-tools).
+
+## Task trajectory and protocol context
+
+A conversation should advance the Gantt, and every advanced task should be
+traceable back to the conversation that did it. Schema version 5 adds
+`task_events` for that: an append-only row per affected task with `id`,
+`task_id` (foreign key, `ON DELETE CASCADE`), `session_id`, `turn`, `action`,
+`detail`, and `created_at`, indexed by `(task_id, created_at)` and
+`(session_id, created_at)`. There is no backfill: history starts when the feature
+first records an event, so tasks changed before that have an empty trajectory.
+
+Recording is automatic, not a separate tool argument surface: the assistant
+tools derive the session id and turn from the tool execution context, and add
+the optional `summary` argument as the event detail. The action vocabulary is
+`create`, `update`, `complete`, and `decompose`; a completed task and a merely
+updated task are distinguishable. `GET /api/gantt/trajectory` reads the events
+newest first, filterable by task and/or session, default limit 20 (integer
+1–100). The right-rail panel shows five recent entries for the focused task
+(action, turn, time, detail, with the full session id in the row tooltip). The
+API shape is in [api.md](api.md#task-trajectory).
+
+The host also feeds the protocol into the conversation automatically when the
+optional `systemPrompt` service is present:
+
+- a static prompt section, `gantt:protocol`, order `700`, explains the
+  completion / partial-decompose / decompose-only protocol and that provenance
+  is recorded automatically;
+- a dynamic runtime context, `gantt:focus`, order `530`, is emitted only while
+  the conversation has a focused task and contains the focused ancestor chain
+  (ref, title, kind, status, `doneWhen`), the focus detail, and the recent
+  trajectory.
+
+The plugin declares the `systemPrompt` dependency lazily
+(`ctx.inject(['systemPrompt'], …)`); when the service is absent it contributes
+nothing and the tools still work. DSH materializes runtime context as a durable
+snapshot and appends a new snapshot only when the rendered text changes, so an
+unchanged focus does not churn the prompt and the cache prefix stays stable.
 
 ## Day plans and the Today page
 

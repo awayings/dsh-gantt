@@ -38,8 +38,8 @@ function makeV3DatabaseWithMaterialisedRows() {
 describe('schema v4', () => {
   it('creates the daily_briefs table and bumps the version for a fresh database', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(4)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 })
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(4)
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     const columns = /** @type {{ name: string }[]} */ (store.db.prepare('PRAGMA table_info(daily_briefs)').all()).map(row => row.name)
     expect(columns).toEqual(['plan_date', 'generated_at', 'source', 'report'])
     expect(store.db.prepare('SELECT COUNT(*) AS count FROM daily_briefs').get()).toEqual({ count: 0 })
@@ -49,7 +49,7 @@ describe('schema v4', () => {
     dir = makeTempDir('dsh-gantt-v2-to-v4-')
     const file = writeV2Database(path.join(dir, 'tasks.db'))
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(store.count()).toBe(6)
     expect(store.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'daily_briefs'").get()).toEqual({ name: 'daily_briefs' })
   })
@@ -57,7 +57,7 @@ describe('schema v4', () => {
   it('does not re-import snapshots when a v3 database only needs the version bump', () => {
     const file = makeV3DatabaseWithMaterialisedRows()
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(store.count()).toBe(3)
     expect(store.db.prepare('SELECT COUNT(*) AS count FROM daily_briefs').get()).toEqual({ count: 0 })
   })

@@ -13,9 +13,10 @@ the automated gate plus the real-database migration check; the `1.4.0` daily
 brief and perspectives add the schema-v4 migration; the `1.5.0` round refactors
 the source into `src/host/` + `src/client/` (rolldown bundle into `lib/client.js`)
 and moves the AI workflow to native conversations (right-rail tab + host
-assistant tools with per-conversation focus); it was verified by the same gate.
-The manual GUI checklist is in `docs/development.md` and had not been run at
-that date.
+assistant tools with per-conversation focus); the current round adds the
+schema-v5 `task_events` trajectory, automatic session/turn provenance, and the
+background assistant protocol context, covered by the same gate. The manual GUI
+checklist is in `docs/development.md` and had not been run at that date.
 
 ## 1 · Supported set
 
@@ -56,7 +57,7 @@ that date.
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `src/host/routes/` registers eighteen exact paths this
+   returns a `Response`. `src/host/routes/` registers nineteen exact paths this
    way via `src/host/routes/http.js`.
 3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
    `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
@@ -107,7 +108,9 @@ that date.
    conversation: each execution reads the session id from the execution context
    and looks up the `focus` row. Focus rows live in SQLite, so they survive a
    host restart and are removed by the foreign-key cascade when the task is
-   deleted.
+   deleted. Every tool write also appends to `task_events` with the session id
+   and turn index, so task history is traceable without a separate logging call;
+   the optional `summary` argument becomes the event detail.
 9. **Right-rail tab (client).** The conversation sidebar is provided by the
    optional `dsh-better-sidebar` plugin. `src/client/index.js` injects
    `betterSidebar` with `ctx.inject(['betterSidebar'], …)` and calls
@@ -128,6 +131,20 @@ that date.
    `today` field, default task date,
    `持续` end, and the scheduler agree with the browser rather than with the
    host clock.
+11. **Assistant protocol context (optional `systemPrompt`).** The plugin
+   declares the dependency lazily with `ctx.inject(['systemPrompt'], …)` and
+   contributes a static prompt section (`gantt:protocol`, order `700`)
+   plus a dynamic runtime context (`gantt:focus`, order `530`). The section
+   states the completion / partial-decompose / decompose-only protocol and that
+   provenance is automatic; the context is emitted only while the conversation
+   has a focus and carries the focused ancestor chain, focus detail, and recent
+   trajectory. `ctx.systemPrompt.section({ name, order, text })` and
+   `ctx.systemPrompt.context({ name, order, text })` are the registry calls
+   (`dsh: dsh-system-prompt/lib/types/index.d.ts:256,275`). Runtime context is
+   materialized as a durable user-role snapshot; DSH appends a new snapshot only
+   when the rendered text changes, so an unchanged focus keeps the cache prefix
+   stable. Without the service the plugin registers neither piece and keeps
+   working.
 
 ## 3 · Rules
 
@@ -190,15 +207,26 @@ that date.
    (`gantt_update_task`) directly. The guard is not an approval prompt but the
    store: depth cap, status vocabulary, date ranges, hierarchy rules, and one
    transaction per write all still apply, and tools return the resulting message
-   to the model. The plugin itself calls no model and ships no prompt.
+   to the model. Each write also appends a `task_events` row with the session id
+   and turn, so the task remains traceable; task deletion cascades to its events.
+   The plugin itself calls no model; its protocol contribution is prompt text,
+   not a model call.
 
 ## 4 · Data model layering and migration
 
-Schema version 4 adds the persisted daily brief report; version 3 had already
-unified the plugin's two previous datasets into one working tree. `tracks`/
-`nodes` remain as import snapshots, and the importer materializes them into
-`tasks` in the same transaction; the domain model is in
-`docs/personal-task-system.md`.
+Schema version 5 adds the append-only task trajectory; version 4 had added the
+persisted daily brief report; version 3 had already unified the plugin's two
+previous datasets into one working tree. `tracks`/`nodes` remain as import
+snapshots, and the importer materializes them into `tasks` in the same
+transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v4 → v5 upgrade:** the base schema creates `task_events` (`id`, `task_id`
+foreign key with `ON DELETE CASCADE`, `session_id`, `turn`, `action`, `detail`,
+`created_at`) with indexes on `(task_id, created_at)` and
+`(session_id, created_at)`, and the migration only bumps `PRAGMA user_version`
+to 5. It does **not** touch `tasks`, the snapshot tables, `focus`, or
+`daily_briefs`, and there is no event backfill: existing tasks start with an
+empty trajectory and events accumulate from the next assistant-tool write.
 
 **v3 → v4 upgrade:** the base schema creates the `daily_briefs` table
 (`plan_date` primary key, `generated_at`, `source`, `report` JSON) and the
@@ -211,12 +239,12 @@ read. The `focus` table (`session_id` primary key, `task_id` foreign key with
 without a schema-version bump. Focus rows survive restarts and disappear with
 the task they point at.
 
-**v2 → v4 upgrade (append-only, run once when the host opens the database):**
+**v2 → v5 upgrade (append-only, run once when the host opens the database):**
 
 1. The migration adds 12 columns to `tasks` — `kind`, `ref`, `state`, `lane`,
    `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
-   `links`, `source` — each `NOT NULL DEFAULT`, so existing rows stay valid, and
-   sets `PRAGMA user_version = 3`.
+   `links`, `source` — each `NOT NULL DEFAULT`, so existing rows stay valid; the
+   migration then records the current schema version.
 2. It adds the unique index `idx_tasks_ref ON tasks(kind, ref) WHERE ref <> ''`
    that makes `(kind, ref)` the import upsert key.
 3. A **one-time backfill** materializes the existing `tracks`/`nodes` rows into
@@ -229,8 +257,9 @@ the task they point at.
    start date when it is in the future).
 4. The column/index steps are guarded by their own existence and the backfill
    by `user_version < 3`; the migration handles a v1 empty database, a v2
-   imported one, and a v3 database (tree kept, reports added), and re-opening a
-   v4 database changes nothing.
+   imported one, a v3 database (tree kept, reports added), and a v4 database
+   (reports kept, trajectory added), and re-opening a v5 database changes
+   nothing.
 5. The upgrade is one-way. To keep a downgrade path, stop `dsh web` and copy
    `tasks.db` (plus `-wal`/`-shm` if present) before opening the new build.
 
@@ -243,6 +272,7 @@ the task they point at.
 | Time grid | `plan_blocks`, `day_plans` | Today page (`/day`) |
 | Daily brief reports | `daily_briefs` | `/brief`, `/tree` `dailyBrief`, `/day` `brief`, context `## 今日窗口` |
 | Conversation focus | `focus` | Right-rail tab (`/focus` routes), assistant `gantt_context` |
+| Task trajectory | `task_events` | `/trajectory`, `gantt_context` `## 任务轨迹（会话与轮次）`, right-rail panel |
 
 ## 5 · Limitations
 
@@ -314,6 +344,9 @@ the task they point at.
   calls over SQLite (no shell or filesystem access), and the store's validation
   and transactions are the guard. A model with tool access can modify tasks;
   treat the model's tool permissions as the real control surface.
+- **No trajectory backfill.** `task_events` starts empty when the feature is
+  installed; tasks created or changed before that have no recorded session/turn
+  provenance. Events are append-only and are deleted with their task.
 - **Stale parent rollups** when a parent loses its last child (§3.8).
 - **Concurrent DSH processes must not share one SQLite file** (§3.2).
 - **i18n is `en` + `zh` only.** The harness may offer more UI languages; plugin
@@ -334,14 +367,16 @@ the task they point at.
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
-- **Check — schema migration:** open a copy of a v2 or v3 database with the
-  current build and assert `GET /api/gantt/meta` returns `schemaVersion: 4`.
+- **Check — schema migration:** open a copy of a v2, v3, or v4 database with
+  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 5`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
-  unchanged and only gain `daily_briefs`; both also gain the additive `focus`
-  table. Then read `/api/gantt/brief` and assert the report is computed and
-  cached for today, and `/api/gantt/focus?sessionId=…` returns `taskId: null`
-  on a fresh database.
+  unchanged and only gain `daily_briefs`; a v4 copy must keep the tree and
+  reports and only gain `task_events` plus its two indexes. All also gain the
+  additive `focus` table. Then read `/api/gantt/brief` and assert the report is
+  computed and cached for today, `/api/gantt/focus?sessionId=…` returns
+  `taskId: null` on a fresh database, and `/api/gantt/trajectory` returns an
+  empty `events` array before any assistant-tool write.
 - **Check — task-day clock:** with the host in UTC, assert the `today` fields in
   `/tree`, `/day`, and `/brief` match the `Asia/Shanghai` date (not the UTC
   date late in the UTC evening), then restart with `DSH_GANTT_TZ=UTC` and
@@ -352,19 +387,25 @@ the task they point at.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 4, eighteen endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 5, nineteen endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,
   `/api/gantt/context` (including `## 今日窗口`), `/api/gantt/brief`,
-  `/api/gantt/brief/compute`, plus a focus round trip: `POST /api/gantt/focus/set`
-  with a task id, then `GET /api/gantt/focus` for the same `sessionId` returns
-  it and clearing returns `taskId: null`).
+  `/api/gantt/brief/compute`, `/api/gantt/trajectory`, plus a focus round trip:
+  `POST /api/gantt/focus/set` with a task id, then `GET /api/gantt/focus` for
+  the same `sessionId` returns it and clearing returns `taskId: null`).
 - **Check — assistant tools:** `tests/host/tools.spec.js` covers the three
   definitions, reference resolution, per-session context, and registration
   no-op; the live check is a native conversation: focus a task in the right-rail
   tab, ask the model to decompose it, and confirm the children appear in the
-  tree.
+  tree and the parent/child events appear in `/api/gantt/trajectory` with the
+  conversation's session id and turn.
+- **Check — background context:** with `systemPrompt` present, a focused
+  conversation should show the `gantt:protocol` section and a
+  `gantt:focus` runtime-context snapshot containing the ancestor chain and
+  recent trajectory; changing no focus state must not append a new snapshot.
+  Without `systemPrompt`, the plugin must still start and the tools/API work.
 - **Check — rendering:** the manual GUI checklist in `docs/development.md`.
 - **Procedure — add a supported DSH line:** install that release in a
   disposable profile, run the automated gate, run the install/host acceptance

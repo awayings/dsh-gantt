@@ -5,24 +5,24 @@ by a local SQLite database and an authenticated JSON API.
 
 ## Shape
 
-- Host `src/host/` (plain ESM in the `dsh web` process): `index.js` owns the
-  store lifecycle, the 08:00 scheduler, and route/tool registration; `routes/`
-  holds eighteen route specs incl. `focus.js` (plumbing in `http.js`); `store/`
-  owns SQLite and brief persistence; `tracker/` parses the tracker markdown;
-  `tree/` holds pure tree/brief/context/chain helpers; `clock.js` resolves
-  task-day dates; `daily/` builds the daily report; `tools.js` declares the
-  assistant tools. Four facades keep the public surface stable for tests.
+- Host `src/host/`: `index.js` owns the store lifecycle, the 08:00 scheduler, and
+  route/tool/prompt registration; `routes/` holds nineteen route specs incl.
+  `focus.js`/trajectory (plumbing in `http.js`); `store/` owns SQLite, briefs,
+  and `task_events`; `tracker/` parses the tracker markdown; `tree/` holds pure
+  tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
+  builds the daily report; `tools.js` declares the assistant tools and records
+  provenance. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
   right-rail `panel` tab, brief strip, dialogs, styles) bundled by
   `scripts/build-client.mjs` (rolldown) into gitignored `lib/client.js` — one
   classic script registered through `window.__ModuleLoader__.load`, React from
   the factory `require`. DSH derives the artifact revision from
   `exports["./client"]` metadata only; rebuild after client edits, never commit
-  `lib/`. One concern per file, every source file under 1000 lines.
+  `lib/`.
 - One working tree: imported tracks/nodes, manual tasks, and decomposed tasks
   live in `tasks`; `tracks`/`nodes` are import snapshots only. `daily_briefs` is
-  a morning snapshot refreshed by recompute or the 08:00 run; `focus` stores one
-  task per conversation for the right-rail tab and assistant tools. Details in
+  a morning snapshot; `focus` stores one task per conversation; `task_events` is
+  the append-only session/turn trajectory. Details in
   `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`) before deciding
@@ -33,10 +33,10 @@ by a local SQLite database and an authenticated JSON API.
 No pull requests: work commits straight to `main`, gated by two local hooks.
 
 - `pre-commit` → `pnpm run static` (lint + typecheck, ~3 s).
-- `pre-push` → `pnpm run check`: static + unit coverage + e2e in parallel
-  (~25 s cold; the e2e gate rebuilds `lib/client.js` first). A green run is
-  cached in `.tmp/check.stamp` for 60 min; the push is refused unless the stamp
-  matches the pushed tree, so commit or stash first. `--full` forces a run.
+- `pre-push` → `pnpm run check`: static + coverage + e2e in parallel (~25 s
+  cold; e2e rebuilds `lib/client.js`). A green run is cached in
+  `.tmp/check.stamp` for 60 min; the push is refused unless the stamp matches
+  the tree, so commit or stash first. `--full` forces a run.
 - Never `--no-verify`, never push a red or uncommitted tree, no history rewrites.
 - Coverage floors live in `vitest.config.ts` and ratchet up: 100% per file for
   `src/host/**` and `src/shared/**`; 99/98/99/99 per file for `src/client/**`.
@@ -53,10 +53,11 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   frontier/next, and context markdown are derived at read time, never stored.
   Parent rollups are a cache: a parent that loses its last child keeps its last
   rolled-up values (known limitation in `docs/compatibility.md`). The daily
-  report is a snapshot, not live state; a native conversation's assistant tools
-  write through the store, where validation is the guard, and the plugin never
-  calls an LLM. Dates and the 08:00 recompute resolve in the task-day zone
-  (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host time zone.
+  report is a snapshot, not live state; assistant tools write through the store
+  (validation is the guard) and append `task_events` with the session and turn;
+  the plugin never calls an LLM, and optional `systemPrompt` carries the
+  protocol/focus context. Dates and the 08:00 recompute resolve in the task-day
+  zone (`DSH_GANTT_TZ`, default `Asia/Shanghai`), not the host time zone.
 - Multi-row writes use one `BEGIN IMMEDIATE` transaction; validate before
   mutating (dates, status, progress, parent existence, cycles). The client
   refetches after every write and shows an error banner, never stale data.
@@ -91,9 +92,8 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   URL once (it sets the session cookie). DB: `$DSH_HOME/gantt/tasks.db`,
   override with `DSH_GANTT_DB`; task-day zone `DSH_GANTT_TZ` (default
   `Asia/Shanghai`).
-- Install a checkout: `pnpm run deploy` (builds, links, checks composition;
-  `--check`, `--uninstall`), or GUI `plugin_manager install_bundle`; restart
-  `dsh web` for host changes, rebuild + reload for client changes.
+- Install with `pnpm run deploy` (`--check`, `--uninstall`) or GUI
+  `plugin_manager install_bundle`; restart for host changes, rebuild+reload for client.
 - `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
   manual checklist, acceptance pass, API — in `docs/development.md`,
   `docs/api.md`, `docs/compatibility.md`.

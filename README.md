@@ -15,7 +15,9 @@ sidebar:
   perspectives prune the tree to the paths that matter. A **甘特** tab in the
   native conversation sidebar focuses one task per conversation, and the host
   assistant tools let that conversation read the focused chain and write
-  decompositions straight into the tree.
+  decompositions straight into the tree. Every tool write records the DSH
+  session and turn in a task trajectory that the tab, the tools, and
+  `GET /api/gantt/trajectory` can read back.
 - **Today (今日安排)** — the day's planned time blocks, grouped by slot, with
   one-click status, the tree nodes in play, the day's core goal, and integrity
   warnings for missing landing targets or a missing evening slot. Blocks created
@@ -128,14 +130,14 @@ DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 08:00 brief recompute; it defaults to `Asia/Shanghai` (this deployment's host
 process runs in UTC). An invalid IANA zone falls back to the default.
 
-The schema is created on first activation and upgraded in place; a v2 or v3
-database is migrated to schema version 4 on open (the append-only migration,
-the one-time tree backfill for v2, and the new `daily_briefs` table are in
-[docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
+The schema is created on first activation and upgraded in place; a v2, v3, or
+v4 database is migrated to schema version 5 on open (the append-only migration,
+the one-time tree backfill for v2, and the `daily_briefs`/`focus`/`task_events`
+additions are in [docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
 task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`;
 plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
-Schema version 4 keeps one working tree in `tasks`: `kind='track'` roots (the
+Schema version 5 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
 manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
 `lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
@@ -144,7 +146,10 @@ and the plugin's `links`; `(kind, ref)` is unique for imported rows. The
 `plan_blocks`/`day_plans` hold the time grid. The `daily_briefs` table stores
 one report per date: a deterministic, persisted snapshot of today's windows and
 picked tasks, recomputed by the host at 08:00 in the task-day zone, by
-**Recompute**, or on the first read of a day without a stored report. The import reads a task-tracker
+**Recompute**, or on the first read of a day without a stored report.
+`task_events` keeps the append-only provenance trail (action, session id, turn,
+detail, time) that the assistant tools write automatically; `focus` keeps the
+per-conversation focused task. The import reads a task-tracker
 markdown workspace (`SCHEDULE.md`, `TREE.md`, `daily/*.md`) from
 `/data/home/clawd/projects/task-tracker` by default (`DSH_GANTT_TRACKER_DIR`
 overrides it) and never writes to it. See
@@ -173,7 +178,7 @@ axis changes.
 
 ## JSON API
 
-All eighteen routes are mounted on the harness's existing authenticated `/api` channel.
+All nineteen routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
@@ -183,6 +188,7 @@ status.
 | `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief` |
 | `GET` | `/api/gantt/focus` | The task a conversation is focused on (`?sessionId=`) |
 | `POST` | `/api/gantt/focus/set` | Focus one task for a conversation, or clear it |
+| `GET` | `/api/gantt/trajectory` | Newest-first task provenance events (`?taskId=&sessionId=&limit=`) |
 | `GET` | `/api/gantt/meta` | Database path, statuses, kinds, link types, endpoint catalog |
 | `POST` | `/api/gantt/tasks` | Create a task (including the tracker metadata fields) |
 | `POST` | `/api/gantt/task/update` | Update any writable task fields |
@@ -259,13 +265,13 @@ one concern per file, and every source file stays under 1000 lines.
 | Path | Role |
 | --- | --- |
 | `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, route and assistant-tool registration |
-| `src/host/routes/` | the eighteen `/api/gantt/*` route specs split by resource (including `focus.js`); `http.js` holds shared plumbing |
-| `src/host/store/` | SQLite schema and migrations, task/tree writes, daily-brief persistence, context document |
+| `src/host/routes/` | the nineteen `/api/gantt/*` route specs split by resource (including `focus.js` and the trajectory read); `http.js` holds shared plumbing |
+| `src/host/store/` | SQLite schema and migrations, task/tree writes, task-event trajectory, daily-brief persistence, context document |
 | `src/host/tracker/` | tracker markdown parsers and importer |
 | `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown, `chain.js` focus rendering |
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/tools.js` | assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`) and task-reference resolution |
+| `src/host/tools.js` | assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`), task-reference resolution, and automatic provenance recording |
 | `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`), brief strip, dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
@@ -316,7 +322,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
-- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, native-conversation assistant tools, links, context export
+- [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, native-conversation assistant tools, task trajectory/protocol context, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
 - [AGENTS.md](AGENTS.md) — engineering policy (priorities, tests, file size, gate)
 

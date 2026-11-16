@@ -216,4 +216,61 @@ describe('gantt assistant tools', () => {
     registerTools({ get: () => ({}) }, store)
     registerTools({ get: () => null }, store)
   })
+
+  it('records the calling conversation and turn on update and completion', async () => {
+    const { task } = focusTask()
+    const update = tool(toolDefinitions(store), TOOL_NAMES.update)
+    const exec = { agent: { session: { id: 'session-a', snapshotEvents: () => [{ type: 'user/message', data: {} }, { type: 'turn/start', data: { turn: 4 } }] } } }
+    const value = /** @type {any} */ (await update.execute({ id: task.id, status: 'done', summary: '  shipped  ' }, exec))
+    expect(value.message).toContain('已自动记录会话与轮次索引。')
+    const [event] = store.trajectory({ taskId: task.id })
+    expect(event).toMatchObject({ action: 'complete', sessionId: 'session-a', turn: 4, detail: 'shipped' })
+  })
+
+  it('records a decompose and its children, and tolerates an unknown turn', async () => {
+    const { task } = focusTask()
+    const decompose = tool(toolDefinitions(store), TOOL_NAMES.decompose)
+    const exec = { agent: { session: { id: 'session-b', snapshotEvents: () => [{ type: 'turn/start' }] } } }
+    const value = /** @type {any} */ (await decompose.execute({ id: task.id, children: [{ title: 'Child', doneWhen: 'Done' }] }, exec))
+    expect(value.message).toContain('已自动记录会话与轮次索引。')
+    const [parentEvent] = store.trajectory({ taskId: task.id })
+    expect(parentEvent).toMatchObject({ action: 'decompose', sessionId: 'session-b', turn: null })
+    const childId = /** @type {string} */ (store.getNode(task.id)?.children[0].id)
+    expect(store.trajectory({ taskId: childId })[0]).toMatchObject({ action: 'create', sessionId: 'session-b', turn: null })
+  })
+
+  it('records a null turn without session events and ignores a non-string summary', async () => {
+    const { task } = focusTask()
+    const update = tool(toolDefinitions(store), TOOL_NAMES.update)
+    for (const exec of [
+      { agent: { session: { id: 'session-c' } } },
+      { agent: { session: { id: 'session-c', snapshotEvents: () => [] } } },
+    ]) {
+      await update.execute({ id: task.id, status: 'in_progress', progress: 10, summary: 5 }, exec)
+    }
+    const events = store.trajectory({ taskId: task.id })
+    expect(events).toHaveLength(2)
+    for (const event of events) {
+      expect(event).toMatchObject({ action: 'update', sessionId: 'session-c', turn: null })
+      expect(event.detail).toContain('状态 in_progress，进度 10%')
+    }
+  })
+
+  it('renders the recent trajectory in gantt_context', async () => {
+    const { task } = focusTask()
+    store.recordEvent({ taskId: task.id, action: 'complete', sessionId: 'session-old', turn: 2, detail: 'shipped' })
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-a' } } }))
+    expect(value.markdown).toContain('## 任务轨迹（会话与轮次）')
+    expect(value.markdown).toContain('会话 session-old')
+    expect(value.markdown).toContain('第 2 轮')
+    expect(value.markdown).toContain('shipped')
+  })
+
+  it('renders an empty trajectory for a focused task without events', async () => {
+    focusTask()
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-a' } } }))
+    expect(value.markdown).toContain('（暂无会话记录）')
+  })
 })

@@ -110,6 +110,63 @@ export const CSS_PANEL = `
     animation: gantt-panel-spin 800ms linear infinite;
   }
   @keyframes gantt-panel-spin { to { transform: rotate(360deg); } }
+  .gantt-panel-trajectory {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 10px 7px;
+    border-bottom: 1px solid var(--gantt-line);
+    background: color-mix(in srgb, var(--gantt-accent) 4%, transparent);
+  }
+  .gantt-panel-trajectory-head { display: flex; align-items: baseline; gap: 6px; }
+  .gantt-panel-trajectory-title { font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--gantt-muted); }
+  .gantt-panel-trajectory-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--gantt-text);
+  }
+  .gantt-panel-trajectory-action {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--gantt-line);
+    color: var(--gantt-muted);
+  }
+  .gantt-panel-trajectory-row[data-action="complete"] .gantt-panel-trajectory-action {
+    color: var(--dsw-alias-state-success-primary);
+    border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent);
+  }
+  .gantt-panel-trajectory-row[data-action="decompose"] .gantt-panel-trajectory-action {
+    color: var(--gantt-accent);
+    border-color: color-mix(in srgb, var(--gantt-accent) 40%, transparent);
+  }
+  .gantt-panel-trajectory-turn {
+    flex: 0 0 auto;
+    color: var(--gantt-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .gantt-panel-trajectory-time {
+    flex: 0 0 auto;
+    color: var(--gantt-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .gantt-panel-trajectory-detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .gantt-panel-trajectory-error { margin: 0; font-size: 10.5px; color: var(--dsw-alias-state-error-primary); }
+  @container (max-width: 340px) {
+    .gantt-panel-trajectory-turn { display: none; }
+  }
   @container (max-width: 340px) {
     .gantt-panel-focus-label { display: none; }
     .gantt-panel-kind { display: none; }

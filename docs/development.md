@@ -46,16 +46,17 @@ script because the DSH client loader fetches a single artifact per package.
 
 | Path | Half | Role |
 | --- | --- | --- |
-| `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, route/tool registration |
-| `src/host/routes/` | host | The eighteen `/api/gantt/*` route specs split by resource (including `focus.js`); `http.js` is shared plumbing |
+| `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, route/tool/prompt registration |
+| `src/host/routes/` | host | The nineteen `/api/gantt/*` route specs split by resource (including focus and trajectory); `http.js` is shared plumbing |
 | `src/host/routes/focus.js` | host | `GET /focus` and `POST /focus/set`: per-conversation task focus |
-| `src/host/store/` | host | SQLite schema/migrations, task/tree writes, brief persistence, context document, 08:00 scheduler |
+| `src/host/store/` | host | SQLite schema/migrations, task/tree writes, task-event trajectory, brief persistence, context document, 08:00 scheduler |
 | `src/host/tracker/` | host | Task-tracker markdown parsers and importer |
 | `src/host/tree/` | host | Pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown |
 | `src/host/tree/chain.js` | host | Focus-chain rendering for the assistant tools (track root → focus, task detail) |
 | `src/host/clock.js` | host | Task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/tools.js` | host | Assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`) and their task-reference resolution |
+| `src/host/tools.js` | host | Assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`), task-reference resolution, and automatic provenance recording |
+| `src/host/prompt.js` | host | Static task-protocol section and dynamic focus trajectory context (optional `systemPrompt`) |
 | `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab, brief strip, dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
@@ -181,19 +182,23 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v4 migration and the additive `focus` table, conversation focus persistence/cascade, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
-| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all eighteen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, `decompose`/`schedule`/`context`, the day/plan routes, assistant tool definitions/reference resolution/execution, per-session context, and registration no-op without a tools service |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema v5 migration and the additive `focus`/`task_events` tables, conversation focus persistence/cascade, task-event trajectory, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all nineteen routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, `decompose`/`schedule`/`context`, the day/plan routes, assistant tool definitions/reference resolution/execution, per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, loading/error/empty), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 4, and a SQLite file that survives a restart |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries, loading/error/empty), tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 5, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 New in the native-conversation round: `tests/store/focus.spec.js`,
 `tests/host/routes-focus.spec.js`, `tests/host/chain.spec.js`, and
 `tests/host/tools.spec.js`, plus `tests/client/panel.spec.js`; the e2e chat
 `503` case became a focus HTTP round trip, and the old `chat.spec.js` files and
-the fake `llm` helper were removed. Earlier daily-brief / clock tests
-(`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
+the fake `llm` helper were removed. The trajectory round adds
+`tests/store/events.spec.js` and `tests/host/prompt.spec.js` and extends the
+store, host, client, and e2e suites with task-event/provenance, trajectory-route,
+and prompt-context cases (`task_events` migration, tool session/turn recording,
+`gantt_context` 任务轨迹, right-rail five-entry view). Earlier daily-brief /
+clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
 
@@ -256,7 +261,7 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
-### Schema version 4: one working tree plus daily reports
+### Schema version 5: one working tree plus daily reports and trajectory
 
 The tree data lives in `tasks`, one row per node, with `kind` marking the layer:
 
@@ -270,13 +275,17 @@ Each row also carries the tracker metadata (`state`, `lane`, `dep`, `done_when`,
 `landing`, `estimate`, `category`, `inspiration`, `links`) and `source`
 (`tracker` | `manual`). A unique index on `(kind, ref)` (where `ref <> ''`) is
 the import's upsert key. `tracks` and `nodes` stay as import snapshots;
-`plan_blocks` and `day_plans` remain the time grid. Schema version 4 adds
+`plan_blocks` and `day_plans` remain the time grid. Schema version 4 added
 `daily_briefs` (`plan_date` primary key, `generated_at`, `source`, `report`
 JSON), the persisted daily 该动 snapshots, plus `focus` (`session_id` primary
 key, `task_id` foreign key with `ON DELETE CASCADE`, `updated_at`) for the
 right-rail tab and assistant tools. The `focus` table is created by the base
 schema's `CREATE TABLE IF NOT EXISTS` without a schema-version bump, survives
-host restarts, and is cleared when its task is deleted. The rationale is in
+host restarts, and is cleared when its task is deleted. Schema version 5 adds
+`task_events` (`id`, `task_id` foreign key with `ON DELETE CASCADE`,
+`session_id`, `turn`, `action`, `detail`, `created_at`) with indexes on
+`(task_id, created_at)` and `(session_id, created_at)`; it is created on every
+open and has no data backfill. The rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
@@ -284,23 +293,25 @@ The host also starts an in-process scheduler: a `setTimeout` to the next 08:00
 in the task-day zone recomputes today's report with `source: 'auto'`; the timer
 is unref'ed and disposed with the plugin, so it only runs while `dsh web` is up.
 
-#### Migrate a v2 or v3 database
+#### Migrate a v2, v3, or v4 database
 
 The host runs the append-only migration when it opens a database whose
-`PRAGMA user_version` is below 4. A v2 database additionally gets the twelve
+`PRAGMA user_version` is below 5. A v2 database additionally gets the twelve
 `tasks` columns, the `(kind, ref)` index, and the one-time backfill of
-`tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and only
-gains `daily_briefs`.
+`tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and gains
+`daily_briefs`; a v4 database keeps the tree and reports and gains only
+`task_events` (plus its indexes). No event backfill runs.
 
 1. Stop `dsh web`, then copy the database aside:
    `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v3.db` (also copy `-wal`/`-shm` if
    present, or run `sqlite3 tasks.db 'PRAGMA wal_checkpoint(TRUNCATE)'` first).
 2. Start the new build / restart `dsh web`. No separate migration command
    exists; opening the store performs it.
-3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `4` and `taskCount`
-   is unchanged on a v3 upgrade. `GET /api/gantt/tree` still has the same tree
-   and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
-   today's report.
+3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `5` and `taskCount`
+   is unchanged on a v3/v4 upgrade. `GET /api/gantt/tree` still has the same
+   tree and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
+   today's report; `GET /api/gantt/trajectory` returns an empty `events` array
+   until the first assistant-tool write.
 4. On a v2 upgrade, run the import once (`POST /api/gantt/plan/import`); it must
    report the same track/node counts as the snapshot and must not duplicate rows
    (the unique `(kind, ref)` index would reject a second copy).
@@ -448,12 +459,14 @@ curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/focus?sessionId=de
 curl -s -H "Cookie: $COOKIE" -X POST -H 'content-type: application/json' \
   http://127.0.0.1:3080/api/gantt/focus/set \
   -d '{"sessionId":"demo","taskId":null}'
+# Task trajectory (empty until an assistant tool writes):
+curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/trajectory?taskId=<task-id>&limit=5"
 ```
 
 Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
 `DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
 returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
-schemaVersion:4, kinds:[…], linkTypes:[…], endpoints:[…18 routes…]}`; `seed`
+schemaVersion:5, kinds:[…], linkTypes:[…], endpoints:[…19 routes…]}`; `seed`
 on an empty database inserts 13 demo tasks and returns
 `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry
@@ -468,9 +481,11 @@ block id instead of a duplicate; `context` returns markdown with `chars`,
 with `cached` and the report's `slots`/`items`/`tracks`, and
 `brief/compute` returns the same shape with `source: 'manual'`; the focus GET
 returns `{ok:true,taskId:null}` before the set, the set returns the canonical
-task id, a second GET returns it, and clearing returns `taskId:null`. The
-assistant tools are not HTTP routes: they are verified through a native
-conversation in the manual checklist below, and by `tests/host/tools.spec.js`.
+task id, a second GET returns it, and clearing returns `taskId:null`;
+`trajectory` returns `{ok:true,events:[]}` until an assistant tool records an
+event, and `{ok:true,events:[…]}` newest-first afterwards. The assistant tools
+are not HTTP routes: they are verified through a native conversation in the
+manual checklist below, and by `tests/host/tools.spec.js`.
 An invalid JSON body returns HTTP 400 with
 `{"ok":false,"error":"request body must be valid JSON"}`.
 
@@ -559,11 +574,23 @@ Open the page in the connected Web GUI and check:
       labels; clicking a row focuses it (chip + highlight), **clear** removes
       the focus, **refresh** reloads, an empty tree shows its hint, and the tab
       pauses refresh while it is not visible.
+- [ ] With a focus set, the tab header shows up to five task-trajectory entries
+      (action, turn, time, detail; full session id in the row tooltip), newest
+      first.
 - [ ] In a native conversation with that focus set, ask the model to decompose
-      the task: it calls `gantt_context` (the focused chain), then
-      `gantt_decompose`, and the new children appear in the tree without any
-      propose/apply card. `gantt_update_task` changes a task's status/progress/
-      title/`doneWhen` the same way.
+      the task: it calls `gantt_context` (the focused chain and its
+      `## 任务轨迹（会话与轮次）` section), then `gantt_decompose`, and the new
+      children appear in the tree without any propose/apply card.
+      `gantt_update_task` changes a task's
+      status/progress/title/`doneWhen` the same way.
+- [ ] After those tool calls, `GET /api/gantt/trajectory?taskId=…` shows the
+      `decompose`/`create`/`update`/`complete` events with the conversation's
+      full session id and turn; a new conversation focused on the same task
+      receives the ancestor chain, focus detail, and recent trajectory via the
+      `gantt:focus` runtime context.
+- [ ] With `systemPrompt` absent, the plugin still starts and the tools/API keep
+      working; with it present, repeated turns on an unchanged focus do not
+      append a new runtime-context snapshot.
 - [ ] Without `dsh-better-sidebar`, the full `/gantt` page still works and has
       no AI button or in-page chat panel; without a host tools service, the
       conversation simply has no assistant tools.
@@ -647,6 +674,17 @@ conversation's focus: set a task in the right-rail tab (or via
 (`400` validation, `404` unknown task) and are returned to the model; the plugin
 never calls an LLM itself, so a model that is unavailable or lacks tool access is
 a harness-side concern, not a plugin failure.
+
+### The model does not see the gantt protocol or focus context
+
+The static protocol section (`gantt:protocol`) and the dynamic focus
+context (`gantt:focus`) are contributed only when the host exposes the optional
+`systemPrompt` service; the plugin declares that dependency lazily with
+`ctx.inject(['systemPrompt'], …)` and skips registration when it is absent.
+Without it, tools and routes still work but the conversation has to discover the
+protocol and focus through `gantt_context` instead of prompt context. With the
+service present, check that the focus is set for the same conversation id and
+that the runtime snapshot updates only when the rendered text changes.
 
 ### Concurrent coverage runs collide on `./coverage`
 

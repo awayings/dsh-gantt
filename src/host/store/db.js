@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 /** Columns added by schema v3/v4; the migration appends whichever is missing. @type {Record<string, string>} */
 const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'" }
@@ -47,6 +47,17 @@ const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS day_plans (plan_date TEXT PRIMARY KEY, weekday TEXT NOT NULL DEFAULT '', day_kind TEXT NOT NULL DEFAULT '', market_open INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', core_goal TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS daily_briefs (plan_date TEXT PRIMARY KEY, generated_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'auto', report TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS focus (session_id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, updated_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS task_events (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL DEFAULT '',
+    turn INTEGER,
+    action TEXT NOT NULL CHECK (action IN ('create', 'update', 'complete', 'decompose')),
+    detail TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id, created_at);
 `
 
 /**

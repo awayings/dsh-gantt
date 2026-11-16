@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { STATUS_COLOR } from '../constants.js'
+import { localeTag } from '../dates.js'
 import { h } from '../dom.js'
 import { requestJson, useGanttData, useLocale } from '../hooks.js'
 import { CSS_PANEL } from '../styles/panel.js'
@@ -7,6 +8,17 @@ import { flattenTree, rowNumber } from '../view.js'
 
 function failureMessage(failure) {
   return failure instanceof Error ? failure.message : String(failure)
+}
+
+function shortTime(iso, locale) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(localeTag(locale), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date)
 }
 
 /**
@@ -17,11 +29,13 @@ function failureMessage(failure) {
  * Auto-refresh pauses while the tab is not visible.
  */
 export function GanttPanel({ ctx, scope, visible = true }) {
-  const { t } = useLocale(ctx)
+  const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData({ enabled: visible })
   const [focusId, setFocusId] = useState(null)
   const [focusError, setFocusError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [trajectory, setTrajectory] = useState({ taskId: null, events: [], error: null })
+  const [trajectoryRevision, setTrajectoryRevision] = useState(0)
   const sessionId = scope?.sessionId ?? ''
 
   useEffect(() => {
@@ -39,12 +53,38 @@ export function GanttPanel({ ctx, scope, visible = true }) {
     }
   }, [sessionId, visible])
 
+  const refreshAll = useCallback(() => {
+    refresh()
+    setTrajectoryRevision(value => value + 1)
+  }, [refresh])
+
   useEffect(() => {
     if (!visible) return undefined
-    const onFocus = () => refresh()
+    const onFocus = () => refreshAll()
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [visible, refresh])
+  }, [visible, refreshAll])
+
+  useEffect(() => {
+    if (!visible || focusId === null) return undefined
+    let active = true
+    requestJson(`api/gantt/trajectory?taskId=${encodeURIComponent(focusId)}&limit=5`)
+      .then((body) => {
+        if (active) {
+          setTrajectory({
+            taskId: focusId,
+            events: Array.isArray(body.events) ? body.events : [],
+            error: null,
+          })
+        }
+      })
+      .catch((failure) => {
+        if (active) setTrajectory({ taskId: focusId, events: [], error: failureMessage(failure) })
+      })
+    return () => {
+      active = false
+    }
+  }, [focusId, visible, trajectoryRevision])
 
   const rows = useMemo(() => {
     const tasks = data?.tasks ?? []
@@ -107,9 +147,43 @@ export function GanttPanel({ ctx, scope, visible = true }) {
       title: t('panel.refresh'),
       'aria-label': t('panel.refresh'),
       disabled: status === 'refreshing',
-      onClick: refresh,
+      onClick: refreshAll,
     }, status === 'refreshing' ? '…' : '⟳'),
   )
+
+  const trajectoryVisible = focusId !== null
+    && trajectory.taskId === focusId
+    && (trajectory.events.length > 0 || trajectory.error !== null)
+  const trajectorySection = trajectoryVisible
+    ? h('section', {
+      className: 'gantt-panel-trajectory',
+      'data-block': 'trajectory',
+      'aria-label': t('panel.trajectory'),
+    },
+    h('div', { className: 'gantt-panel-trajectory-head' },
+      h('span', { className: 'gantt-panel-trajectory-title' }, t('panel.trajectory')),
+    ),
+    trajectory.error
+      ? h('p', { className: 'gantt-panel-trajectory-error', role: 'status' },
+        `${t('panel.trajectoryError')} ${trajectory.error}`)
+      : null,
+    trajectory.events.slice(0, 5).map((event, index) => h('div', {
+      key: index,
+      className: 'gantt-panel-trajectory-row',
+      'data-action': event.action,
+      title: event.sessionId,
+    },
+    h('span', { className: 'gantt-panel-trajectory-action' }, t(`panel.action.${event.action}`)),
+    typeof event.turn === 'number'
+      ? h('span', { className: 'gantt-panel-trajectory-turn' }, t('panel.turn').replace('{n}', String(event.turn)))
+      : null,
+    h('span', { className: 'gantt-panel-trajectory-time' }, shortTime(event.at, locale)),
+    event.detail
+      ? h('span', { className: 'gantt-panel-trajectory-detail', title: event.detail }, event.detail)
+      : null,
+    )),
+    )
+    : null
 
   if (status === 'loading' && data === null) {
     return shell(h(React.Fragment, null, header,
@@ -136,6 +210,7 @@ export function GanttPanel({ ctx, scope, visible = true }) {
 
   return shell(h(React.Fragment, null,
     header,
+    trajectorySection,
     h('div', { className: 'gantt-panel-body' },
       focusError
         ? h('div', { className: 'gantt-panel-error', role: 'status' }, `${t('panel.focusError')} ${focusError}`)
