@@ -473,6 +473,10 @@ Open the page in the connected Web GUI and check:
 
 - [ ] The sidebar icon appears with the localized label and opens the page in
       the center column, like the built-in pages.
+- [ ] The title row keeps a compact header: no intro paragraph by default, just
+      a small info button next to the title. Clicking it floats the intro text
+      below the button; clicking outside the popover or pressing Escape closes
+      it, in both locales and at narrow widths.
 - [ ] The tree renders numbers (`1`, `1.1`, `1.1.1`), bars, today line, and
       weekend/month groups in both **Week** and **Month** scales.
 - [ ] Imported track rows show the lane chip and the raw tracker state chip;
@@ -526,8 +530,10 @@ Open the page in the connected Web GUI and check:
       row per window (time, role, track, task, or 未填), generated-at and
       source, and **重新计算** recomputes and refreshes; an empty report shows
       the muted hint plus the button.
-- [ ] The **AI 拆解** header button opens the right sidebar; a row's ✦ action
-      focuses that task and opens it. With a model, sending a decomposition
+- [ ] The **AI 拆解** header button opens the right sidebar below the
+      full-width 周视图/月视图 stats row, so that second row is never narrowed
+      or shifted while the panel is open; a row's ✦ action focuses that task
+      and opens it. With a model, sending a decomposition
       request renders the reply and a proposal card, **应用拆解** calls
       decompose and refreshes; without a model the panel shows the no-model
       banner instead of breaking. Enter sends, Shift+Enter inserts a newline,
