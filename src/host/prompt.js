@@ -14,18 +14,24 @@ import { findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from
 /** Static protocol section injected into every system prompt. */
 export const PROTOCOL_SECTION = `## 甘特图任务协议
 
-本部署把会话的工作单元挂在甘特图上：用户在右侧甘特 tab 选中的「聚焦任务」及其全部祖先链路会作为运行时上下文注入本会话；推进任务的过程由插件自动记录为任务轨迹（会话 id + 轮次索引）。会话本身就是不断完成甘特图任务的过程。
+本部署把会话的工作单元挂在甘特图上：用户在右侧甘特 tab 选中的「聚焦任务」及其全部祖先链路会作为运行时上下文注入本会话；推进任务的过程由插件自动记录为任务轨迹（会话 id + 轮次索引）。本会话就是该聚焦任务的内容专用主会话，是这个任务的工作现场，不是旁路聊天；会话本身就是不断完成甘特图任务的过程。
 
 工作方式：
 - 开始工作前先阅读注入的聚焦链路；需要子任务、完成标准或最近轨迹时调用 \`gantt_context\`。
 - 任务写入一律通过工具完成，校验在 store 层；插件不会调用模型，也不会替你自动改任务。
 - 每次写入都会自动带上本会话 id 与当前轮次，不要把这些值写进标题、描述或完成标准。
 
-输出要求（任务收尾时按情况选一种）：
-1. 任务已直接完成：调用 \`gantt_update_task\` 把 status 设为 \`done\`（progress 自动 100），并用 \`summary\` 记录完成证据（产出了什么、在哪里验证）。
-2. 只完成了一部分：先用 \`gantt_update_task\` 把已完成部分更新为 \`in_progress\` 与相应进度，并用 \`summary\` 说明已完成什么；剩余工作必须用 \`gantt_decompose\` 拆成可独立验证的子任务（每个都要有 \`doneWhen\`），不要留下模糊的“剩余工作”。
-3. 纯任务拆解（本轮不动手实施）：不要改状态，只调用 \`gantt_decompose\` 创建子任务。
-4. 任务被阻塞：用 \`gantt_update_task\` 设为 \`blocked\`，并在 \`summary\` 写明阻塞条件。
+收尾硬性要求（memory-evolve 式）：每一轮都必须以下面四个工具调用之一收尾，且只能有一个——先做事，再用一个工具调用落账；只回复文字、不以这四个工具之一收尾是不允许的。
+1. 本轮没有写任务树：调用 \`gantt_track\`，用 \`summary\` 写清本轮做了什么，把这一轮与聚焦任务关联起来。
+2. 任务有推进、完成或阻塞：调用 \`gantt_update_task\`，更新 status/progress，并用 \`summary\` 写完成证据或阻塞条件。
+3. 本轮拆出了新子任务：调用 \`gantt_decompose\`，父任务用当前聚焦任务，每个子任务必须有可验证的 \`doneWhen\`（最多 4 层、单次最多 100 个）。
+4. 本轮开了一个新的同级节点：调用 \`gantt_create_task\`，在聚焦任务之后插入，写清 title 与 \`doneWhen\`。
+
+任务收尾时按情况选一种并落账：
+- 任务已直接完成：\`gantt_update_task\` 把 status 设为 \`done\`（progress 自动 100），\`summary\` 记录产出了什么、在哪里验证。
+- 只完成了一部分：\`gantt_update_task\` 把已完成部分更新为 \`in_progress\` 与相应进度，并用 \`summary\` 说明已完成什么；剩余工作必须用 \`gantt_decompose\` 拆成可独立验证的子任务，不要留下模糊的“剩余工作”。
+- 纯任务拆解（本轮不动手实施）：不要改状态，只调用 \`gantt_decompose\` 创建子任务。
+- 任务被阻塞：\`gantt_update_task\` 设为 \`blocked\`，并在 \`summary\` 写明阻塞条件。
 
 收尾回复用点号编号（如 1.2.1）引用任务，说明状态变化与新增子任务；需要回看历史时使用 \`gantt_context\` 里的任务轨迹（会话 id + 轮次）。`
 

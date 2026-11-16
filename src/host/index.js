@@ -1,7 +1,8 @@
 // The gantt plugin's host entry: one SQLite store, its task-day 08:00 daily
-// recompute, the nineteen authenticated `/api/gantt/*` JSON routes, the
-// assistant tools a DSH conversation uses to read and decompose tasks, and the
-// background context that puts the focused task chain into each conversation.
+// recompute, the twenty-three authenticated `/api/gantt/*` JSON routes, the
+// assistant tools a DSH conversation uses to read, track, and decompose tasks,
+// and the background context that puts the focused task chain into each
+// conversation.
 
 import { GanttStore, resolveDatabasePath } from './store.js'
 import { installPrompt } from './prompt.js'
