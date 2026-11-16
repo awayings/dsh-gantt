@@ -5,19 +5,22 @@ import { SidebarIcon, TodayGlyph } from './icons.js'
 import { GanttPage } from './pages/gantt.js'
 import { GanttPanel } from './pages/panel.js'
 import { TodayPage } from './pages/today.js'
+import { GanttWorkbench } from './pages/workbench.js'
 
 // The browser half of the plugin: registers the two sidebar entries, the two
 // keyed main pages, and (when dsh-better-sidebar is installed) the compact tree
-// as a native conversation-sidebar tab. The host context is passed into every
-// component at registration, so no plugin-scoped state lives in module scope.
+// and the workbench as native conversation-sidebar tabs. The host context is
+// passed into every component at registration, so no plugin-scoped state lives
+// in module scope.
 /** Plugin descriptor consumed by the DSH client module loader. */
 export const plugin = {
   inject: ['slots', 'locale'],
   apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTS), 'gantt: locale dictionaries')
     const t = ctx.locale.bind(NS)
-    // Contribute the compact tree as a tab of the native conversation sidebar.
-    // A host without dsh-better-sidebar simply never resolves this injection.
+    // Contribute the compact tree and the workbench as tabs of the native
+    // conversation sidebar. A host without dsh-better-sidebar simply never
+    // resolves this injection.
     if (typeof ctx.inject === 'function') {
       ctx.inject(['betterSidebar'], (injected) => {
         ctx.effect(() => injected.betterSidebar.registerTab({
@@ -28,6 +31,14 @@ export const plugin = {
           single: true,
           component: props => h(GanttPanel, { ctx: props.ctx, scope: props.scope, visible: props.visible }),
         }), 'gantt: better-sidebar tab')
+        ctx.effect(() => injected.betterSidebar.registerTab({
+          id: 'gantt-work',
+          title: () => t('panel.workbench'),
+          description: () => t('workbench.description'),
+          order: 23,
+          single: true,
+          component: props => h(GanttWorkbench, { ctx: props.ctx, scope: props.scope, visible: props.visible }),
+        }), 'gantt: workbench tab')
       })
     }
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({

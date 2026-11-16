@@ -89,7 +89,7 @@ afterEach(unmountAll)
 
 function panelApp(options = {}) {
   const app = setupApp({ services: { betterSidebar: fakeSidebarService() }, ...options })
-  return { app, tab: app.sidebarTabs()[0] }
+  return { app, tab: app.sidebarTabs().find(tab => tab.id === 'gantt') }
 }
 
 function panelElement(tab, app, visible = true) {
@@ -131,10 +131,11 @@ function trajectoryCalls(calls) {
 }
 
 describe('better-sidebar registration', () => {
-  it('registers the Gantt tab with the sidebar service', () => {
+  it('registers the Gantt tab and the workbench tab with the sidebar service', () => {
     const { app, tab } = panelApp()
 
-    expect(app.sidebarTabs()).toHaveLength(1)
+    expect(app.sidebarTabs()).toHaveLength(2)
+    expect(app.sidebarTabs().map(entry => entry.id)).toEqual(['gantt', 'gantt-work'])
     expect(tab).toMatchObject({ id: 'gantt', order: 22, single: true })
     expect(tab.title()).toBe('Task Gantt')
     expect(tab.description()).toBe(
@@ -142,15 +143,42 @@ describe('better-sidebar registration', () => {
     )
     expect(typeof tab.component).toBe('function')
 
+    const workbench = app.sidebarTabs().find(entry => entry.id === 'gantt-work')
+    expect(workbench).toMatchObject({ id: 'gantt-work', order: 23, single: true })
+    expect(workbench.title()).toBe('Workbench')
+    expect(workbench.description()).toBe(
+      'The focused task: its work conversation, trajectory, skills, and agent team.',
+    )
+    expect(typeof workbench.component).toBe('function')
+
     app.dispose()
     expect(app.sidebarTabs()).toHaveLength(0)
   })
 
+  it('mounts the registered workbench tab body', async () => {
+    const { app } = panelApp()
+    const workbench = app.sidebarTabs().find(entry => entry.id === 'gantt-work')
+
+    const view = mount(createElement(workbench.component, {
+      ctx: app.ctx,
+      scope: { sessionId: 's1' },
+      visible: false,
+    }))
+    await flush()
+
+    expect(q(view.container, '.gantt-workbench')).not.toBeNull()
+    expect(text(view.container, '.gantt-workbench-none')).toBe('No focused task')
+    expect(qa(view.container, '.gantt-workbench-tab')).toHaveLength(4)
+  })
+
   it('localizes the tab title and description', () => {
-    const { tab } = panelApp({ locale: 'zh' })
+    const { app, tab } = panelApp({ locale: 'zh' })
 
     expect(tab.title()).toBe('任务甘特图')
     expect(tab.description()).toBe('为当前对话聚焦任务；紧凑任务树随时显示状态。')
+    const workbench = app.sidebarTabs().find(entry => entry.id === 'gantt-work')
+    expect(workbench.title()).toBe('工作台')
+    expect(workbench.description()).toBe('聚焦任务：它的专属工作对话、轨迹、技能与编队。')
   })
 
   it('does nothing when the sidebar service is absent or injection is unavailable', () => {
