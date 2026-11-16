@@ -464,7 +464,13 @@ in-page **Workbench** panel beside the tree (the same body is registered as a
 right-rail tab), showing the task's dedicated main conversation and its
 trajectory side by side. A task without a conversation shows an **Execute**
 button that creates the dedicated conversation and opens it in a new browser
-window; an existing conversation can be opened in place or in a new window. The
+window; an existing conversation can be opened in place or in a new window.
+**Execute** and **Decompose** first queue the localized prompt ("Complete this
+task." / "Decompose this task into subtasks."; 完成任务 / 拆解任务 in Chinese)
+into the conversation through the client's scope-addressed conversation service,
+so the Host starts a turn before the window even opens (and still starts one
+when the popup is blocked). The prompt is an ordinary user message; the model
+reads the focused task from the injected `gantt:focus` runtime context. The
 new window restores that exact conversation: the opener seeds the workspace
 selection key and a short-lived `window.name`/localStorage handoff, so the window
 does not come up on the previously selected conversation. The **Active** view filter keeps only tasks whose dedicated

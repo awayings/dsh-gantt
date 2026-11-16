@@ -21,9 +21,11 @@ sidebar:
   `GET /api/gantt/trajectory` can read back. **Work mode** turns a row click
   into a workbench interaction without leaving the page: the **工作台** panel
   opens beside the tree with the task's work conversation and trajectory. A task
-  without a conversation shows **执行**, which creates it in the work workspace
+  without a conversation shows **执行**, which creates it in the work workspace,
+  queues the localized **完成任务** prompt into it so the model starts at once,
   and opens that same conversation in a new browser window (one conversation per
-  task, reused afterwards); waiting tasks carry a warning badge. The workbench
+  task, reused afterwards); **拆解** does the same with **拆解任务**. Waiting
+  tasks carry a warning badge. The workbench
   is also registered as a tab in the native right rail. Each round is required to close with
   `gantt_track` / `gantt_update_task` / `gantt_decompose` /
   `gantt_create_task` so the trajectory stays exact.

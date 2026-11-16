@@ -1,263 +1,44 @@
 // Workbench tab body: the task view (bound conversation plus trajectory), the
-// execute entry point for an unbound task (new browser window), the skills and
-// agent-team panels, and the refetch rules (visible, window focus, refresh,
-// focus revision, after a conversation action).
+// skills and agent-team panels, and the refetch rules (visible, window focus,
+// refresh, focus revision, after a conversation action). The new-window and
+// execute/decompose entries live in workbench-execute.spec.js.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, createElement } from 'react'
+import { act } from 'react'
 import {
   click,
   deferred,
   flush,
   installFetch,
   jsonResponse,
-  mount,
   q,
   qa,
   text,
   unmountAll,
 } from './harness.js'
-import { GanttWorkbench } from '../../src/client/pages/workbench.js'
-import { DICTS } from '../../src/client/i18n/index.js'
 import { noteWorkFocus } from '../../src/client/work-nav.js'
-import { HANDOFF_KEY } from '../../src/client/session-window.js'
-
-const WORK = 'api/gantt/work'
-const WORK_SESSION = 'api/gantt/work/session'
-const SKILLS = 'api/gantt/work/skills'
-const TEAM = 'api/gantt/work/team'
-const TRAJECTORY = 'api/gantt/trajectory'
-const FOCUS_SET = 'api/gantt/focus/set'
-
-const TASK = {
-  id: 'task-1',
-  number: '1.8.1',
-  ref: '1.8.1',
-  title: 'Ship work mode',
-  status: 'in_progress',
-  progress: 40,
-  doneWhen: 'green gates',
-}
-
-const WORK_BY_SESSION = {
-  ok: true,
-  cwd: '/data/home/ws-plugin',
-  task: TASK,
-  sessionId: 'session-work',
-}
-
-const WORK_WITHOUT_SESSION = { ...WORK_BY_SESSION, sessionId: null }
-
-const WORK_FOCUS_NONE = {
-  ok: true,
-  cwd: '/data/home/ws-plugin',
-  task: null,
-  sessionId: null,
-}
-
-const TRAJECTORY_EVENTS = [
-  {
-    id: 'e3',
-    taskId: 'task-1',
-    action: 'track',
-    sessionId: 'session-work',
-    sessionTitle: 'Bench work',
-    turn: 4,
-    detail: 'wired the panels',
-    at: '2026-11-16T06:30:00.000Z',
-  },
-  {
-    id: 'e2',
-    taskId: 'task-1',
-    action: 'complete',
-    sessionId: 'session-work',
-    turn: null,
-    detail: '',
-    at: 'not-a-date',
-  },
-  {
-    id: 'e1',
-    taskId: 'task-1',
-    action: 'create',
-    sessionId: 'session-work',
-    turn: 0,
-    detail: '',
-    at: null,
-  },
-  {
-    id: 'e0',
-    taskId: 'task-1',
-    action: 'update',
-    sessionId: '',
-    turn: 'ignored',
-    detail: '',
-    at: '',
-  },
-]
-
-const SKILLS_AVAILABLE = [
-  { name: 'codex-cli-calling', description: 'Run Codex from a terminal.', source: 'workspace' },
-  { name: 'quiet-skill', description: '', source: '' },
-]
-
-const AGENTS = [
-  { id: 'agent-1', label: 'reviewer', mode: 'continuable', createdAt: '2026-11-16T06:00:00.000Z' },
-  { id: 'agent-2', label: '', mode: 'one-shot', createdAt: '2026-11-16T05:00:00.000Z' },
-  { id: 'agent-3', label: 'outsider', mode: 'external', createdAt: '2026-11-16T04:00:00.000Z' },
-]
-
-const SESSION_LIST = {
-  ids: ['session-work'],
-  phase: 'ready',
-  byId: {
-    'session-work': {
-      id: 'session-work',
-      displayTitle: 'Ship work mode',
-      running: true,
-      updatedAt: Date.UTC(2026, 10, 16, 6, 30),
-    },
-  },
-}
-
-function dictionary(locale) {
-  return String(locale).toLowerCase().startsWith('zh') ? DICTS.zh : DICTS.en
-}
-
-function fakeUiSession(entries = {}) {
-  let snapshot = new Map(Object.entries(entries))
-  const listeners = new Set()
-  return {
-    sessionStatus: {
-      getSnapshot: () => snapshot,
-      subscribe(listener) {
-        listeners.add(listener)
-        return () => listeners.delete(listener)
-      },
-    },
-    refresh(next) {
-      snapshot = new Map(Object.entries(next))
-      for (const listener of [...listeners]) listener()
-    },
-  }
-}
-
-function buildCtx(options = {}) {
-  const services = { ...(options.services ?? {}) }
-  const locale = options.locale ?? 'en'
-  const snapshot = { revision: 1, locale }
-  const ctx = {
-    locale: {
-      register: () => () => {},
-      bind: () => key => dictionary(locale)[key] ?? key,
-      getSnapshot: () => snapshot,
-      subscribe: () => () => {},
-    },
-    get: name => services[name],
-  }
-  if (options.withoutGet) delete ctx.get
-  if (options.sessions !== undefined) ctx.sessions = options.sessions
-  if (options.uiWorkspace !== undefined) ctx.uiWorkspace = options.uiWorkspace
-  return ctx
-}
-
-function fakeServices(options = {}) {
-  const opened = []
-  const created = []
-  const opens = []
-  const sessions = {
-    created,
-    create: async (request) => {
-      created.push(request)
-      return 'session-created'
-    },
-    list: { getSnapshot: () => options.sessionsList ?? SESSION_LIST },
-  }
-  const services = {
-    sessions,
-    uiWorkspace: { opened, openSession: sessionId => opened.push(sessionId) },
-    workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: '/data/home/ws-plugin' }] }) } },
-    betterSidebar: { opens, openTab: (seed, scope) => opens.push({ seed, scope }) },
-    opened,
-    created,
-    opens,
-  }
-  if (options.uiSession !== undefined) services.uiSession = options.uiSession
-  return services
-}
-
-function defaultRoutes(overrides = {}) {
-  return {
-    [WORK]: () => jsonResponse(overrides.work ?? WORK_BY_SESSION),
-    [TRAJECTORY]: () => jsonResponse({ ok: true, events: TRAJECTORY_EVENTS }),
-    [SKILLS]: () => jsonResponse({ ok: true, available: true, skills: SKILLS_AVAILABLE }),
-    [TEAM]: () => jsonResponse({ ok: true, available: true, agents: AGENTS }),
-    [FOCUS_SET]: () => jsonResponse({ ok: true, taskId: 'task-1' }),
-    [WORK_SESSION]: () => jsonResponse({ ok: true, taskId: 'task-1', sessionId: 'session-created' }),
-    ...overrides.routes,
-  }
-}
-
-function renderWorkbench(options = {}) {
-  const services = options.services ?? fakeServices(options.serviceOptions)
-  const ctx = options.ctx === undefined
-    ? buildCtx({ services, locale: options.locale, ...(options.ctxOptions ?? {}) })
-    : options.ctx
-  const scope = options.scope === undefined ? { sessionId: options.sessionId ?? 's1' } : options.scope
-  const props = {
-    ctx,
-    scope,
-    visible: options.visible ?? true,
-    ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
-    ...(options.onClose === undefined ? {} : { onClose: options.onClose }),
-  }
-  const view = mount(createElement(GanttWorkbench, props))
-  return { view, ctx, services, props }
-}
-
-function rerender(view, props, visible) {
-  view.rerender(createElement(GanttWorkbench, { ...props, visible }))
-}
-
-function rowElements(container) {
-  return qa(container, '.gantt-workbench-row')
-}
-
-function tab(container, name) {
-  return q(container, `[data-work-tab="${name}"]`)
-}
-
-function fakeWindow() {
-  return {
-    closed: false,
-    close() {
-      this.closed = true
-    },
-    location: {
-      replaced: '',
-      replace(target) {
-        this.replaced = target
-      },
-    },
-  }
-}
-
-function stubOpen(result) {
-  const calls = []
-  vi.stubGlobal('open', (...args) => {
-    calls.push(args)
-    return result
-  })
-  return calls
-}
-
-function handoff() {
-  const raw = localStorage.getItem(HANDOFF_KEY)
-  return raw === null ? null : JSON.parse(raw)
-}
-
-afterEach(() => {
-  unmountAll()
-  localStorage.clear()
-})
+import {
+  SKILLS,
+  SKILLS_AVAILABLE,
+  TASK,
+  TEAM,
+  TRAJECTORY,
+  WORK,
+  WORK_BY_SESSION,
+  WORK_FOCUS_NONE,
+  WORK_SESSION,
+  WORK_WITHOUT_SESSION,
+  buildCtx,
+  defaultRoutes,
+  fakeServices,
+  fakeUiSession,
+  fakeWindow,
+  handoff,
+  renderWorkbench,
+  rerender,
+  rowElements,
+  stubOpen,
+  tab,
+} from './workbench-fixtures.js'
 
 describe('task view', () => {
   it('renders the focused task, the conversation, and the trajectory in one view', async () => {
@@ -290,7 +71,8 @@ describe('task view', () => {
     expect(text(view.container, '.gantt-workbench-chat-updated')).toMatch(/^Last active \d{2}:\d{2}$/)
     expect(q(view.container, '[data-action="open-conversation"]')).not.toBeNull()
     expect(q(view.container, '[data-action="open-window"]')).not.toBeNull()
-    expect(q(view.container, '[data-action="execute"]')).toBeNull()
+    expect(q(view.container, '[data-action="execute"]')).not.toBeNull()
+    expect(q(view.container, '[data-action="decompose"]')).not.toBeNull()
 
     const rows = rowElements(view.container)
     expect(rows).toHaveLength(4)
@@ -407,111 +189,6 @@ describe('conversation state', () => {
   })
 })
 
-describe('execute entry', () => {
-  it('creates the conversation and opens it in a new browser window', async () => {
-    const win = fakeWindow()
-    const opens = stubOpen(win)
-    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
-    const services = fakeServices()
-    const { view } = renderWorkbench({ services })
-    await flush()
-
-    expect(text(view.container, '[data-action="execute"]')).toBe('Execute')
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-
-    expect(opens).toHaveLength(1)
-    expect(services.created).toEqual([{ workspaceId: 'ws-1' }])
-    expect(services.opened).toEqual([])
-    expect(handoff()).toMatchObject({ sessionId: 'session-created' })
-    expect(win.location.replaced).toBe(globalThis.location.href)
-    expect(win.opener).toBeNull()
-  })
-
-  it('falls back to the current window when the browser blocks the popup', async () => {
-    stubOpen(null)
-    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
-    const services = fakeServices()
-    const { view } = renderWorkbench({ services })
-    await flush()
-
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-
-    expect(services.created).toEqual([{ workspaceId: 'ws-1' }])
-    expect(services.opened).toEqual(['session-created'])
-  })
-
-  it('shows the busy state while the conversation is being created', async () => {
-    const pending = deferred()
-    stubOpen(fakeWindow())
-    installFetch({
-      ...defaultRoutes({ work: WORK_WITHOUT_SESSION }),
-      [WORK_SESSION]: () => pending.promise,
-    })
-    const { view } = renderWorkbench()
-    await flush()
-
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-    expect(text(view.container, '[data-action="execute"]')).toBe('Creating…')
-    expect(q(view.container, '[data-action="execute"]').disabled).toBe(true)
-
-    pending.resolve(jsonResponse({ ok: true, taskId: 'task-1', sessionId: 'session-created' }))
-    await flush()
-    expect(text(view.container, '[data-action="execute"]')).toBe('Execute')
-  })
-
-  it('reports a failed execute and closes the blank window', async () => {
-    const win = fakeWindow()
-    stubOpen(win)
-    installFetch(defaultRoutes({
-      work: WORK_WITHOUT_SESSION,
-      routes: { [WORK_SESSION]: () => jsonResponse({ ok: false, error: 'bind failed' }, 500) },
-    }))
-    const { view } = renderWorkbench()
-    await flush()
-
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-
-    expect(text(view.container, '.gantt-workbench-error')).toBe('Could not open the work conversation. bind failed')
-    expect(win.closed).toBe(true)
-    expect(handoff()).toBeNull()
-  })
-
-  it('falls back in place when the handoff cannot be stored', async () => {
-    const win = fakeWindow()
-    stubOpen(win)
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('denied')
-    })
-    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
-    const services = fakeServices()
-    const { view } = renderWorkbench({ services })
-    await flush()
-
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-
-    expect(win.closed).toBe(true)
-    expect(services.opened).toEqual(['session-created'])
-  })
-
-  it('reports the missing navigation service when no window can be opened', async () => {
-    stubOpen(null)
-    installFetch(defaultRoutes({ work: WORK_WITHOUT_SESSION }))
-    const services = fakeServices()
-    delete services.uiWorkspace
-    const { view } = renderWorkbench({ services })
-    await flush()
-
-    click(q(view.container, '[data-action="execute"]'))
-    await flush()
-
-    expect(text(view.container, '.gantt-workbench-error')).toBe('Could not open the work conversation. This host cannot open the conversation in a new window.')
-  })
-})
 
 describe('open in a new window', () => {
   it('hands the bound conversation to a new window', async () => {
@@ -949,4 +626,10 @@ describe('robustness', () => {
     expect(text(view.container, '.gantt-workbench-message')).toBe('Could not load the workbench.')
     expect(text(view.container, '.gantt-workbench-error')).toBe('offline')
   })
+})
+
+
+afterEach(() => {
+  unmountAll()
+  localStorage.clear()
 })

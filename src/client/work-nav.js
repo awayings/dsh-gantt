@@ -131,6 +131,39 @@ export function loadWork(target = {}) {
 }
 
 /**
+ * Queue one prompt into a task's work conversation without displaying it. The
+ * conversation service is scope-addressed, so the target must be retained for
+ * the duration of the send; the running turn then belongs to the Host and
+ * survives the released reference. Failures reject so the caller can report
+ * that the task did not start.
+ * @param {any} ctx
+ * @param {string} sessionId
+ * @param {string} text
+ * @returns {Promise<void>}
+ */
+export async function sendWorkPrompt(ctx, sessionId, text) {
+  const sessions = workServices(ctx).sessions
+  if (sessions === null || typeof sessionId !== 'string' || sessionId === '') {
+    throw new Error('work mode needs the session service')
+  }
+  if (typeof sessions.retain !== 'function' || typeof sessions.scope !== 'function') {
+    throw new Error('this host cannot start a prompt in the work conversation')
+  }
+  const reference = sessions.retain(sessionId, { source: 'ganttWork' })
+  try {
+    await reference.ready
+    const scope = sessions.scope(sessionId)
+    const conversation = typeof scope?.get === 'function' ? scope.get('conversation') : undefined
+    if (typeof conversation?.send !== 'function') {
+      throw new Error('this host cannot start a prompt in the work conversation')
+    }
+    await conversation.send(text)
+  } finally {
+    reference.release()
+  }
+}
+
+/**
  * Open the workbench tab in one session's right sidebar when the host has one.
  * @param {any} betterSidebar
  * @param {string} sessionId

@@ -9,6 +9,7 @@ import {
   noteWorkFocus,
   openWorkTask,
   openWorkbenchTab,
+  sendWorkPrompt,
   subscribeWorkFocus,
   workFocusRevisionSnapshot,
   workServices,
@@ -82,6 +83,72 @@ describe('workServices', () => {
     expect(canExecuteWorkTask(undefined)).toBe(false)
     expect(canExecuteWorkTask(fakeCtx({ uiWorkspace: { openSession: () => {} } }))).toBe(false)
     expect(canExecuteWorkTask(fakeCtx({ sessions: { create: async () => 's1' } }))).toBe(true)
+  })
+})
+
+describe('sendWorkPrompt', () => {
+  function fakePromptSessions(options = {}) {
+    const retained = []
+    const released = []
+    const prompts = []
+    const sessions = {
+      create: async () => 'session-new',
+      retain(sessionId, request) {
+        retained.push({ sessionId, ...request })
+        return {
+          ready: options.ready ?? Promise.resolve(),
+          release: () => released.push(sessionId),
+        }
+      },
+      scope: sessionId => (options.scope === undefined
+        ? {
+          get: name => (name === 'conversation'
+            ? {
+              send: async (text) => {
+                if (options.sendError !== undefined) throw options.sendError
+                prompts.push({ sessionId, text })
+              },
+            }
+            : undefined),
+        }
+        : options.scope(sessionId)),
+    }
+    return { sessions, retained, released, prompts }
+  }
+
+  it('retains the conversation, queues the prompt in its scope, and releases it', async () => {
+    const fake = fakePromptSessions()
+    await sendWorkPrompt(fakeCtx({ sessions: fake.sessions }), 'session-work', 'Complete this task.')
+    expect(fake.retained).toEqual([{ sessionId: 'session-work', source: 'ganttWork' }])
+    expect(fake.prompts).toEqual([{ sessionId: 'session-work', text: 'Complete this task.' }])
+    expect(fake.released).toEqual(['session-work'])
+  })
+
+  it('releases the reference when the host rejects the prompt', async () => {
+    const fake = fakePromptSessions({ sendError: new Error('prompt rejected') })
+    await expect(sendWorkPrompt(fakeCtx({ sessions: fake.sessions }), 'session-work', 'Complete this task.'))
+      .rejects.toThrow('prompt rejected')
+    expect(fake.released).toEqual(['session-work'])
+  })
+
+  it('reports hosts without the scope-addressed conversation service', async () => {
+    await expect(sendWorkPrompt(fakeCtx({ sessions: { create: async () => 'session-new' } }), 'session-work', 'x'))
+      .rejects.toThrow('this host cannot start a prompt in the work conversation')
+    const missingConversation = fakePromptSessions({ scope: () => ({ get: () => undefined }) })
+    await expect(sendWorkPrompt(fakeCtx({ sessions: missingConversation.sessions }), 'session-work', 'x'))
+      .rejects.toThrow('this host cannot start a prompt in the work conversation')
+    expect(missingConversation.released).toEqual(['session-work'])
+    const missingScope = fakePromptSessions({ scope: () => undefined })
+    await expect(sendWorkPrompt(fakeCtx({ sessions: missingScope.sessions }), 'session-work', 'x'))
+      .rejects.toThrow('this host cannot start a prompt in the work conversation')
+    expect(missingScope.released).toEqual(['session-work'])
+  })
+
+  it('rejects a missing session service or target', async () => {
+    await expect(sendWorkPrompt(fakeCtx({}), 'session-work', 'x')).rejects.toThrow('work mode needs the session service')
+    const fake = fakePromptSessions()
+    await expect(sendWorkPrompt(fakeCtx({ sessions: fake.sessions }), '', 'x'))
+      .rejects.toThrow('work mode needs the session service')
   })
 })
 
@@ -272,6 +339,14 @@ describe('openWorkTask', () => {
     const sessions = fakeSessions()
     const ctx = fakeCtx({ sessions, uiWorkspace: fakeWorkspaceService() })
     installFetch({ 'api/gantt/work': () => jsonResponse({ ok: true, cwd: '', sessionId: null }) })
+    await expect(openWorkTask(ctx, task)).rejects.toThrow(/no work directory/)
+    expect(sessions.created).toEqual([])
+  })
+
+  it('treats a non-string work directory as absent', async () => {
+    const sessions = fakeSessions()
+    const ctx = fakeCtx({ sessions, uiWorkspace: fakeWorkspaceService() })
+    installFetch({ 'api/gantt/work': () => jsonResponse({ ok: true, sessionId: null }) })
     await expect(openWorkTask(ctx, task)).rejects.toThrow(/no work directory/)
     expect(sessions.created).toEqual([])
   })

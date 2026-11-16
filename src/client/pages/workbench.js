@@ -1,8 +1,9 @@
 // Workbench tab body: the focused task's dedicated work conversation and its
 // trajectory, plus the host skills and the conversation's subagent team. In
 // work mode a task click focuses the task and reveals this tab instead of
-// navigating away, so the panel also hosts the "execute" entry point that
-// creates the conversation and opens it in a new browser window. Data is read
+// navigating away, so the panel also hosts the execute/decompose entry points
+// that create the conversation, queue the starting prompt, and open it in a new
+// browser window. Data is read
 // through the authenticated JSON API plus the client session snapshots; the
 // component never polls and never throws into render, so a failing endpoint is
 // a panel-level message instead of a crashed sidebar.
@@ -14,7 +15,13 @@ import { requestJson, useLocale } from '../hooks.js'
 import { CSS_WORKBENCH } from '../styles/workbench.js'
 import { conversationState, useSessionStatuses } from '../session-status.js'
 import { openSessionWindow, sendSessionToWindow } from '../session-window.js'
-import { loadWork, openWorkTask, subscribeWorkFocus, workFocusRevisionSnapshot } from '../work-nav.js'
+import {
+  loadWork,
+  openWorkTask,
+  sendWorkPrompt,
+  subscribeWorkFocus,
+  workFocusRevisionSnapshot,
+} from '../work-nav.js'
 
 /** Sub-tab identifiers, in presentation order. */
 const WORK_TABS = ['task', 'skills', 'team']
@@ -130,7 +137,7 @@ function trajectoryList(trajectory, t, locale, openSession) {
 }
 
 /** Full task view: the bound conversation (or its execute entry) and trajectory. */
-function taskPanel({ work, trajectory, action, locale, t, statuses, openSession, onExecute, onOpenWindow }) {
+function taskPanel({ work, trajectory, action, locale, t, statuses, openSession, onExecute, onDecompose, onOpenWindow }) {
   if (work.task === null) {
     return section('task', h('p', { className: 'gantt-workbench-empty' }, t('workbench.focusNone')))
   }
@@ -150,30 +157,44 @@ function taskPanel({ work, trajectory, action, locale, t, statuses, openSession,
       h('span', { className: 'gantt-workbench-chat-updated' },
         t('workbench.task.updated').replace('{time}', shortTime(summary?.updatedAt, locale))),
     )
-  const buttons = work.sessionId === null
-    ? h('button', {
+  const buttons = h(React.Fragment, null,
+    h('button', {
       className: 'gantt-workbench-btn',
       type: 'button',
       'data-action': 'execute',
       disabled: action.busy,
       onClick: onExecute,
-    }, action.busy ? t('workbench.task.executing') : t('workbench.task.execute'))
-    : h(React.Fragment, null,
-      h('button', {
-        className: 'gantt-workbench-btn',
-        type: 'button',
-        'data-action': 'open-conversation',
-        disabled: action.busy,
-        onClick: () => openSession?.(work.sessionId),
-      }, t('workbench.task.open')),
-      h('button', {
-        className: 'gantt-workbench-btn',
-        type: 'button',
-        'data-action': 'open-window',
-        disabled: action.busy,
-        onClick: onOpenWindow,
-      }, t('workbench.task.openWindow')),
-    )
+    }, action.busy && action.kind === 'execute'
+      ? t('workbench.task.executing')
+      : t('workbench.task.execute')),
+    h('button', {
+      className: 'gantt-workbench-btn',
+      type: 'button',
+      'data-action': 'decompose',
+      disabled: action.busy,
+      onClick: onDecompose,
+    }, action.busy && action.kind === 'decompose'
+      ? t('workbench.task.decomposing')
+      : t('workbench.task.decompose')),
+    work.sessionId === null
+      ? null
+      : h(React.Fragment, null,
+        h('button', {
+          className: 'gantt-workbench-btn',
+          type: 'button',
+          'data-action': 'open-conversation',
+          disabled: action.busy,
+          onClick: () => openSession?.(work.sessionId),
+        }, t('workbench.task.open')),
+        h('button', {
+          className: 'gantt-workbench-btn',
+          type: 'button',
+          'data-action': 'open-window',
+          disabled: action.busy,
+          onClick: onOpenWindow,
+        }, t('workbench.task.openWindow')),
+      ),
+  )
   return section('task', h('div', { className: 'gantt-workbench-task' },
     h('section', { className: 'gantt-workbench-conversation', 'data-block': 'conversation' },
       h('div', { className: 'gantt-workbench-chat-head' },
@@ -181,7 +202,8 @@ function taskPanel({ work, trajectory, action, locale, t, statuses, openSession,
       ),
       conversationBlock,
       action.error !== null
-        ? h('p', { className: 'gantt-workbench-error', role: 'status' }, `${t('work.error')} ${action.error}`)
+        ? h('p', { className: 'gantt-workbench-error', role: 'status' },
+          `${t(action.stage === 'prompt' ? 'workbench.task.promptError' : 'work.error')} ${action.error}`)
         : null,
       h('div', { className: 'gantt-workbench-chat-actions' }, buttons),
     ),
@@ -283,7 +305,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
   const [tab, setTab] = useState('task')
   const [revision, setRevision] = useState(0)
   const [state, setState] = useState({ status: 'loading', work: null, panels: null, error: null })
-  const [action, setAction] = useState({ busy: false, error: null })
+  const [action, setAction] = useState({ busy: false, error: null, kind: null, stage: 'conversation' })
   const mounted = useRef(true)
   const refresh = useCallback(() => setRevision(value => value + 1), [])
 
@@ -326,25 +348,42 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
   const openSession = typeof workspace?.openSession === 'function'
     ? target => workspace.openSession(target)
     : null
-  const execute = async () => {
+  /**
+   * Start one task turn: reuse or create the bound conversation, queue the
+   * localized prompt through the session scope, then hand the conversation to
+   * a new window so the running turn is visible. The prompt reaches the Host
+   * before navigation, so a blocked popup still starts the work.
+   * @param {'execute' | 'decompose'} kind
+   * @param {string} promptKey
+   * @returns {Promise<void>}
+   */
+  const runPrompt = async (kind, promptKey) => {
     const work = state.work
+    if (work?.task === null || work?.task === undefined) return
     const win = openSessionWindow()
-    setAction({ busy: true, error: null })
+    setAction({ busy: true, error: null, kind, stage: 'conversation' })
+    let stage = 'conversation'
     try {
-      const { sessionId: created } = await openWorkTask(ctx, work.task, { open: false })
-      if (!sendSessionToWindow(win, created)) {
+      const bound = typeof work.sessionId === 'string' && work.sessionId !== '' ? work.sessionId : null
+      const target = bound ?? (await openWorkTask(ctx, work.task, { open: false })).sessionId
+      stage = 'prompt'
+      await sendWorkPrompt(ctx, target, t(promptKey))
+      stage = 'open'
+      if (!sendSessionToWindow(win, target)) {
         if (win) win.close()
         if (openSession === null) throw new Error(t('workbench.task.noWindow'))
-        openSession(created)
+        openSession(target)
       }
       if (!mounted.current) return
-      setAction({ busy: false, error: null })
+      setAction({ busy: false, error: null, kind: null, stage: 'conversation' })
       refresh()
     } catch (failure) {
       if (win) win.close()
-      if (mounted.current) setAction({ busy: false, error: failureMessage(failure) })
+      if (mounted.current) setAction({ busy: false, error: failureMessage(failure), kind: null, stage })
     }
   }
+  const execute = () => runPrompt('execute', 'workbench.prompt.execute')
+  const decompose = () => runPrompt('decompose', 'workbench.prompt.decompose')
   const openInWindow = () => {
     const work = state.work
     const win = openSessionWindow()
@@ -424,6 +463,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
           statuses,
           openSession,
           onExecute: execute,
+          onDecompose: decompose,
           onOpenWindow: openInWindow,
         })
         : tab === 'skills'

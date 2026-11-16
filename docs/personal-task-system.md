@@ -507,8 +507,11 @@ results straight into the tree.
   a right-rail tab. A task without a conversation offers **Execute**, which
   creates the conversation and opens it in a new browser window (falling back to
   the current window when the browser blocks the popup); the new window selects
-  that conversation directly instead of restoring the previous one. An existing
-  conversation can be opened in place or in a new window.
+  that conversation directly instead of restoring the previous one. **Execute**
+  and **Decompose** queue the localized prompt (完成任务 / 拆解任务; "Complete this
+  task." / "Decompose this task into subtasks.") into the conversation before
+  navigating, so the Host starts a turn immediately and the trajectory records
+  it. An existing conversation can be opened in place or in a new window.
   The **Active** view filter keeps tasks whose bound conversation is running or
   waiting for a user choice, and waiting tasks carry a warning badge. `GET
   api/gantt/work` reports the task, its bound conversation, and the work

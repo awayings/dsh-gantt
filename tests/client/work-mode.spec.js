@@ -69,6 +69,7 @@ const SESSION_LIST = {
 function workServices(options = {}) {
   const created = []
   const opened = []
+  const prompts = []
   const sidebar = options.sidebar ?? fakeSidebarService()
   const services = {
     sessions: {
@@ -77,6 +78,12 @@ function workServices(options = {}) {
         return 'session-created'
       },
       list: { getSnapshot: () => SESSION_LIST },
+      retain: () => ({ ready: Promise.resolve(), release: () => {} }),
+      scope: sessionId => ({
+        get: name => name === 'conversation'
+          ? { send: async (text) => { prompts.push({ sessionId, text }) } }
+          : undefined,
+      }),
     },
     uiWorkspace: { openSession: (sessionId) => { opened.push(sessionId) } },
     workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'ws-1', path: WORK_CWD }] }) } },
@@ -89,7 +96,7 @@ function workServices(options = {}) {
       sessionStatus: { getSnapshot: () => EMPTY_STATUSES, subscribe: () => () => {} },
     }
   }
-  return { services, created, opened, sidebar }
+  return { services, created, opened, prompts, sidebar }
 }
 
 function defaultRoutes(overrides = {}) {
@@ -362,7 +369,7 @@ describe('work-mode activation', () => {
   })
 
   it('shows the execute entry for an unbound task and opens the new conversation in a fresh window', async () => {
-    const { services, created } = workServices()
+    const { services, created, prompts } = workServices()
     const win = {
       name: '',
       closed: false,
@@ -387,6 +394,7 @@ describe('work-mode activation', () => {
     await flush()
 
     expect(created).toEqual([{ workspaceId: 'ws-1' }])
+    expect(prompts).toEqual([{ sessionId: 'session-created', text: 'Complete this task.' }])
     expect(win.location.replaced).toBe(globalThis.location.href)
     expect(JSON.parse(localStorage.getItem('dsh.sessions.current'))).toEqual({ sessionId: 'session-created' })
     expect(win.closed).toBe(false)
