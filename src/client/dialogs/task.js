@@ -1,10 +1,19 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { STATUSES } from '../../shared/vocabulary.js'
+import { agentLabel, loadAgentNames, reportText } from '../agent-labels.js'
 import { addDays, todayIso } from '../dates.js'
 import { requestJson } from '../hooks.js'
 import { rowNumber } from '../view.js'
 import { Dialog, Field } from './primitives.js'
 import { h } from '../dom.js'
+
+/** One read-only row of the dialog's completion write-back block. */
+function writebackRow(field, label, value, multiline = false) {
+  return h('div', { className: 'gantt-writeback-row', 'data-field': field },
+    h('span', { className: 'gantt-writeback-label' }, label),
+    h('span', { className: `gantt-writeback-value${multiline ? ' gantt-writeback-report' : ''}` }, value),
+  )
+}
 
 /** Create or edit task dialog. */
 export function TaskDialog({ mode, task, parentTask, parentOptions, t, onClose, onSaved, onSplit }) {
@@ -21,6 +30,18 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, t, onClose, 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [agentNames, setAgentNames] = useState(/** @type {Map<string, string> | null} */ (null))
+  const writebackTask = mode === 'edit' ? task : null
+  useEffect(() => {
+    if (!writebackTask) return undefined
+    let active = true
+    loadAgentNames().then((names) => {
+      if (active) setAgentNames(names)
+    })
+    return () => {
+      active = false
+    }
+  }, [writebackTask])
   const submit = async () => {
     const cleanTitle = title.trim()
     if (cleanTitle.length === 0) {
@@ -225,5 +246,12 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, t, onClose, 
       }),
     ),
   ),
+  writebackTask
+    ? h('div', { className: 'gantt-writeback', 'data-block': 'writeback' },
+      writebackRow('operator', t('field.operator'), agentLabel(agentNames, writebackTask.operatorId, t)),
+      writebackRow('completedBy', t('field.completedBy'), agentLabel(agentNames, writebackTask.completedById, t)),
+      writebackRow('report', t('field.report'), reportText(writebackTask.report, t), true),
+    )
+    : null,
   )
 }

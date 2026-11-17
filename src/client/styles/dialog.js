@@ -75,6 +75,34 @@ export const CSS_DIALOG = `
     color: var(--dsw-alias-state-error-primary);
     font-size: 12px;
   }
+  .gantt-writeback {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--gantt-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--gantt-bg) 55%, transparent);
+  }
+  .gantt-writeback-row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    min-width: 0;
+  }
+  .gantt-writeback-label { font-size: 11.5px; color: var(--gantt-muted); font-weight: 550; }
+  .gantt-writeback-value {
+    display: block;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--gantt-text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .gantt-writeback-report { max-height: 96px; overflow: auto; }
   .gantt-split-head, .gantt-split-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 132px 132px 32px;
