@@ -13,6 +13,7 @@ export const SKILLS = 'api/gantt/work/skills'
 export const TEAM = 'api/gantt/work/team'
 export const TRAJECTORY = 'api/gantt/trajectory'
 export const FOCUS_SET = 'api/gantt/focus/set'
+export const AGENTS = 'api/gantt/agents'
 
 export const TASK = {
   id: 'task-1',
@@ -22,6 +23,9 @@ export const TASK = {
   status: 'in_progress',
   progress: 40,
   doneWhen: 'green gates',
+  operatorId: 'agent-1',
+  completedById: 'agent-2',
+  report: 'Wired the write-back rows.\nVerified with the workbench specs.',
 }
 
 export const WORK_BY_SESSION = {
@@ -85,11 +89,13 @@ export const SKILLS_AVAILABLE = [
   { name: 'quiet-skill', description: '', source: '' },
 ]
 
-export const AGENTS = [
+export const TEAM_AGENTS = [
   { id: 'agent-1', label: 'reviewer', mode: 'continuable', createdAt: '2026-11-16T06:00:00.000Z' },
   { id: 'agent-2', label: '', mode: 'one-shot', createdAt: '2026-11-16T05:00:00.000Z' },
   { id: 'agent-3', label: 'outsider', mode: 'external', createdAt: '2026-11-16T04:00:00.000Z' },
 ]
+
+export const AGENT_REGISTRY = [{ id: 'agent-1', name: 'reviewer' }]
 
 export const SESSION_LIST = {
   ids: ['session-work'],
@@ -199,7 +205,8 @@ export function defaultRoutes(overrides = {}) {
     [WORK]: () => jsonResponse(overrides.work ?? WORK_BY_SESSION),
     [TRAJECTORY]: () => jsonResponse({ ok: true, events: TRAJECTORY_EVENTS }),
     [SKILLS]: () => jsonResponse({ ok: true, available: true, skills: SKILLS_AVAILABLE }),
-    [TEAM]: () => jsonResponse({ ok: true, available: true, agents: AGENTS }),
+    [TEAM]: () => jsonResponse({ ok: true, available: true, agents: TEAM_AGENTS }),
+    [AGENTS]: () => jsonResponse({ ok: true, agents: AGENT_REGISTRY }),
     [FOCUS_SET]: () => jsonResponse({ ok: true, taskId: 'task-1' }),
     [WORK_SESSION]: () => jsonResponse({ ok: true, taskId: 'task-1', sessionId: 'session-created' }),
     ...overrides.routes,

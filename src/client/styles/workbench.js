@@ -199,6 +199,20 @@ export const CSS_WORKBENCH = `
     border-radius: 7px;
     background: var(--gantt-surface);
   }
+  .gantt-workbench-writeback {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid var(--gantt-line);
+    border-radius: 7px;
+    background: var(--gantt-surface);
+  }
+  .gantt-workbench-writeback-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .gantt-workbench-writeback-label { flex: 0 0 auto; width: 68px; color: var(--gantt-muted); font-size: 10.5px; }
+  .gantt-workbench-writeback-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+  .gantt-workbench-writeback-row[data-field="report"] .gantt-workbench-writeback-value { color: var(--gantt-text); }
   .gantt-workbench-prompt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .gantt-workbench-prompt-label { font-size: 10.5px; color: var(--gantt-muted); }
   .gantt-workbench-prompt-input {
@@ -235,6 +249,10 @@ export const CSS_WORKBENCH = `
   .gantt-workbench-item-mode { flex: 0 0 auto; font-size: 9.5px; line-height: 1; padding: 2px 5px; border-radius: 4px; border: 1px solid var(--gantt-line); color: var(--gantt-muted); }
   .gantt-workbench-item-description { margin: 0; font-size: 11px; color: var(--gantt-muted); overflow-wrap: anywhere; }
   .gantt-workbench-item-actions { display: flex; gap: 6px; margin-top: 2px; }
+  @container (max-width: 400px) {
+    .gantt-workbench-writeback-row { flex-direction: column; align-items: stretch; gap: 1px; }
+    .gantt-workbench-writeback-label { width: auto; }
+  }
   @container (max-width: 320px) {
     .gantt-workbench-head { padding: 7px 8px; }
     .gantt-workbench-tabs { padding: 5px 8px 0; }

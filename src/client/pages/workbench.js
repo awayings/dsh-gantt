@@ -10,6 +10,7 @@
 // a panel-level message instead of a crashed sidebar.
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { sessionDisplay } from '../../shared/session.js'
+import { agentLabel, loadAgentNames, reportPreview, reportText } from '../agent-labels.js'
 import { localeTag } from '../dates.js'
 import { h } from '../dom.js'
 import { requestJson, useLocale } from '../hooks.js'
@@ -144,10 +145,28 @@ function trajectoryList(trajectory, t, locale, openSession) {
   ))
 }
 
+/** One read-only write-back row: a field label and its resolved value. */
+function writebackRow(field, label, value, title = value) {
+  return h('div', { className: 'gantt-workbench-writeback-row', 'data-field': field },
+    h('span', { className: 'gantt-workbench-writeback-label' }, label),
+    h('span', { className: 'gantt-workbench-writeback-value', title }, value),
+  )
+}
+
+/** The operator, the completer, and the completion report of a task. */
+function writebackBlock(task, names, t) {
+  const report = reportText(task.report, t)
+  return h('section', { className: 'gantt-workbench-writeback', 'data-block': 'writeback' },
+    writebackRow('operator', t('field.operator'), agentLabel(names, task.operatorId, t)),
+    writebackRow('completedBy', t('field.completedBy'), agentLabel(names, task.completedById, t)),
+    writebackRow('report', t('field.report'), reportPreview(report, 160), report),
+  )
+}
+
 /** Full task view: the bound conversation (or its execute entry), the editable
- * prompt, and the trajectory. */
+ * prompt, the read-only write-back rows, and the trajectory. */
 function taskPanel({
-  work, trajectory, action, locale, t, statuses, prompt, openSession,
+  work, trajectory, names, action, locale, t, statuses, prompt, openSession,
   onPromptChange, onExecute, onDecompose, onSend, onOpenWindow,
 }) {
   if (work.task === null) {
@@ -239,6 +258,7 @@ function taskPanel({
       ),
       h('div', { className: 'gantt-workbench-chat-actions' }, buttons),
     ),
+    writebackBlock(work.task, names, t),
     h('section', { className: 'gantt-workbench-conversation', 'data-block': 'trajectory' },
       h('div', { className: 'gantt-workbench-chat-head' },
         h('span', { className: 'gantt-workbench-chat-title' }, t('workbench.task.trajectory')),
@@ -353,13 +373,14 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
       try {
         const work = await loadWork(targetTaskId === null ? { sessionId } : { taskId: targetTaskId })
         if (!active) return
-        const [trajectory, skills, team] = await Promise.all([
+        const [trajectory, skills, team, names] = await Promise.all([
           work.task === null ? NO_TRAJECTORY : fetchTrajectory(work.task.id),
           fetchSkills(),
           fetchTeam(work.sessionId ?? sessionId),
+          loadAgentNames(),
         ])
         if (!active) return
-        setState({ status: 'ready', work, panels: { trajectory, skills, team }, error: null })
+        setState({ status: 'ready', work, panels: { trajectory, skills, team, names }, error: null })
       } catch (failure) {
         if (active) setState({ status: 'error', work: null, panels: null, error: failureMessage(failure) })
       }
@@ -499,6 +520,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
         ? taskPanel({
           work: { ...state.work, ctx },
           trajectory: state.panels.trajectory,
+          names: state.panels.names,
           action,
           locale,
           t,
