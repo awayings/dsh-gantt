@@ -22,15 +22,16 @@ never as a substitute for reviewing a remote `bash deploy.sh`.
 ## Usage
 
 ```sh
-node scripts/remote-exec.mjs --target jason@192.168.1.5 -- claude mcp list
-node scripts/remote-exec.mjs -t jason@192.168.1.5 -i ~/.ssh/id_rsa --dry-run -- 'claude --version'
-node scripts/remote-exec.mjs -t jason@192.168.1.5 --allow-recursive-delete -- rm -rf /tmp/build
-node scripts/remote-exec.mjs -t jason@192.168.1.5 --stdin -- 'umask 077; cat > ~/.config/gantt-mcp/token'
+node scripts/remote-exec.mjs --target k3s-node -- claude mcp list
+node scripts/remote-exec.mjs -t k3s-node -i ~/.ssh/id_rsa --dry-run -- 'claude --version'
+node scripts/remote-exec.mjs -t mac -- shasum -a 256 ~/.config/gantt-mcp/token
+node scripts/remote-exec.mjs -t k3s-node --allow-recursive-delete -- rm -rf /tmp/build
+node scripts/remote-exec.mjs -t k3s-node --stdin -- 'umask 077; cat > ~/.config/gantt-mcp/token'
 ```
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `-t, --target <user@host>` | `$REMOTE_TARGET` (required) | SSH destination |
+| `-t, --target <user@host\|alias>` | `$REMOTE_TARGET` (required) | SSH destination; `~/.ssh/config` aliases (`k3s-node`, `mac`) are accepted |
 | `-i, --identity <file>` | `$REMOTE_SSH_IDENTITY`, else `~/.ssh/id_rsa` when it exists | private key |
 | `-p, --port <port>` | `$REMOTE_SSH_PORT`, else `22` | SSH port |
 | `--timeout <seconds>` | `120` | kill the remote command after N seconds (exit `124`) |

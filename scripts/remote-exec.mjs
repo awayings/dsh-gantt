@@ -8,7 +8,7 @@
 //    to `.tmp/remote-exec.log` (or --audit-log), so a token in a `--header`
 //    argument is never persisted verbatim and the remote history is traceable.
 //
-// Usage: node scripts/remote-exec.mjs --target user@host [options] -- command...
+// Usage: node scripts/remote-exec.mjs --target user@host|alias [options] -- command...
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -22,10 +22,11 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const USAGE = `Forward a shell command to a remote host over SSH, refusing destructive commands.
 
 Usage:
-  node scripts/remote-exec.mjs --target user@host [options] -- <command...>
+  node scripts/remote-exec.mjs --target user@host|alias [options] -- <command...>
 
 Options:
-  -t, --target <user@host>     Remote target (env REMOTE_TARGET; required)
+  -t, --target <user@host|alias>
+                               Remote target, or an ~/.ssh/config alias (env REMOTE_TARGET; required)
   -i, --identity <file>        SSH private key (env REMOTE_SSH_IDENTITY, else ~/.ssh/id_rsa if present)
   -p, --port <port>            SSH port (env REMOTE_SSH_PORT, default 22)
       --timeout <seconds>      Kill the remote command after N seconds (default 120)
@@ -40,9 +41,10 @@ Exit codes: 0 remote success, 2 usage error, 3 refused by the guard, 124 timeout
 otherwise the remote command's exit status.
 
 Examples:
-  node scripts/remote-exec.mjs -t jason@192.168.1.5 -- claude mcp list
-  node scripts/remote-exec.mjs -t jason@192.168.1.5 --allow-recursive-delete -- rm -rf /tmp/build
-  node scripts/remote-exec.mjs -t jason@192.168.1.5 --dry-run -- rm -rf /`
+  node scripts/remote-exec.mjs -t k3s-node -- claude mcp list
+  node scripts/remote-exec.mjs -t mac -- shasum -a 256 ~/.config/gantt-mcp/token
+  node scripts/remote-exec.mjs -t k3s-node --allow-recursive-delete -- rm -rf /tmp/build
+  node scripts/remote-exec.mjs -t k3s-node --dry-run -- rm -rf /`
 
 /** @typedef {{ target: string, identity: string, port: number, timeout: number, stdin: boolean, dryRun: boolean, allowRecursiveDelete: boolean, knownHosts: string, auditLog: string, command: string }} Options */
 
@@ -97,8 +99,8 @@ function parseArgs(argv) {
   if (command.trim() === '') fatal('no command given (put it after --)')
   if (!argv.slice(0, index).includes('--')) fatal('separate the remote command from the options with --')
   const target = options.target ?? process.env.REMOTE_TARGET ?? ''
-  if (target === '') fatal('--target user@host (or REMOTE_TARGET) is required')
-  if (!/^[A-Za-z0-9._-]+@[A-Za-z0-9._:][A-Za-z0-9._:-]*$/.test(target)) fatal(`invalid target ${target}`)
+  if (target === '') fatal('--target user@host|alias (or REMOTE_TARGET) is required')
+  if (!/^[A-Za-z0-9._-]+(@[A-Za-z0-9._:][A-Za-z0-9._:-]*)?$/.test(target)) fatal(`invalid target ${target}`)
   const port = options.port ?? Number(process.env.REMOTE_SSH_PORT ?? 22)
   if (!Number.isInteger(port) || port < 1 || port > 65535) fatal('invalid port')
   const timeout = options.timeout ?? 120

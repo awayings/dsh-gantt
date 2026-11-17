@@ -125,6 +125,18 @@ describe('remote-exec CLI', () => {
     expect(entries[1].exit).toBe(9)
   })
 
+  it('accepts an ~/.ssh/config alias as the target', () => {
+    const result = run(['--target', 'mac', '-i', join(dir, 'identity'), '--known-hosts', join(dir, 'known_hosts'), '--audit-log', auditLog, '--dry-run', '--', 'true'])
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('ssh mac')
+  })
+
+  it('rejects a target that could be read as an ssh option', () => {
+    const result = run(['--target', '-oProxyCommand=x', '--', 'true'])
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('invalid target')
+  })
+
   it('requires a target and an explicit -- before the command', () => {
     const noTarget = run(['--', 'true'])
     expect(noTarget.status).toBe(2)
