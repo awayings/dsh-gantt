@@ -35,7 +35,22 @@ request step. `main` blocks force-pushes and deletion.
 4. Commit with [Conventional Commits](https://www.conventionalcommits.org/)
    (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`), English,
    imperative subject, one concern per commit, then `git push`.
-5. Never use `--no-verify`, never force-push `main`, and never push a red or
+5. When the change belongs to a Gantt task — the task focused in the Gantt tab,
+   or the task the session is working under — end the subject with its point
+   number:
+
+   ```text
+   <type>(<scope>): <imperative subject> (<point number>)
+
+   feat(today): keep the plan row bold on hover (1.8.1)
+   fix(api): reject progress above 100 (3.5.4)
+   docs(workflow): describe the pinned-profile dev loop (3.5.4)
+   ```
+
+   The point number is the only stable handle that ties a commit to the task
+   tree, the trajectory, and the Gantt page; a bare commit cannot be traced
+   back. Omit it for work that is not on the tree (tooling, release chores).
+6. Never use `--no-verify`, never force-push `main`, and never push a red or
    uncommitted tree — the hook refuses it anyway.
 
 If you only have read access, fork and open a pull request; it is reviewed and

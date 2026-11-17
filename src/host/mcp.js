@@ -35,7 +35,7 @@ export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: c
 
 Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Then: list_ready_tasks (tag=ready) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
-Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. Call get_worker_guide for the full playbook.`
+Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
 
 /** The full worker playbook served by `get_worker_guide`. */
 export const WORKER_GUIDE = `# Working a shared Gantt task tree
@@ -76,6 +76,11 @@ pulling from it; nothing is ever pushed to you.
   whatever the human or get_task_context gave you. Never invent one.
 - Your own session id goes in session when you have one (Codex session, Claude
   Code session id); the trajectory then shows that context next to the write.
+- When you commit code for the task you are working, end the commit subject
+  with its point number: \`feat(today): keep the plan row bold (1.8.1)\`.
+  Template \`<type>(<scope>): <imperative subject> (<point number>)\`. The
+  number is the only handle that ties the commit back to the tree a human is
+  watching, so a bare subject loses that link.
 - A task that blocks a human decision is status "blocked" with the concrete
   condition in summary, not a silent stop.
 - Cancelling (status "cancelled") drops the task from the parent rollup; do it

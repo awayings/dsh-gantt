@@ -25,3 +25,7 @@ bearer token 来自 `GANTT_MCP_TOKEN`），本地不需要安装任何东西。
 `task ... was not found`，此时用 `list_ready_tasks` 重新解析，不要猜。没有人给你
 派单：任务是你自己拉取的。链路不明确就问人；没人能回答，就把 `status` 设为
 `"blocked"`，并在 `summary` 里写清阻塞条件。
+
+**提交时带上点号编号。** 给甘特任务写代码并提交时，把任务的点号编号放在 commit
+标题末尾：`feat(today): 加粗计划行 (1.8.1)`；模板
+`<type>(<scope>): <祈使句标题> (<点号编号>)`。裸标题对不上任务树。

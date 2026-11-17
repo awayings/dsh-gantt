@@ -135,6 +135,12 @@ Steps 1-2 happen once per worker, 3-8 once per task, and step 9 closes a round.
   error). Pass your own session or thread id as `session` when you have one:
   the trajectory is keyed by it, else by `agent:<name>`, so a human can trace a
   change back to its conversation.
+- **Commits carry the point number.** When you commit code for a task, end the
+  subject with its point number — `feat(today): keep the plan row bold (1.8.1)`,
+  template `<type>(<scope>): <imperative subject> (<point number>)`. The
+  trajectory ties the round to the tree; a bare commit subject does not, and the
+  human reviewing the Gantt then has to guess which change belonged to which
+  task.
 - **Never invent task ids.** Act only on ids from `list_ready_tasks`,
   `get_task_context`, a decomposition you just created, or a human message. An
   unknown id returns `task ... was not found`; resolve it again instead of
