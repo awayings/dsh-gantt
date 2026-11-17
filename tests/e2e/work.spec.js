@@ -71,6 +71,9 @@ describe('work mode over HTTP', () => {
       status: 'todo',
       progress: 0,
       doneWhen: '',
+      operatorId: '',
+      completedById: '',
+      report: '',
     })
     expect(before.payload.sessionId).toBeNull()
     expect(typeof before.payload.cwd).toBe('string')
