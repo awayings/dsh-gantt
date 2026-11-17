@@ -163,7 +163,7 @@ export const DICT_ZH = {
   'filter.hint.next': '切回「全部」查看完整任务树。',
   'filter.hint.today': '点右侧「重算前沿和该动」生成今天的安排。',
   'filter.hint.done': '切回「全部」或「该动」继续推进。',
-  'bar.dragHint': '拖动按整周平移；拖左右边缘调整起止。',
+  'bar.dragHint': '拖动按格平移（周视图按天、月视图按月）；拖左右边缘调整起止。',
   'tree.decompose': '拆解为子任务',
   'tree.schedule': '排入某天计划',
   'field.state': '原始状态',

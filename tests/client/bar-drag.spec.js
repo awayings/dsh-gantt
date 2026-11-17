@@ -1,6 +1,6 @@
-// Week-snapping maths for the drag-and-resize gesture on Gantt bars.
+// Cell-snapped maths for the drag-and-resize gesture on Gantt bars.
 import { describe, expect, it } from 'vitest'
-import { dragMode, dragRange, dragWeeks } from '../../src/client/bar-drag.js'
+import { cellWidth, dragMode, dragRange, dragSteps } from '../../src/client/bar-drag.js'
 
 function edge(attribute) {
   const bar = document.createElement('div')
@@ -10,21 +10,36 @@ function edge(attribute) {
   return handle
 }
 
-describe('dragWeeks', () => {
-  it('rounds a pixel delta to whole weeks on the weekly scale', () => {
-    expect(dragWeeks(0, 36)).toBe(0)
-    expect(dragWeeks(125, 36)).toBe(0)
-    expect(dragWeeks(126, 36)).toBe(1)
-    expect(dragWeeks(251, 36)).toBe(1)
-    expect(dragWeeks(252, 36)).toBe(1)
-    expect(dragWeeks(504, 36)).toBe(2)
-    expect(dragWeeks(-252, 36)).toBe(-1)
+// The weekly window is 28 one-day cells of 36 px; the monthly window is 12
+// months of 365 days at 3.2 px per day.
+const WEEKLY = { totalWidth: 1008, units: Array.from({ length: 28 }) }
+const MONTHLY = { totalWidth: 1168, units: Array.from({ length: 12 }) }
+
+describe('cellWidth', () => {
+  it('returns one day cell on the weekly timeline', () => {
+    expect(cellWidth(WEEKLY)).toBe(36)
   })
 
-  it('uses the monthly scale pixels per day', () => {
-    expect(dragWeeks(22.4, 3.2)).toBe(1)
-    expect(dragWeeks(11, 3.2)).toBe(0)
-    expect(dragWeeks(-44.8, 3.2)).toBe(-2)
+  it('returns the average month width on the monthly timeline', () => {
+    expect(cellWidth(MONTHLY)).toBeCloseTo(97.33, 1)
+  })
+})
+
+describe('dragSteps', () => {
+  it('rounds a pixel delta to whole day cells on the weekly scale', () => {
+    expect(dragSteps(0, 36)).toBe(0)
+    expect(dragSteps(17, 36)).toBe(0)
+    expect(dragSteps(18, 36)).toBe(1)
+    expect(dragSteps(35, 36)).toBe(1)
+    expect(dragSteps(252, 36)).toBe(7)
+    expect(dragSteps(-252, 36)).toBe(-7)
+  })
+
+  it('rounds a pixel delta to whole month cells on the monthly scale', () => {
+    expect(dragSteps(40, 97.5)).toBe(0)
+    expect(dragSteps(60, 97.5)).toBe(1)
+    expect(dragSteps(195, 97.5)).toBe(2)
+    expect(dragSteps(-195, 97.5)).toBe(-2)
   })
 })
 
@@ -43,48 +58,61 @@ describe('dragMode', () => {
 })
 
 describe('dragRange', () => {
-  it('moves a whole-week task by whole weeks and keeps its span', () => {
-    expect(dragRange({ mode: 'move', startDate: '2026-11-16', endDate: '2026-11-22', weeks: 1 }))
-      .toEqual({ startDate: '2026-11-23', endDate: '2026-11-29' })
-    expect(dragRange({ mode: 'move', startDate: '2026-11-16', endDate: '2026-11-22', weeks: -2 }))
-      .toEqual({ startDate: '2026-11-02', endDate: '2026-11-08' })
+  it('moves a task by whole days and keeps its span', () => {
+    expect(dragRange({ mode: 'move', startDate: '2026-11-09', endDate: '2026-11-12', steps: 1, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-10', endDate: '2026-11-13' })
+    expect(dragRange({ mode: 'move', startDate: '2026-11-09', endDate: '2026-11-12', steps: -2, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-07', endDate: '2026-11-10' })
   })
 
-  it('normalizes a misaligned task to whole weeks when it moves', () => {
-    expect(dragRange({ mode: 'move', startDate: '2026-07-01', endDate: '2026-11-20', weeks: 1 }))
-      .toEqual({ startDate: '2026-07-06', endDate: '2026-11-22' })
+  it('moves a task by whole months on the monthly scale', () => {
+    expect(dragRange({ mode: 'move', startDate: '2026-11-09', endDate: '2026-11-12', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2026-12-09', endDate: '2026-12-12' })
   })
 
-  it('grows a one-day task to one whole week when it moves', () => {
-    expect(dragRange({ mode: 'move', startDate: '2026-11-16', endDate: '2026-11-16', weeks: 0 }))
-      .toEqual({ startDate: '2026-11-16', endDate: '2026-11-22' })
+  it('does not re-align a mid-week range when it moves', () => {
+    expect(dragRange({ mode: 'move', startDate: '2026-07-01', endDate: '2026-11-20', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2026-08-01', endDate: '2026-12-20' })
   })
 
-  it('resizes the start edge on Mondays and snaps the end to its Sunday', () => {
-    expect(dragRange({ mode: 'start', startDate: '2026-11-16', endDate: '2026-11-22', weeks: -1 }))
-      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-22' })
-    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-12', weeks: -1 }))
-      .toEqual({ startDate: '2026-11-02', endDate: '2026-11-15' })
+  it('clamps a month shift to the end of the target month', () => {
+    expect(dragRange({ mode: 'move', startDate: '2027-01-31', endDate: '2027-01-31', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2027-02-28', endDate: '2027-02-28' })
   })
 
-  it('clamps the start edge to a one-week span', () => {
-    expect(dragRange({ mode: 'start', startDate: '2026-11-16', endDate: '2026-11-22', weeks: 1 }))
-      .toEqual({ startDate: '2026-11-16', endDate: '2026-11-22' })
-    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-12', weeks: 1 }))
-      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-15' })
+  it('resizes the start edge by whole days and keeps the end', () => {
+    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-12', steps: -2, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-07', endDate: '2026-11-12' })
   })
 
-  it('resizes the end edge on Sundays and snaps the start to its Monday', () => {
-    expect(dragRange({ mode: 'end', startDate: '2026-11-16', endDate: '2026-11-22', weeks: 1 }))
-      .toEqual({ startDate: '2026-11-16', endDate: '2026-11-29' })
-    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-12', weeks: 1 }))
-      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-22' })
+  it('resizes the start edge by whole months and keeps the end', () => {
+    expect(dragRange({ mode: 'start', startDate: '2026-11-02', endDate: '2026-12-12', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2026-12-02', endDate: '2026-12-12' })
   })
 
-  it('clamps the end edge to a one-week span', () => {
-    expect(dragRange({ mode: 'end', startDate: '2026-11-16', endDate: '2026-11-22', weeks: -1 }))
-      .toEqual({ startDate: '2026-11-16', endDate: '2026-11-22' })
-    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-12', weeks: -1 }))
-      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-15' })
+  it('clamps the start edge to a one-day span', () => {
+    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-09', steps: -1, scale: 'month' }))
+      .toEqual({ startDate: '2026-10-09', endDate: '2026-11-09' })
+    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-09', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-09' })
+    expect(dragRange({ mode: 'start', startDate: '2026-11-09', endDate: '2026-11-12', steps: 5, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-12', endDate: '2026-11-12' })
+  })
+
+  it('resizes the end edge by whole days and keeps the start', () => {
+    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-12', steps: 2, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-14' })
+  })
+
+  it('resizes the end edge by whole months and keeps the start', () => {
+    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-12', steps: 1, scale: 'month' }))
+      .toEqual({ startDate: '2026-11-09', endDate: '2026-12-12' })
+  })
+
+  it('clamps the end edge to a one-day span', () => {
+    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-12', steps: -5, scale: 'week' }))
+      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-09' })
+    expect(dragRange({ mode: 'end', startDate: '2026-11-09', endDate: '2026-11-09', steps: -1, scale: 'month' }))
+      .toEqual({ startDate: '2026-11-09', endDate: '2026-11-09' })
   })
 })

@@ -7,7 +7,7 @@ sidebar:
   numbering; weekly and monthly timelines with zoom-out / zoom-in navigation;
   status, progress, and roll-up values on parent tasks; creation, editing,
   splitting, moving (including dragging a bar to move or resize it on the
-  weekly grid), deletion. The six imported tracks are the tree roots and
+  timeline grid), deletion. The six imported tracks are the tree roots and
   their Hermes nodes hang below them, so the imported work is visible here.
   Decompose a node into subtasks, schedule a node into a day plan, and export
   the whole tree as markdown model context. **全部 / 未完成 / 进行中 / 前沿 /

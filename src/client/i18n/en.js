@@ -163,7 +163,7 @@ export const DICT_EN = {
   'filter.hint.next': 'Switch to All to see the whole tree.',
   'filter.hint.today': 'Recompute the frontier and next to fill today.',
   'filter.hint.done': 'Switch to All or Next to keep planning.',
-  'bar.dragHint': 'Drag to move by weeks; drag either edge to resize.',
+  'bar.dragHint': 'Drag to move one cell (a day, or a month in month view); drag either edge to resize.',
   'tree.decompose': 'Decompose into subtasks',
   'tree.schedule': 'Schedule into a day plan',
   'field.state': 'Raw state',

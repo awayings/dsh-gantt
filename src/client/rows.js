@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { dragMode, dragRange, dragWeeks } from './bar-drag.js'
+import { cellWidth, dragMode, dragRange, dragSteps } from './bar-drag.js'
 import { DAY_MS, STATUS_COLOR } from './constants.js'
 import { formatMonth, formatMonthYear, formatWeekday, formatYear, isoToDay } from './dates.js'
 import { StatusPill } from './status.js'
@@ -52,6 +52,7 @@ function TaskBar({ task, timeline, onSelect, drag, onDragPreview, onDragCommit, 
   const previewEnd = drag === null ? task.endDate : drag.endDate
   const range = barRange({ ...task, startDate: previewStart, endDate: previewEnd }, timeline)
   if (range === null) return null
+  const stepPx = cellWidth(timeline)
   const overdue = task.status !== 'done' && task.status !== 'cancelled' && task.endDate < timeline.today
   // The whole bar moves; the two edge zones resize. Window-level listeners keep
   // the gesture alive when the pointer leaves the selected row.
@@ -71,8 +72,8 @@ function TaskBar({ task, timeline, onSelect, drag, onDragPreview, onDragCommit, 
     const onMove = (moveEvent) => {
       const deltaX = moveEvent.clientX - active.startX
       if (active.latest === null && Math.abs(deltaX) < DRAG_THRESHOLD) return
-      const weeks = dragWeeks(deltaX, timeline.pxPerDay)
-      if (weeks === 0) {
+      const steps = dragSteps(deltaX, stepPx)
+      if (steps === 0) {
         if (active.latest !== null) {
           active.latest = null
           onDragPreview(task, null)
@@ -80,7 +81,13 @@ function TaskBar({ task, timeline, onSelect, drag, onDragPreview, onDragCommit, 
         return
       }
       moveEvent.preventDefault()
-      active.latest = dragRange({ mode, startDate: active.startDate, endDate: active.endDate, weeks })
+      active.latest = dragRange({
+        mode,
+        startDate: active.startDate,
+        endDate: active.endDate,
+        steps,
+        scale: timeline.scale,
+      })
       onDragPreview(task, { mode, ...active.latest })
     }
     const onUp = () => {

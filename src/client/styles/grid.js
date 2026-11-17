@@ -314,7 +314,7 @@ export const CSS_GRID = `
     text-overflow: ellipsis;
     pointer-events: none;
   }
-  /* A leaf bar drags: the body moves it by whole weeks, the two edge zones
+  /* A leaf bar drags: the body moves it one timeline cell at a time, the two edge zones
      resize it. Summary bars stay roll-up only and keep the plain pointer. */
   .gantt-bar[data-editable="true"] { cursor: grab; touch-action: pan-y; }
   .gantt-bar[data-dragging="true"] {

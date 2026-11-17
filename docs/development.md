@@ -138,23 +138,27 @@ gesture that previews locally and writes exactly once on release with
 `POST api/gantt/task/update { id, startDate, endDate }` (`notice.datesUpdated`).
 Summary bars never drag — their dates roll up from their children.
 
-The task system plans in whole ISO weeks, so every gesture snaps:
+A drag moves in whole timeline cells: one day on the weekly scale, one month on
+the monthly scale. The gesture maths is `cellWidth(timeline)` =
+`totalWidth / units.length` (36 px for the weekly scale's day cell, the average
+month width in the monthly scale) and `dragSteps(deltaX, cellWidth)` =
+`Math.round(deltaX / cellWidth)`.
 
-- the bar body moves by whole weeks and keeps the task's whole-week span
-  (`move`);
-- the left edge moves the start in whole weeks, lands it on a Monday, and snaps
-  the end to its own Sunday (`start`);
-- the right edge moves the end in whole weeks, lands it on a Sunday, and snaps
-  the start to its own Monday (`end`);
-- both edge gestures clamp to a minimum span of one week, and a clamp that
-  lands on the current range skips the write entirely.
+- the bar body shifts both dates by the same number of cells, so the task keeps
+  its span (`move`);
+- the left edge moves the start by whole cells and clamps to the end date
+  (`start`);
+- the right edge moves the end by whole cells and clamps to the start date
+  (`end`);
+- a clamp that lands on the current range skips the write entirely.
 
-A range that is not week-aligned (for example the imported `07-01` starts)
-normalizes to whole weeks on its first drag. The date maths lives in
+Ranges are not re-aligned to week boundaries: a task that starts mid-week moves
+day by day, and a month-scale drag can change the span by a day when the target
+month is shorter (for example `01-31 → 02-28`). The date maths lives in
 `src/client/bar-drag.js` and is unit-tested directly; `rows.js` turns pointer
-travel into `dragWeeks`/`dragRange` with window-level listeners, and
+travel into `dragSteps`/`dragRange` with window-level listeners, and
 `pages/gantt.js` holds the preview state and the single commit. A pointer
-travel shorter than half a week stays a click and still opens the edit dialog;
+travel shorter than half a cell stays a click and still opens the edit dialog;
 the click that ends a real drag is swallowed. New tasks created from the dialog
 start on the creation day (the tree payload's `today`), not on the parent's
 range.
@@ -730,11 +734,11 @@ Open the page in the connected Web GUI and check:
       `inspiration`, and links chips with the full link in a tooltip.
 - [ ] A running (`持续`) node's bar ends at today, and the depth zoom switches
       between all nodes, two levels, and one level.
-- [ ] Dragging a leaf bar moves it by whole weeks (Monday start, Sunday end);
-      dragging either edge resizes it by whole weeks with a one-week minimum;
-      the preview label shows the target range, one release writes the new
-      dates, a plain click still opens the editor, and summary bars do not
-      drag.
+- [ ] Dragging a leaf bar moves it by whole timeline cells (days on the weekly
+      scale, months on the monthly scale); dragging either edge resizes it by
+      the same cells with a one-day minimum; the preview label shows the target
+      range, one release writes the new dates, a plain click still opens the
+      editor, and summary bars do not drag.
 - [ ] A new task created under a parent whose range began earlier starts on
       today, not on the parent's start date.
 - [ ] The perspective switch offers 全部 / 进行中 / 前沿 / 该动 / 今日 /

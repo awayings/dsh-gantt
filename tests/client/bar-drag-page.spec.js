@@ -1,4 +1,4 @@
-// Dragging and resizing task bars on the Gantt page: week snapping, the live
+// Dragging and resizing task bars on the Gantt page: cell snapping, the live
 // preview, the single write on release, and the click/drag split.
 import { afterEach, describe, expect, it } from 'vitest'
 import { createElement } from 'react'
@@ -23,8 +23,11 @@ import { treePayload } from './fixtures.js'
 
 const TREE = 'api/gantt/tree'
 const UPDATE = 'api/gantt/task/update'
-// The weekly timeline draws 36 px per day, so one snapped week is 252 px.
-const WEEK = 7 * 36
+// The weekly timeline draws 36 px per one-day cell.
+const DAY = 36
+// The monthly window is Aug 2026 – Jul 2027: 365 days at 3.2 px per day, so one
+// month cell averages 1168 / 12 px.
+const MONTH = 1168 / 12
 
 afterEach(unmountAll)
 
@@ -65,32 +68,32 @@ function updateBodies(calls) {
 }
 
 describe('bar drag', () => {
-  it('moves a leaf bar by whole weeks, previews the range, and persists it once', async () => {
+  it('moves a leaf bar by whole days, previews the range, and persists it once', async () => {
     const { calls, view } = await renderPage()
     const bar = barOf(view, '1.1 Write spec')
     expect(bar.getAttribute('data-editable')).toBe('true')
-    expect(bar.getAttribute('title')).toContain('Drag to move by weeks')
+    expect(bar.getAttribute('title')).toContain('Drag to move one cell')
     expect(handleOf(view, '1.1 Write spec', 'start')).not.toBeNull()
     expect(handleOf(view, '1.1 Write spec', 'end')).not.toBeNull()
 
     press(bar)
-    moveTo(100 + WEEK)
+    moveTo(100 + 7 * DAY)
     const preview = barOf(view, '1.1 Write spec')
     expect(preview.getAttribute('data-dragging')).toBe('true')
-    expect(preview.getAttribute('data-range')).toBe('2026-11-16 → 2026-11-22')
-    expect(preview.getAttribute('title')).toContain('2026-11-16 → 2026-11-22')
+    expect(preview.getAttribute('data-range')).toBe('2026-11-16 → 2026-11-19')
+    expect(preview.getAttribute('title')).toContain('2026-11-16 → 2026-11-19')
     expect(calls.filter(call => call.path === UPDATE)).toHaveLength(0)
 
-    releaseTo(100 + WEEK)
+    releaseTo(100 + 7 * DAY)
     await flush()
 
-    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-16', endDate: '2026-11-22' }])
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-16', endDate: '2026-11-19' }])
     expect(text(view.container, '.gantt-toast')).toBe('Dates updated')
     expect(calls.filter(call => call.path === TREE)).toHaveLength(2)
     expect(barOf(view, '1.1 Write spec').getAttribute('data-dragging')).toBeNull()
   })
 
-  it('treats a jiggle shorter than half a week as a click', async () => {
+  it('treats a jiggle shorter than half a cell as a click', async () => {
     const { calls, view } = await renderPage()
     const bar = barOf(view, '1.1 Write spec')
 
@@ -106,11 +109,11 @@ describe('bar drag', () => {
     expect(text(view.container, '.gantt-dialog-title')).toBe('Edit task · 1.1')
   })
 
-  it('clears the preview when the pointer returns within the original week', async () => {
+  it('clears the preview when the pointer returns within the original cell', async () => {
     const { calls, view } = await renderPage()
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
+    moveTo(100 + DAY)
     expect(barOf(view, '1.1 Write spec').getAttribute('data-dragging')).toBe('true')
     moveTo(90)
     expect(barOf(view, '1.1 Write spec').getAttribute('data-dragging')).toBeNull()
@@ -127,19 +130,19 @@ describe('bar drag', () => {
 
     press(bar)
     press(bar)
-    moveTo(100 + 2 * WEEK)
-    releaseTo(100 + 2 * WEEK)
+    moveTo(100 + 2 * DAY)
+    releaseTo(100 + 2 * DAY)
     await flush()
 
-    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-23', endDate: '2026-11-29' }])
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-11', endDate: '2026-11-14' }])
   })
 
   it('ignores a non-primary mouse button', async () => {
     const { calls, view } = await renderPage()
 
     press(barOf(view, '1.1 Write spec'), 100, 2)
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    releaseTo(100 + DAY)
     await flush()
 
     expect(updateBodies(calls)).toHaveLength(0)
@@ -150,8 +153,8 @@ describe('bar drag', () => {
     const { calls, view } = await renderPage()
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
-    pointerEvent(window, 'pointercancel', { clientX: 100 + WEEK })
+    moveTo(100 + DAY)
+    pointerEvent(window, 'pointercancel', { clientX: 100 + DAY })
 
     expect(barOf(view, '1.1 Write spec').getAttribute('data-dragging')).toBeNull()
     await flush()
@@ -162,66 +165,72 @@ describe('bar drag', () => {
     const { calls, view } = await renderPage()
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
+    moveTo(100 + DAY)
     expect(() => view.unmount()).not.toThrow()
-    releaseTo(100 + WEEK)
+    releaseTo(100 + DAY)
     await flush()
 
     expect(updateBodies(calls)).toHaveLength(0)
   })
 
-  it('drags by whole weeks on the monthly scale as well', async () => {
+  it('moves by whole months on the monthly scale', async () => {
     const { calls, view } = await renderPage()
     click(buttonByText(view.container, 'Month'))
-    const weekPx = 7 * 3.2
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + weekPx)
-    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-16 → 2026-11-22')
-    releaseTo(100 + weekPx)
+    moveTo(100 + MONTH)
+    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-12-09 → 2026-12-12')
+    releaseTo(100 + MONTH)
     await flush()
 
-    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-16', endDate: '2026-11-22' }])
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-12-09', endDate: '2026-12-12' }])
   })
 })
 
 describe('bar resize', () => {
-  it('resizes the start edge from its handle and snaps the end to a Sunday', async () => {
+  it('resizes the start edge by days and keeps the end', async () => {
     const { calls, view } = await renderPage()
 
     press(handleOf(view, '1.1 Write spec', 'start'))
-    moveTo(100 - WEEK)
-    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-02 → 2026-11-15')
-    releaseTo(100 - WEEK)
+    moveTo(100 - DAY)
+    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-08 → 2026-11-12')
+    releaseTo(100 - DAY)
     await flush()
 
-    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-02', endDate: '2026-11-15' }])
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-08', endDate: '2026-11-12' }])
   })
 
-  it('resizes the end edge from its handle and snaps the start to a Monday', async () => {
+  it('resizes the end edge by days and keeps the start', async () => {
     const { calls, view } = await renderPage()
 
     press(handleOf(view, '1.1 Write spec', 'end'))
-    moveTo(100 + WEEK)
-    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-09 → 2026-11-22')
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-09 → 2026-11-13')
+    releaseTo(100 + DAY)
     await flush()
 
-    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-09', endDate: '2026-11-22' }])
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-09', endDate: '2026-11-13' }])
+  })
+
+  it('resizes the end edge by months on the monthly scale', async () => {
+    const { calls, view } = await renderPage()
+    click(buttonByText(view.container, 'Month'))
+
+    press(handleOf(view, '1.1 Write spec', 'end'))
+    moveTo(100 + MONTH)
+    expect(barOf(view, '1.1 Write spec').getAttribute('data-range')).toBe('2026-11-09 → 2026-12-12')
+    releaseTo(100 + MONTH)
+    await flush()
+
+    expect(updateBodies(calls)).toEqual([{ id: 'c1', startDate: '2026-11-09', endDate: '2026-12-12' }])
   })
 
   it('skips the write when a resize clamps back to the current range', async () => {
-    const payload = treePayload()
-    const parent = payload.tasks[1]
-    parent.startDate = '2026-11-16'
-    parent.endDate = '2026-11-22'
-    parent.children[0].startDate = '2026-11-16'
-    parent.children[0].endDate = '2026-11-22'
-    const { calls, view } = await renderPage({ [TREE]: () => jsonResponse(payload) })
+    const { calls, view } = await renderPage()
 
     press(handleOf(view, '2.1 Announce', 'start'))
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    releaseTo(100 + DAY)
     await flush()
 
     expect(updateBodies(calls)).toHaveLength(0)
@@ -235,12 +244,12 @@ describe('drag limits and failures', () => {
     const summary = barOf(view, '1 Release 2.0')
 
     expect(summary.getAttribute('data-editable')).toBeNull()
-    expect(summary.getAttribute('title')).not.toContain('Drag to move by weeks')
+    expect(summary.getAttribute('title')).not.toContain('Drag to move one cell')
     expect(qa(row(view.container, '1 Release 2.0'), '.gantt-bar-handle')).toHaveLength(0)
 
     press(summary)
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    releaseTo(100 + DAY)
     await flush()
 
     expect(updateBodies(calls)).toHaveLength(0)
@@ -253,8 +262,8 @@ describe('drag limits and failures', () => {
     })
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + 7 * DAY)
+    releaseTo(100 + 7 * DAY)
     await flush()
 
     const toast = q(view.container, '.gantt-toast')
@@ -267,8 +276,8 @@ describe('drag limits and failures', () => {
     const { view } = await renderPage({ [UPDATE]: () => Promise.reject('update exploded') })
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    releaseTo(100 + DAY)
     await flush()
 
     expect(text(view.container, '.gantt-toast')).toBe('update exploded')
@@ -280,8 +289,8 @@ describe('bar drag click split', () => {
     const { view } = await renderPage()
 
     press(barOf(view, '1.1 Write spec'))
-    moveTo(100 + WEEK)
-    releaseTo(100 + WEEK)
+    moveTo(100 + DAY)
+    releaseTo(100 + DAY)
     await flush()
 
     click(barOf(view, '1.1 Write spec'))

@@ -1,15 +1,16 @@
-// Week-snapped date maths for dragging a Gantt task bar.
+// Cell-snapped date maths for dragging a Gantt task bar.
 //
-// The task system plans in whole ISO weeks: a start edge lands on a Monday, an
-// end edge on a Sunday, and a body drag keeps the whole-week span. These helpers
+// The timeline draws one cell per scale unit — a day on the weekly scale, a
+// month on the monthly scale — so a drag moves in those units: a body drag
+// shifts both dates by the same number of cells and keeps the task's span, and
+// an edge drag moves one date and clamps to a one-day minimum. These helpers
 // stay free of the DOM so the gesture maths is unit-tested directly; rows.js
-// only translates pointers into a mode, a week delta, and the returned range.
+// only translates pointers into a mode, a step count, and the returned range.
 
-import { DAY_MS } from './constants.js'
-import { addDays, isoToDay, startOfWeek } from './dates.js'
+import { addDays, addMonths } from './dates.js'
 
-/** Days in one snapped drag step. */
-export const WEEK_DAYS = 7
+/** Timeline scale a drag runs on; one unit of the scale is one drag step.
+ * @typedef {'week' | 'month'} DragScale */
 
 /** How a bar was grabbed: its body, or one of its two edges.
  * @typedef {'move' | 'start' | 'end'} BarDragMode */
@@ -17,12 +18,20 @@ export const WEEK_DAYS = 7
 /** A date range produced by one drag gesture.
  * @typedef {{ startDate: string, endDate: string }} BarDragRange */
 
-/** Whole snapped weeks covered by a horizontal pointer delta.
- * @param {number} deltaX Horizontal pointer travel in pixels.
- * @param {number} pxPerDay Timeline scale in pixels per day.
+/** Pixels one drag step covers on the given timeline: 36 px for the weekly
+ * scale's one-day cell, the average month width for the monthly scale.
+ * @param {{ totalWidth: number, units: ArrayLike<unknown> }} timeline
  * @returns {number} */
-export function dragWeeks(deltaX, pxPerDay) {
-  return Math.round(deltaX / (WEEK_DAYS * pxPerDay))
+export function cellWidth(timeline) {
+  return timeline.totalWidth / timeline.units.length
+}
+
+/** Whole drag steps covered by a horizontal pointer delta.
+ * @param {number} deltaX Horizontal pointer travel in pixels.
+ * @param {number} cellWidthPx Pixels per drag step on the current timeline.
+ * @returns {number} */
+export function dragSteps(deltaX, cellWidthPx) {
+  return Math.round(deltaX / cellWidthPx)
 }
 
 /** The drag mode implied by the element under the pointer: a bar handle carries
@@ -38,41 +47,29 @@ export function dragMode(target) {
   return edge.getAttribute('data-edge') === 'start' ? 'start' : 'end'
 }
 
-/** Monday for a week-shifted date. @param {string} iso @param {number} weeks */
-function mondayOf(iso, weeks) {
-  return startOfWeek(addDays(iso, weeks * WEEK_DAYS))
+/** Shift an ISO date by whole steps of the timeline scale. @param {string} iso
+ * @param {number} steps @param {DragScale} scale @returns {string} */
+function shiftDate(iso, steps, scale) {
+  return scale === 'week' ? addDays(iso, steps) : addMonths(iso, steps)
 }
 
-/** Whole weeks between two inclusive dates, never less than one.
- * @param {string} startDate @param {string} endDate @returns {number} */
-function wholeWeeks(startDate, endDate) {
-  const days = (isoToDay(endDate) - isoToDay(startDate)) / DAY_MS + 1
-  return Math.max(1, Math.round(days / WEEK_DAYS))
-}
-
-/** The week-snapped dates a drag gesture commits.
+/** The dates a drag gesture commits.
  *
- * `move` shifts the bar by whole weeks and keeps its whole-week span; `start`
- * and `end` move one edge by whole weeks, snap the other edge to its own week
- * boundary, and clamp to a minimum span of one week.
- * @param {{ mode: BarDragMode, startDate: string, endDate: string, weeks: number }} gesture
+ * `move` shifts both dates by the same cell count and keeps the span; `start`
+ * and `end` move one date by whole cells and clamp to a minimum one-day span.
+ * @param {{ mode: BarDragMode, startDate: string, endDate: string, steps: number, scale: DragScale }} gesture
  * @returns {BarDragRange} */
-export function dragRange({ mode, startDate, endDate, weeks }) {
+export function dragRange({ mode, startDate, endDate, steps, scale }) {
   if (mode === 'move') {
-    const nextStart = mondayOf(startDate, weeks)
     return {
-      startDate: nextStart,
-      endDate: addDays(nextStart, wholeWeeks(startDate, endDate) * WEEK_DAYS - 1),
+      startDate: shiftDate(startDate, steps, scale),
+      endDate: shiftDate(endDate, steps, scale),
     }
   }
   if (mode === 'start') {
-    const nextEnd = addDays(mondayOf(endDate, 0), WEEK_DAYS - 1)
-    const earliestStart = addDays(nextEnd, -(WEEK_DAYS - 1))
-    const candidate = mondayOf(startDate, weeks)
-    return { startDate: candidate > earliestStart ? earliestStart : candidate, endDate: nextEnd }
+    const candidate = shiftDate(startDate, steps, scale)
+    return { startDate: candidate > endDate ? endDate : candidate, endDate }
   }
-  const nextStart = mondayOf(startDate, 0)
-  const latestEnd = addDays(nextStart, WEEK_DAYS - 1)
-  const candidate = addDays(mondayOf(endDate, weeks), WEEK_DAYS - 1)
-  return { startDate: nextStart, endDate: candidate < latestEnd ? latestEnd : candidate }
+  const candidate = shiftDate(endDate, steps, scale)
+  return { startDate, endDate: candidate < startDate ? startDate : candidate }
 }
