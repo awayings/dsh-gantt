@@ -333,7 +333,10 @@ appends one `track` event and touches nothing else. Returns
 ### `get_worker_guide`
 
 No parameters. Returns `{ "ok": true, "markdown": "# Working a shared Gantt task tree…" }`
-— the server's authoritative playbook, readable without a local skill file.
+— the server's authoritative playbook, readable without a local skill file. It
+carries the round-closing discipline, the task-id forms, and the commit
+convention (end the subject with the task's point number, template
+`<type>(<scope>): <imperative subject> (<point number>)`).
 [worker-flow.md](worker-flow.md) is the human-facing companion: install, client
 setup, and smoke tests.
 
