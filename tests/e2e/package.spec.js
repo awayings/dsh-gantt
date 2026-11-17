@@ -29,6 +29,9 @@ const REQUIRED = [
   'src/client/index.js',
   'deploy/gantt-mcp.service',
   'deploy/mcp.env.example',
+  'deploy/k3s/gantt-mcp-entrypoint.sh',
+  'deploy/k3s/sidecar-patch.yaml',
+  'deploy/k3s/README.md',
   'docs/deployment.md',
   'docs/mcp.md',
 ]

@@ -1,0 +1,95 @@
+# Template: run gantt-mcp as a sidecar in an existing DSH Deployment.
+#
+#   kubectl -n <namespace> patch deployment <dsh-deployment> \
+#     --type=strategic --patch-file deploy/k3s/sidecar-patch.yaml \
+#     --dry-run=server            # preview, then drop --dry-run to apply
+#
+# Strategic merge patch: containers and volumes merge by name, so the existing
+# dsh container keeps its spec untouched. Replace the placeholders marked
+# REPLACE before applying:
+#   <dsh-image>      image your dsh container runs. Any node >= 24 image with
+#                    bash and tar works (gantt-mcp has zero runtime
+#                    dependencies); reusing the DSH image avoids a second pull.
+#   <tailnet-ip>     address the sidecar binds and the kubelet probes. The Pod
+#                    uses hostNetwork, so this is the node's tailscale address
+#                    (e.g. 100.83.77.65). Do not bind 0.0.0.0: that exposes the
+#                    MCP port to the LAN. Probes must repeat the literal address;
+#                    the kubelet connects from the node network namespace, where
+#                    the Pod IP (host IP) is not the address the sidecar bound.
+#   <version>        release version, must match the tarball in
+#                    /data/dsh-home/gantt/releases/dsh-gantt-<version>.tgz
+#
+# The target Deployment must already mount the /data PVC and have a
+# GANTT_MCP_TOKEN key in its Secret (see deploy/k3s/README.md, "Fresh install").
+# hostNetwork is required: the sidecar binds the tailscale address of the node,
+# which only exists in the host network namespace.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gantt-mcp
+          image: <dsh-image>
+          command: ['/bin/bash', '/opt/gantt/gantt-mcp-entrypoint.sh']
+          env:
+            - name: GANTT_VERSION
+              value: '<version>'
+            - name: GANTT_MCP_TRANSPORT
+              value: http
+            - name: GANTT_MCP_HOST
+              value: '<tailnet-ip>'
+            - name: GANTT_MCP_PORT
+              value: '18765'
+            - name: GANTT_MCP_DB
+              value: /data/dsh-home/gantt/tasks.db
+            - name: GANTT_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dsh-secrets
+                  key: GANTT_MCP_TOKEN
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: gantt-entrypoint
+              mountPath: /opt/gantt
+              readOnly: true
+          # The sidecar installs its own release from the PVC before exec'ing, so
+          # the startup budget covers a first-ever extraction, not just a process
+          # start.
+          startupProbe:
+            httpGet:
+              host: '<tailnet-ip>'
+              path: /healthz
+              port: 18765
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              host: '<tailnet-ip>'
+              path: /healthz
+              port: 18765
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              host: '<tailnet-ip>'
+              path: /healthz
+              port: 18765
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: '1'
+              memory: 256Mi
+      volumes:
+        - name: gantt-entrypoint
+          configMap:
+            name: gantt-entrypoint
+            defaultMode: 0555
+
+# The ConfigMap the volume above expects is created from the script next to this
+# file:
+#   kubectl -n <namespace> create configmap gantt-entrypoint \
+#     --from-file=gantt-mcp-entrypoint.sh=deploy/k3s/gantt-mcp-entrypoint.sh \
+#     --dry-run=client -o yaml | kubectl apply -f -
