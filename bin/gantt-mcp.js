@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // CLI entry for the dsh-gantt MCP server. Stdio is the default transport so a
 // coding tool can spawn it directly; the optional HTTP transport serves a
-// single JSON-RPC POST endpoint plus a health check.
+// single JSON-RPC POST endpoint plus a health check. A network bind needs a
+// bearer token, so a LAN address cannot expose task writes unauthenticated.
 
 import { createServer } from 'node:http'
 import { createInterface } from 'node:readline'
-import { createMcpServer } from '../src/host/mcp.js'
+import { assertHttpBinding, createMcpServer } from '../src/host/mcp.js'
 import { GanttStore, resolveDatabasePath } from '../src/host/store.js'
 
 const USAGE = `Usage: gantt-mcp [options]
@@ -139,6 +140,7 @@ function startStdio(options) {
 
 /** @param {CliOptions} options */
 function startHttp(options) {
+  assertHttpBinding(options.host, options.token)
   const store = new GanttStore(options.db)
   const server = createMcpServer({ store })
   const http = createServer((request, response) => {
@@ -252,8 +254,13 @@ function main() {
     console.log(USAGE)
     return
   }
-  if (options.transport === 'http') startHttp(options)
-  else startStdio(options)
+  try {
+    if (options.transport === 'http') startHttp(options)
+    else startStdio(options)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
 }
 
 main()

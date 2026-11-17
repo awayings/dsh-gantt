@@ -5,6 +5,23 @@
 /** The MCP revision this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18'
 
+/** Bind hosts that are unreachable off-machine and therefore need no token. */
+const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost']
+
+/**
+ * Refuse an HTTP bind that would expose task writes to the network without
+ * authentication: only loopback hosts may serve without a bearer token, so a
+ * LAN or wildcard bind fails before the socket opens instead of running open.
+ * @param {string} host the requested bind host
+ * @param {string} token the bearer token, empty when none is configured
+ * @returns {void}
+ */
+export function assertHttpBinding(host, token) {
+  if (token !== '') return
+  if (LOOPBACK_HOSTS.includes(host)) return
+  throw new Error(`refusing to serve ${host === '' ? 'all interfaces' : host} without a bearer token; set GANTT_MCP_TOKEN or --token`)
+}
+
 /** @typedef {import('./store.js').GanttStore} GanttStore */
 /** @typedef {{ name: string, description: string, inputSchema: Record<string, unknown> }} McpTool */
 /** @typedef {{ jsonrpc: '2.0', id: unknown, result: unknown }} McpResultResponse */

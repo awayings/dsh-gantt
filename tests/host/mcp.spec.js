@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createMcpServer, MCP_PROTOCOL_VERSION, MCP_TOOLS } from '../../src/host/mcp.js'
+import { assertHttpBinding, createMcpServer, MCP_PROTOCOL_VERSION, MCP_TOOLS } from '../../src/host/mcp.js'
 import { GanttStore } from '../../src/host/store.js'
 
 let store
@@ -217,5 +217,25 @@ describe('tools/call', () => {
     })
     expect(validation.result.isError).toBe(true)
     expect(validation.result.content[0].text).toBe('name is required')
+  })
+})
+
+describe('HTTP binding guard', () => {
+  it('allows a loopback host without a token', () => {
+    for (const host of ['127.0.0.1', '::1', 'localhost']) {
+      expect(() => assertHttpBinding(host, '')).not.toThrow()
+    }
+  })
+
+  it('refuses a network bind without a token', () => {
+    for (const host of ['0.0.0.0', '192.168.1.20', '::']) {
+      expect(() => assertHttpBinding(host, '')).toThrow(/without a bearer token/)
+    }
+    expect(() => assertHttpBinding('', '')).toThrow(/all interfaces/)
+  })
+
+  it('accepts a network bind once a token is configured', () => {
+    expect(() => assertHttpBinding('0.0.0.0', 's3cret')).not.toThrow()
+    expect(() => assertHttpBinding('127.0.0.1', 's3cret')).not.toThrow()
   })
 })
