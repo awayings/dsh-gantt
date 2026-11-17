@@ -85,8 +85,10 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   tooling is pinned and locked (rolldown builds the browser half).
 - Conventional Commits, English, imperative subject, one concern per commit.
 - Release: `pnpm run release X.Y.Z --push` (validates a clean, synced `main` and
-  its version, runs the full gate, tags, pushes, waits for the workflow).
-  Private package, never published to npm.
+  its version, runs the full gate, packages, tags, pushes, waits for the
+  workflow). The artifact is `pnpm run package`: one tarball for both deployment
+  units (plugin bundle + MCP sidecar) plus `SHA256SUMS`, attached to the GitHub
+  Release. Private package, never published to npm.
 
 ## Runbook
 

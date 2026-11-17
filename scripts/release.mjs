@@ -103,6 +103,11 @@ runPnpm(['verify'])
 info('running the full gate (pnpm run check --full)')
 runPnpm(['check', '--full'])
 
+// The workflow packages the artifact after the gate; doing it here too makes a
+// dry run fail before the tag exists if "files" no longer covers a deployment unit.
+info('running pnpm run package')
+runPnpm(['package'])
+
 if (dryRun) {
   info(`dry run: all validations passed; would tag ${head.slice(0, 12)} as ${tag}${push ? ' and push it' : ''}`)
   process.exit(0)

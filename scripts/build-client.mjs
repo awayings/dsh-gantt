@@ -5,7 +5,7 @@
 // with a `require` that resolves the shell's platform modules. The bundle is
 // therefore CommonJS with `react` left external, wrapped in that factory: the
 // same shape the reference plugin's tsdown build emits.
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rolldown } from 'rolldown'
@@ -41,5 +41,10 @@ const source = [
 ].join('\n')
 
 await mkdir(dirname(outFile), { recursive: true })
-await writeFile(outFile, source)
+// Write-then-rename: the artifact is read while a rebuild is in flight (a page
+// load, the e2e suite, `pnpm run package`), and a reader must never see a
+// truncated bundle.
+const tempFile = `${outFile}.${process.pid}.tmp`
+await writeFile(tempFile, source)
+await rename(tempFile, outFile)
 console.log(`build-client: lib/client.js (${(Buffer.byteLength(source) / 1024).toFixed(1)} KiB)`)

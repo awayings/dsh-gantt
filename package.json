@@ -22,6 +22,8 @@
     "bin",
     "lib/client.js",
     "cordis.patch.yml",
+    "deploy",
+    "docs",
     "icon.svg",
     "README.md"
   ],
@@ -35,6 +37,7 @@
     "mcp": "node bin/gantt-mcp.js",
     "static": "pnpm run lint && pnpm run typecheck",
     "check": "node scripts/run-bash.mjs scripts/check.sh",
+    "package": "node scripts/package.mjs",
     "deploy": "node scripts/deploy.mjs",
     "release": "node scripts/release.mjs",
     "verify": "node scripts/verify.mjs",

@@ -81,12 +81,14 @@ Releases are cut from a clean, synced `main` by a maintainer:
    the full gate.
 3. `pnpm run release X.Y.Z --push` creates the annotated tag, pushes it, and
    waits for `.github/workflows/release.yml`: it re-runs lint, typecheck,
-   coverage, and e2e, rejects a tag that does not match the package version, and
-   creates the GitHub Release with generated notes.
+   coverage, and e2e, rejects a tag that does not match the package version,
+   packages the release tarball (`pnpm run package`), and creates the GitHub
+   Release with generated notes plus the tarball and its `SHA256SUMS` attached.
 
 The profile that serves the UI links the working tree rather than a copy, so a
 release needs no reinstall: `pnpm run deploy --check` confirms the link, then
 smoke-test the Gantt page before announcing the release.
 
-The package is private and not published to npm; installation is by repository
-path.
+The package is private and not published to npm; a release is installed either
+from the repository path (a checkout) or from the tarball attached to the GitHub
+Release.

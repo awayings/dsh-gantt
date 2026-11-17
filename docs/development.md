@@ -112,6 +112,15 @@ Release tagging is scripted: `pnpm run release X.Y.Z [--dry-run] [--push]`
 validates the repository, runs the full gate, and creates/pushes the tag (see
 `CONTRIBUTING.md` §Releasing).
 
+The release artifact is `pnpm run package`: it rebuilds `lib/client.js`, packs
+the source tree plus `deploy/` and `docs/` into
+`.tmp/dist/dsh-gantt-<version>.tgz`, fails when an entry either deployment unit
+needs is missing (for example `deploy/` dropped from `files`), and writes
+`.tmp/dist/SHA256SUMS`. The workflow attaches both files to the GitHub Release.
+One tarball serves both units: install the plugin with
+`dsh plugin --profile web add file:<tarball>`, and run `bin/gantt-mcp.js` from
+the unpacked copy for the MCP sidecar.
+
 CI runs the full gate only on release tags: `.github/workflows/release.yml` runs
 `pnpm run lint`, `pnpm run typecheck`, `pnpm run coverage`, and `pnpm run e2e`
 after checking that the tag matches the package version. Branches have no CI
