@@ -132,6 +132,16 @@ through `sendWorkPrompt`, hand the conversation to a new window through
 trajectory once the message is accepted. A successful send clears the editor; a
 failure keeps the text so the user can retry.
 
+Resolving the conversation is never a plain read of the panel state: all three
+entries call `openWorkTask(open: false)` even when the panel already shows a
+bound conversation. That helper re-reads the task ⇄ conversation mapping and,
+for an existing conversation, posts `api/gantt/focus/set` before returning, so
+the conversation's focus points at the task the user clicked before the prompt
+is queued. The first runtime-context snapshot of the new turn is therefore built
+from that task. Skipping the refresh and sending to the already-bound
+conversation directly leaves its focus on the task it saw last, and the model
+keeps working on the wrong task.
+
 The editor is deliberately client-side: the model receives the composed text as
 a normal user message, and the host never stores it. That keeps the system
 prompt and the tool contract unchanged.

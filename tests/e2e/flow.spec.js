@@ -6,7 +6,7 @@
 // an in-memory database. Keep this suite small and behavioral; exhaustive cases
 // belong in tests/store, tests/host, and tests/client.
 import { act, createElement } from 'react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installFetch, startServer } from './server.js'
 import {
   buttonByText,
@@ -20,11 +20,14 @@ import {
   text,
   unmountAll,
 } from '../client/harness.js'
+import { fakeServices, fakeWindow } from '../client/workbench-fixtures.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 import path from 'node:path'
 
 const TREE = '/api/gantt/tree'
 const TASKS = '/api/gantt/tasks'
+const WORK_SESSION = '/api/gantt/work/session'
+const FOCUS = '/api/gantt/focus/set'
 const SEEDED = 13
 
 let dir
@@ -79,6 +82,25 @@ async function restartServer() {
   return server
 }
 
+/** Create one task through the shipped write route. */
+async function createTask(title) {
+  const response = await fetch(`${server.origin}${TASKS}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+  return (await response.json()).task
+}
+
+/** POST one JSON body through the shipped route. */
+async function post(pathname, body) {
+  return fetch(`${server.origin}${pathname}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 beforeEach(async () => {
   dir = makeTempDir('dsh-gantt-e2e-')
   dbPath = path.join(dir, 'tasks.db')
@@ -88,6 +110,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   unmountAll()
+  vi.unstubAllGlobals()
   if (restoreFetch) restoreFetch()
   if (server) await server.close()
   if (dir) removeTempDir(dir)
@@ -179,5 +202,35 @@ describe('end-to-end', () => {
     })
     expect(notObject.status).toBe(400)
     expect(await notObject.json()).toEqual({ ok: false, error: 'request body must be a JSON object' })
+  })
+
+  it('refreshes the work conversation focus before the workbench starts a task', async () => {
+    const stale = await createTask('Stale focus task')
+    const target = await createTask('Target task')
+    // The conversation is dedicated to `target` but still focused on `stale`, as
+    // after the user re-pointed the focus from another window.
+    expect((await post(WORK_SESSION, { taskId: target.id, sessionId: 'session-e2e' })).status).toBe(200)
+    expect((await post(FOCUS, { sessionId: 'session-e2e', taskId: stale.id })).status).toBe(200)
+
+    const services = fakeServices()
+    vi.stubGlobal('open', () => fakeWindow())
+    app = setupApp({ services, withoutInject: true })
+    view = mount(createElement(app.page().component))
+    await waitFor(() => qa(view.container, '.gantt-row').length === 2, { label: 'task rows' })
+    const tree = await fetch(`${server.origin}${TREE}`).then(result => result.json())
+    const node = tree.tasks.find(task => task.id === target.id)
+
+    click(q(view.container, 'button[data-action="work-mode"]'))
+    click(row(view.container, `${node.number} ${node.title}`))
+    const execute = await waitFor(
+      () => q(view.container, '.gantt-task-panel button[data-action="execute"]'),
+      { label: 'execute entry' },
+    )
+    click(execute)
+    await waitFor(() => services.prompts.length === 1, { label: 'started prompt' })
+    expect(services.prompts).toEqual([{ sessionId: 'session-e2e', text: 'Complete this task.' }])
+
+    const focus = await fetch(`${server.origin}/api/gantt/focus?sessionId=session-e2e`).then(result => result.json())
+    expect(focus.taskId).toBe(target.id)
   })
 })

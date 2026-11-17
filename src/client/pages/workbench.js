@@ -387,6 +387,12 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
    * a new window so the running turn is visible. The prompt reaches the Host
    * before navigation, so a blocked popup still starts the work. A successful
    * turn clears the optional editor; a failed one keeps the user's text.
+   *
+   * All three entries resolve the conversation through `openWorkTask({open:
+   * false})` even when one is already bound: that call re-reads the binding and
+   * refreshes the conversation's focus to this task before the prompt is queued.
+   * Sending without it leaves the conversation focused on whatever task it saw
+   * last, so the next runtime-context snapshot describes the wrong task.
    * @param {'execute' | 'decompose' | 'send'} kind
    * @param {string} text
    * @returns {Promise<void>}
@@ -398,8 +404,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
     setAction({ busy: true, error: null, kind, stage: 'conversation' })
     let stage = 'conversation'
     try {
-      const bound = typeof work.sessionId === 'string' && work.sessionId !== '' ? work.sessionId : null
-      const target = bound ?? (await openWorkTask(ctx, work.task, { open: false })).sessionId
+      const target = (await openWorkTask(ctx, work.task, { open: false })).sessionId
       stage = 'prompt'
       await sendWorkPrompt(ctx, target, text)
       stage = 'open'

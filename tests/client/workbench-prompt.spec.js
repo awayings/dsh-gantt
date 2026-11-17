@@ -3,8 +3,20 @@
 // content alone through the same create → queue → hand-off path. A successful
 // turn clears the editor; a failure keeps the text so it can be retried.
 import { afterEach, describe, expect, it } from 'vitest'
-import { click, deferred, flush, installFetch, q, setField, text, unmountAll } from './harness.js'
 import {
+  click,
+  deferred,
+  flush,
+  installFetch,
+  jsonResponse,
+  q,
+  requestBody,
+  setField,
+  text,
+  unmountAll,
+} from './harness.js'
+import {
+  FOCUS_SET,
   WORK_WITHOUT_SESSION,
   defaultRoutes,
   fakeServices,
@@ -113,6 +125,39 @@ describe('editable prompt', () => {
     expect(services.prompts).toEqual([{ sessionId: 'session-work', text: 'Check the failing e2e run.' }])
     expect(handoff()).toMatchObject({ sessionId: 'session-work' })
     expect(promptValue(view.container)).toBe('')
+  })
+
+  it.each([
+    ['execute', 'Complete this task.'],
+    ['decompose', 'Decompose this task into subtasks.'],
+    ['send', 'Check the failing e2e run.'],
+  ])('refreshes the bound conversation focus before the %s prompt is queued', async (action, expected) => {
+    const order = []
+    stubOpen(fakeWindow())
+    installFetch(defaultRoutes({
+      routes: {
+        [FOCUS_SET]: (call) => {
+          order.push(['focus', requestBody(call)])
+          return jsonResponse({ ok: true, taskId: 'task-1' })
+        },
+      },
+    }))
+    const services = fakeServices({
+      send: async (sessionId, promptText) => {
+        order.push(['send', sessionId, promptText])
+      },
+    })
+    const { view } = renderWorkbench({ services })
+    await flush()
+
+    if (action === 'send') setField(q(view.container, PROMPT_FIELD), expected)
+    click(q(view.container, `[data-action="${action}"]`))
+    await flush()
+
+    expect(order).toEqual([
+      ['focus', { sessionId: 'session-work', taskId: 'task-1' }],
+      ['send', 'session-work', expected],
+    ])
   })
 
   it('creates the conversation for an unbound task and sends the content there', async () => {
