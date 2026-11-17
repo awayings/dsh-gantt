@@ -128,6 +128,10 @@ export function GanttPage({ ctx }) {
     () => new Set(allTasks.filter(task => task.status === 'done').map(task => task.id)),
     [allTasks],
   )
+  const unfinishedIds = useMemo(
+    () => new Set(allTasks.filter(task => task.status !== 'done' && task.status !== 'cancelled').map(task => task.id)),
+    [allTasks],
+  )
   const activityByTask = useMemo(() => {
     const activities = new Map()
     for (const task of allTasks) {
@@ -137,13 +141,14 @@ export function GanttPage({ ctx }) {
     return activities
   }, [allTasks, statuses])
   const filterIds = useMemo(() => {
+    if (filter === 'unfinished') return unfinishedIds
     if (filter === 'active') return new Set(activityByTask.keys())
     if (filter === 'frontier') return frontierIds
     if (filter === 'next') return nextIds
     if (filter === 'today') return todayIds
     if (filter === 'done') return doneIds
     return null
-  }, [filter, frontierIds, nextIds, todayIds, doneIds, activityByTask])
+  }, [filter, unfinishedIds, frontierIds, nextIds, todayIds, doneIds, activityByTask])
   const filterCount = filterIds === null ? 0 : [...filterIds].filter(id => byId.has(id)).length
   const filteredTasks = useMemo(
     () => (filterIds === null ? tasks : filterTree(tasks, filterIds)),
@@ -536,7 +541,7 @@ export function GanttPage({ ctx }) {
       ? h('section', { className: 'gantt-filter' },
         h('span', { className: 'gantt-filter-label' }, t('filter.label')),
         h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
-          [['all', 'filter.all'], ['active', 'filter.active'], ['frontier', 'filter.frontier'], ['next', 'filter.next'], ['today', 'filter.today'], ['done', 'filter.done']].map(([value, key]) => h('button', {
+          [['all', 'filter.all'], ['unfinished', 'filter.unfinished'], ['active', 'filter.active'], ['frontier', 'filter.frontier'], ['next', 'filter.next'], ['today', 'filter.today'], ['done', 'filter.done']].map(([value, key]) => h('button', {
             key: value,
             className: 'gantt-seg-btn',
             type: 'button',

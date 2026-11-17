@@ -396,13 +396,17 @@ runs in UTC and the default zone has no DST. "Today" in the report is the same
 task-day date, not the host's UTC date. The timer only fires while the host
 process is running, and the manual route is the fallback after downtime.
 
-## Perspectives: all, active, frontier, next, today, done
+## Perspectives: all, unfinished, active, frontier, next, today, done
 
-The Gantt page can render the same tree through six perspectives; the
+The Gantt page can render the same tree through seven perspectives; the
 timeline and row set are filtered from the pruned tree, not merely collapsed.
 
 - **All** — the full tree, using the depth level and manual collapse controls as
   before.
+- **Unfinished** (未完成) — keep every node whose status is neither `done` nor
+  `cancelled`, with its ancestors as path context. This is the plain
+  status-oriented view: tasks the user still has to touch, including `todo`,
+  `in_progress`, and `blocked` ones.
 - **Active** (进行中) — keep the tasks whose work conversation is running or
   waiting for a choice, from the live session-status snapshot.
 - **Frontier** (前沿) — keep the **paths** from each track's frontier entry
@@ -417,7 +421,8 @@ timeline and row set are filtered from the pruned tree, not merely collapsed.
   context, and prune the pending branches, so finished work can be reviewed.
 
 The pruning rule is: a node survives when it is in the keep set or has a
-surviving descendant. 前沿/该动/今日 split what the old 待做 view aggregated.
+surviving descendant. 前沿/该动/今日 split what the old 待做 view aggregated;
+未完成 restores the plain status dimension (not done, not cancelled).
 Switching to any pruned view clears the collapse set so every kept path is
 visible; switching back to 全部 re-applies the depth-level collapse. The page
 shows the number of kept tasks next to the switch, a mode-specific empty hint
@@ -524,7 +529,9 @@ results straight into the tree.
   works when the task has no conversation yet — it creates the dedicated
   conversation, queues the message, then opens it. A successful send clears the
   editor; a failure keeps the text. An existing conversation can be opened in
-  place or in a new window.
+  place or in a new window. The task view also renders the task's markdown
+  description in a fixed-height, scrollable preview above the write-back rows
+  (an empty description shows a hint instead).
   The **Active** view filter keeps tasks whose bound conversation is running or
   waiting for a user choice, and waiting tasks carry a warning badge. `GET
   api/gantt/work` reports the task, its bound conversation, and the work

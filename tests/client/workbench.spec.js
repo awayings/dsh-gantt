@@ -80,7 +80,18 @@ describe('task view', () => {
     expect(q(writeback, '[data-field="report"] .gantt-workbench-writeback-value').getAttribute('title'))
       .toBe(TASK.report)
     expect(qa(view.container, '.gantt-workbench-task > [data-block]').map(element => element.dataset.block))
-      .toEqual(['conversation', 'writeback', 'trajectory'])
+      .toEqual(['conversation', 'description', 'writeback', 'trajectory'])
+    const description = q(view.container, '[data-block="description"]')
+    expect(text(description, '.gantt-workbench-chat-title')).toBe('Description')
+    const descriptionBody = q(description, '.gantt-workbench-description-body')
+    expect(descriptionBody).not.toBeNull()
+    expect(text(descriptionBody, 'h1')).toBe('Ship the workbench')
+    expect(text(descriptionBody, 'strong')).toBe('markdown')
+    expect(text(descriptionBody, 'code')).toBe('renderMarkdown')
+    expect(qa(descriptionBody, 'li').map(element => element.textContent))
+      .toEqual(['conversation', 'description'])
+    expect(text(descriptionBody, 'a')).toBe('Spec')
+    expect(q(descriptionBody, 'a').getAttribute('href')).toBe('https://example.com/spec')
     expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
     expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Running')
     expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('true')
@@ -116,10 +127,24 @@ describe('task view', () => {
     expect(tabs.map(element => element.textContent)).toEqual(['任务', '技能', '编队'])
     expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
     expect(text(view.container, '[data-block="conversation"] .gantt-workbench-chat-title')).toBe('关联对话')
+    expect(text(view.container, '[data-block="description"] .gantt-workbench-chat-title')).toBe('任务描述')
     expect(text(view.container, '[data-field="operator"] .gantt-workbench-writeback-label')).toBe('操作人')
     expect(text(view.container, '[data-field="completedBy"] .gantt-workbench-writeback-label')).toBe('完成人')
     expect(text(view.container, '[data-field="report"] .gantt-workbench-writeback-label')).toBe('汇报结果')
     expect(text(view.container, '[data-field="report"] .gantt-workbench-writeback-value')).toBe('Wired the write-back rows.')
+  })
+
+  it('shows the empty description state without a markdown body', async () => {
+    installFetch(defaultRoutes({
+      work: { ...WORK_BY_SESSION, task: { ...TASK, description: '' } },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    const description = q(view.container, '[data-block="description"]')
+    expect(text(description, '.gantt-workbench-chat-title')).toBe('Description')
+    expect(q(description, '.gantt-workbench-description-body')).toBeNull()
+    expect(text(description, '.gantt-workbench-empty')).toBe('No description yet.')
   })
 
   it('opens the bound conversation from the task view', async () => {

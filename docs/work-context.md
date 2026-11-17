@@ -137,6 +137,14 @@ compact task object beside the markdown, and the MCP tool
 `gantt_context`, there is no fallback to the whole tree: the caller must name a
 task, and an unknown id is a `404`/isError.
 
+## Workbench task view
+
+The task view in the workbench (both the in-page panel and the right-rail tab)
+opens with the bound conversation and its actions, then the task's markdown
+`description` in a fixed-height scrollable preview (`renderMarkdown` in
+`src/client/markdown.js`; an empty description shows a localized hint), the
+read-only write-back rows (operator, completer, report), and the trajectory.
+
 ## Workbench prompt editor
 
 The task view in the workbench (both the in-page panel and the right-rail tab)

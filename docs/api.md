@@ -698,6 +698,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/work?sessionId=<session-id>'
     "number": "1.8.1",
     "ref": "",
     "title": "写验收用例",
+    "description": "覆盖 HTTP 与 e2e 两层验收。\n\n- 路由用例\n- 真机用例",
     "status": "in_progress",
     "progress": 40,
     "doneWhen": "HTTP 与 e2e 全绿",
@@ -717,10 +718,12 @@ curl -s 'http://127.0.0.1:3080/api/gantt/work?sessionId=<session-id>'
 - Neither parameter, or two blank values, is a `400`
   (`taskId or sessionId is required`); an over-long conversation id is a `400`
   (`sessionId must be at most 200 characters`).
-- `task` is `null` or `{ id, number, ref, title, status, progress, doneWhen,
-  operatorId, completedById, report }`, where `number` is the rendered dotted
-  number; `sessionId` is that task's dedicated conversation, or `null` when it
-  has none. `operatorId`/`completedById` are agent registry ids (the client
+- `task` is `null` or `{ id, number, ref, title, description, status, progress,
+  doneWhen, operatorId, completedById, report }`, where `number` is the rendered
+  dotted number and `description` is the task's markdown description (empty
+  string when none; the workbench task tab renders it as a fixed-height,
+  scrollable preview); `sessionId` is that task's dedicated conversation, or
+  `null` when it has none. `operatorId`/`completedById` are agent registry ids (the client
   resolves their names through `GET /api/gantt/agents` and keeps the id visible
   when the lookup fails); `report` is the completion text written by
   `POST /api/gantt/task/report`.

@@ -595,7 +595,7 @@ describe('task filter', () => {
 
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.getAttribute('data-filter')))
-      .toEqual(['all', 'active', 'frontier', 'next', 'today', 'done'])
+      .toEqual(['all', 'unfinished', 'active', 'frontier', 'next', 'today', 'done'])
     expect(filterButton(view, 'all').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
     expect(q(view.container, '.gantt-brief')).toBeNull()
@@ -696,6 +696,53 @@ describe('task filter', () => {
     expect(q(view.container, '.gantt-banner')).toBeNull()
   })
 
+  it('keeps only unfinished nodes and their ancestors in Unfinished', async () => {
+    const tasks = makeFilterTree()
+    tasks[0].children[0].status = 'done'
+    tasks[0].children[0].progress = 100
+    tasks[1].status = 'cancelled'
+    tasks[1].children[0].status = 'cancelled'
+    tasks[2].status = 'done'
+    const { view } = await renderFiltered(filterTreePayload({ tasks }))
+
+    click(filterButton(view, 'unfinished'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+      '3 元能力',
+      '3.1 复盘节奏',
+    ])
+    expect(row(view.container, '1.1 数据底座')).toBeNull()
+    expect(row(view.container, '2 生活系统')).toBeNull()
+    expect(text(view.container, '.gantt-filter-count')).toBe('4 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('5 tasks')
+    expect(filterButton(view, 'unfinished').getAttribute('data-active')).toBe('true')
+  })
+
+  it('shows a mode-specific hint when nothing is unfinished', async () => {
+    const tasks = makeFilterTree()
+    const markDone = (nodes) => {
+      for (const node of nodes) {
+        node.status = 'done'
+        markDone(node.children ?? [])
+      }
+    }
+    markDone(tasks)
+    tasks[1].status = 'cancelled'
+    const { view } = await renderFiltered(filterTreePayload({ tasks }))
+
+    click(filterButton(view, 'unfinished'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+    expect(q(view.container, '.gantt-body')).toBeNull()
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing is unfinished.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All to see the whole tree.')
+    expect(q(view.container, '.gantt-filter-count')).toBeNull()
+
+    click(filterButton(view, 'all'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+  })
+
   it('shows a mode-specific hint when a perspective is empty', async () => {
     const { view } = await renderFiltered()
 
@@ -757,7 +804,7 @@ describe('task filter', () => {
 
     const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.textContent))
-      .toEqual(['全部', '进行中', '前沿', '该动', '今日', '已完成'])
+      .toEqual(['全部', '未完成', '进行中', '前沿', '该动', '今日', '已完成'])
     click(filterButton(view, 'frontier'))
     expect(text(view.container, '.gantt-filter-count')).toBe('1 条路径')
     expect(text(view.container, '.gantt-corner-sub')).toBe('3 个任务')

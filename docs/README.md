@@ -7,7 +7,7 @@ browser half is ESM under `src/client/` bundled into the single `lib/client.js`
 artifact. The
 Gantt page and the Today page render one unified tree
 imported from an external task-tracker workspace; the Gantt page adds the
-perspective filter (frontier / next / today), and a native conversation gets a right-rail **甘特** tab
+perspective filter (unfinished / active / frontier / next / today / done), and a native conversation gets a right-rail **甘特** tab
 plus host assistant tools for focused-task context, decomposition, and automatic
 session/turn provenance. Start with the [README](../README.md) for installation
 and a feature tour.

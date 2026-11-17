@@ -14,6 +14,7 @@ import { agentLabel, loadAgentNames, reportPreview, reportText } from '../agent-
 import { localeTag } from '../dates.js'
 import { h } from '../dom.js'
 import { requestJson, useLocale } from '../hooks.js'
+import { Markdown } from '../markdown.js'
 import { CSS_WORKBENCH } from '../styles/workbench.js'
 import { conversationState, useSessionStatuses } from '../session-status.js'
 import { openSessionWindow, sendSessionToWindow } from '../session-window.js'
@@ -163,8 +164,23 @@ function writebackBlock(task, names, t) {
   )
 }
 
+/** Read-only markdown task description with a fixed-height scroll area. */
+function descriptionBlock(task, t) {
+  return h('section', { className: 'gantt-workbench-description', 'data-block': 'description' },
+    h('div', { className: 'gantt-workbench-chat-head' },
+      h('span', { className: 'gantt-workbench-chat-title' }, t('workbench.task.description')),
+    ),
+    h(Markdown, {
+      text: task.description,
+      className: 'gantt-workbench-description-body',
+      empty: h('p', { className: 'gantt-workbench-empty' }, t('workbench.task.noDescription')),
+    }),
+  )
+}
+
 /** Full task view: the bound conversation (or its execute entry), the editable
- * prompt, the read-only write-back rows, and the trajectory. */
+ * prompt, the markdown description, the read-only write-back rows, and the
+ * trajectory. */
 function taskPanel({
   work, trajectory, names, action, locale, t, statuses, prompt, openSession,
   onPromptChange, onExecute, onDecompose, onSend, onOpenWindow,
@@ -258,6 +274,7 @@ function taskPanel({
       ),
       h('div', { className: 'gantt-workbench-chat-actions' }, buttons),
     ),
+    descriptionBlock(work.task, t),
     writebackBlock(work.task, names, t),
     h('section', { className: 'gantt-workbench-conversation', 'data-block': 'trajectory' },
       h('div', { className: 'gantt-workbench-chat-head' },

@@ -9,8 +9,9 @@ sidebar:
   splitting, moving, deletion. The six imported tracks are the tree roots and
   their Hermes nodes hang below them, so the imported work is visible here.
   Decompose a node into subtasks, schedule a node into a day plan, and export
-  the whole tree as markdown model context. **全部 / 进行中 / 前沿 / 该动 /
-  今日 / 已完成** perspectives prune the tree to the paths that matter (进行中
+  the whole tree as markdown model context. **全部 / 未完成 / 进行中 / 前沿 /
+  该动 / 今日 / 已完成** perspectives prune the tree to the paths that matter
+  (未完成 keeps every task whose status is neither done nor cancelled; 进行中
   keeps tasks whose work conversation is running or waiting for a choice; 前沿
   and 该动 keep each track's frontier and next paths; 今日 keeps the tasks the
   daily brief picked for today), and **重算前沿和该动** on the right of the
@@ -21,7 +22,8 @@ sidebar:
   session and turn in a task trajectory that the tab, the tools, and
   `GET /api/gantt/trajectory` can read back. **Work mode** turns a row click
   into a workbench interaction without leaving the page: the **工作台** panel
-  opens beside the tree with the task's work conversation and trajectory. A task
+  opens beside the tree with the task's work conversation, its description as a
+  fixed-height scrollable markdown preview, and its trajectory. A task
   without a conversation shows **执行**, which creates it in the work workspace,
   queues the localized **完成任务** prompt into it so the model starts at once,
   and opens that same conversation in a new browser window (one conversation per
@@ -116,11 +118,12 @@ is always by path — it is not published to npm.
 6. On a tree row, **Decompose** creates subtasks (and optionally schedules each
    one), **Schedule** puts an existing node into a day's plan, and **Export
    context** copies the tree plus today's plan as markdown.
-7. The perspective switch (**All / Active / Frontier / Next / Today / Done**)
-   prunes the tree to the paths that matter: Frontier keeps each track's newest
-   pending leaf, Next the first executable leaf, and Today the tasks the daily
-   brief picked for today. **Recompute frontier and next** on the right of the
-   switch refreshes the daily brief.
+7. The perspective switch (**All / Unfinished / Active / Frontier / Next /
+   Today / Done**) prunes the tree to the paths that matter: Unfinished keeps
+   every task whose status is neither done nor cancelled, Frontier keeps each
+   track's newest pending leaf, Next the first executable leaf, and Today the
+   tasks the daily brief picked for today. **Recompute frontier and next** on
+   the right of the switch refreshes the daily brief.
 8. With `dsh-better-sidebar`, open the **甘特** tab in a native conversation
    and click a task to focus it. Ask the conversation model to decompose it:
    the assistant tools read the focused chain (`gantt_context`) and write the

@@ -68,6 +68,7 @@ describe('work mode over HTTP', () => {
       number: '1',
       ref: '',
       title: 'Dedicated task',
+      description: '',
       status: 'todo',
       progress: 0,
       doneWhen: '',
