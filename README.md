@@ -364,6 +364,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/api.md](docs/api.md) — JSON API reference
 - [docs/mcp.md](docs/mcp.md) — MCP server, transports, five tools, troubleshooting
 - [docs/deployment.md](docs/deployment.md) — host deployment for remote MCP clients: systemd service, ports, health checks, Claude Code + Codex
+- [docs/remote-exec.md](docs/remote-exec.md) — safety-gated SSH wrapper for host-side steps: guard rules, audit log, tests
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
 - [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, native-conversation assistant tools, task trajectory/protocol context, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist
