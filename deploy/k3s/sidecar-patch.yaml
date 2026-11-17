@@ -16,8 +16,12 @@
 #                    MCP port to the LAN. Probes must repeat the literal address;
 #                    the kubelet connects from the node network namespace, where
 #                    the Pod IP (host IP) is not the address the sidecar bound.
-#   <version>        release version, must match the tarball in
-#                    /data/dsh-home/gantt/releases/dsh-gantt-<version>.tgz
+# GANTT_VERSION is left at "auto": the entrypoint then follows
+# releases/desired (written by deploy/k3s/upgrade-mcp.sh) and falls back to the
+# newest tarball on the PVC. That is what lets an operator upgrade or roll back
+# the sidecar by writing files on the PVC plus a container restart, with no Pod
+# template change and no DSH restart. Pin an explicit version here only to stop
+# following releases/desired.
 #
 # The target Deployment must already mount the /data PVC and have a
 # GANTT_MCP_TOKEN key in its Secret (see deploy/k3s/README.md, "Fresh install").
@@ -32,7 +36,7 @@ spec:
           command: ['/bin/bash', '/opt/gantt/gantt-mcp-entrypoint.sh']
           env:
             - name: GANTT_VERSION
-              value: '<version>'
+              value: auto
             - name: GANTT_MCP_TRANSPORT
               value: http
             - name: GANTT_MCP_HOST

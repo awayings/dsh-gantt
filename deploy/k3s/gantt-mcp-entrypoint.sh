@@ -23,7 +23,6 @@
 set -uo pipefail
 
 ROOT="${GANTT_HOME:-/data/dsh-home/gantt}"
-VERSION="${GANTT_VERSION:?GANTT_VERSION is not set (sidecar release version)}"
 RELEASES="$ROOT/releases"
 RUNTIME="$ROOT/runtime"
 CURRENT="$ROOT/current"
@@ -31,10 +30,30 @@ CURRENT="$ROOT/current"
 log() { echo "[gantt-mcp] $*"; }
 die() { echo "[gantt-mcp] ERROR: $*" >&2; exit 1; }
 
+# Which release to run. An explicit GANTT_VERSION pins one; "auto" (or unset)
+# follows releases/desired, then the newest tarball on the PVC. "auto" is what
+# lets an operator upgrade the sidecar by writing files on the PVC and restarting
+# this container only — no Pod template change, no DSH restart.
+resolve_version() {
+  local version="${GANTT_VERSION:-auto}" newest
+  if [[ "$version" != 'auto' ]]; then
+    printf '%s\n' "$version"
+    return 0
+  fi
+  if [[ -s "$RELEASES/desired" ]]; then
+    tr -d '[:space:]' < "$RELEASES/desired"
+    return 0
+  fi
+  newest="$(ls -1 "$RELEASES"/dsh-gantt-*.tgz 2>/dev/null |
+    sed -e 's|.*/dsh-gantt-||' -e 's|\.tgz$||' | sort -V | tail -1)"
+  [[ -n "$newest" ]] || return 1
+  printf '%s\n' "$newest"
+}
+
 install_release() {
-  local target="$RUNTIME/$VERSION" tarball="$RELEASES/dsh-gantt-$VERSION.tgz" staging="$RUNTIME/.$VERSION.staging"
+  local version="$1" target="$RUNTIME/$version" tarball="$RELEASES/dsh-gantt-$version.tgz" staging="$RUNTIME/.$version.staging"
   if [[ "$(readlink -f "$CURRENT" 2>/dev/null || true)" == "$target" && -f "$CURRENT/bin/gantt-mcp.js" ]]; then
-    log "release $VERSION already installed"
+    log "release $version already installed"
     return 0
   fi
   [[ -f "$tarball" ]] || die "missing $tarball; copy the release tarball onto the PVC (deploy/k3s/README.md)"
@@ -46,19 +65,20 @@ install_release() {
   rm -rf "$staging"
   mkdir -p "$staging"
   tar xzf "$tarball" -C "$staging" --strip-components=1 || die "cannot extract $tarball"
-  [[ -f "$staging/bin/gantt-mcp.js" ]] || die "release $VERSION has no bin/gantt-mcp.js"
+  [[ -f "$staging/bin/gantt-mcp.js" ]] || die "release $version has no bin/gantt-mcp.js"
   rm -rf "$target"
   mv "$staging" "$target"
   # Swap the symlink atomically so a restart mid-install never exposes a half
   # extracted tree.
-  ln -sfn "runtime/$VERSION" "$CURRENT.tmp" && mv -T "$CURRENT.tmp" "$CURRENT"
-  log "installed release $VERSION at runtime/$VERSION"
+  ln -sfn "runtime/$version" "$CURRENT.tmp" && mv -T "$CURRENT.tmp" "$CURRENT"
+  log "installed release $version at runtime/$version"
   # Older runtimes are dead weight on the PVC: releases/ keeps the tarball a
   # rollback extracts from, so pruning the extracted trees is free.
-  find "$RUNTIME" -mindepth 1 -maxdepth 1 -type d ! -name "$VERSION" -exec rm -rf {} + 2>/dev/null || true
+  find "$RUNTIME" -mindepth 1 -maxdepth 1 -type d ! -name "$version" -exec rm -rf {} + 2>/dev/null || true
 }
 
-install_release
+VERSION="$(resolve_version)" || die "no release found under $RELEASES; copy dsh-gantt-<version>.tgz there, write releases/desired, or set GANTT_VERSION"
+install_release "$VERSION"
 
 TRANSPORT="${GANTT_MCP_TRANSPORT:-http}"
 HOST="${GANTT_MCP_HOST:-}"

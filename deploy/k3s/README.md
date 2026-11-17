@@ -19,7 +19,8 @@ Files here:
 | File | Purpose |
 | --- | --- |
 | `sidecar-patch.yaml` | strategic-merge patch adding the `gantt-mcp` container and its ConfigMap volume to a DSH Deployment |
-| `gantt-mcp-entrypoint.sh` | container entrypoint: extract the PVC tarball into `runtime/<version>`, point `current` at it, then `exec node …/bin/gantt-mcp.js` |
+| `gantt-mcp-entrypoint.sh` | container entrypoint: extract the PVC tarball into `runtime/<version>`, point `current` at it, then `exec node …/bin/gantt-mcp.js`; resolves `GANTT_VERSION=auto` through `releases/desired` |
+| `upgrade-mcp.sh` | upgrade or roll back only the sidecar: copy a tarball to the PVC, write `releases/desired`, restart the `gantt-mcp` container in place, verify — no Pod recreation, no DSH restart |
 
 The lab-specific manifests (real Deployment, secrets, scripts) live in the
 cluster repository, not here; this directory is the portable contract.
@@ -99,16 +100,47 @@ by the entrypoint; the tarball is what a rollback extracts from.
    kubectl -n dsh rollout restart deployment/dsh   # host half loads at startup
    ```
 
+6. **Point `releases/desired` at the version** so `GANTT_VERSION=auto` knows what
+   to run (otherwise the entrypoint takes the newest tarball in `releases/`):
+
+   ```bash
+   printf '%s\n' '<version>' | kubectl -n dsh exec -i deploy/dsh -c dsh -- \
+     tee /data/dsh-home/gantt/releases/desired
+   ```
+
 ## Upgrade / rollback
 
-Upgrade: copy the new tarball into `releases/`, bump `GANTT_VERSION` in the
-sidecar env, install the plugin from it, `kubectl -n dsh rollout restart
-deployment/dsh`. The entrypoint extracts the new version and swaps `current`
-atomically.
+There are two levels, because the artifact has two units:
 
-Rollback: set `GANTT_VERSION` back to the version whose tarball is still in
-`releases/` (and reinstall the plugin from it), then restart. A rollback needs
-no rebuild — the old tarball is the artifact.
+**MCP sidecar only** (what most upgrades are — the JSON-RPC server changes, the
+UI half does not). No Pod recreation, no DSH restart, sessions keep running:
+
+```bash
+bash deploy/k3s/upgrade-mcp.sh /path/to/dsh-gantt-<version>.tgz
+```
+
+It copies the tarball and checksum to `releases/`, writes `releases/desired`,
+then `kill -TERM 1` inside the `gantt-mcp` container. The kubelet restarts that
+one container, the entrypoint reads `desired`, extracts atomically and execs the
+new `bin/gantt-mcp.js`; the script then asserts `serverInfo.version` and that the
+Pod UID is unchanged. The same command with an older tarball is the rollback.
+
+This requires the Deployment to keep `GANTT_VERSION=auto`. Pinning an explicit
+version in the sidecar env is supported but stops it from following
+`releases/desired`.
+
+**Full upgrade** (the plugin/UI half changes too — it is loaded when DSH starts):
+
+```bash
+bash install-gantt.sh /path/to/dsh-gantt-<version>.tgz   # in the cluster repo
+```
+
+which does the same PVC/`desired` work, installs the plugin into the DSH profile
+with `dsh plugin add file:<tarball>`, and rolls the Deployment (`Recreate`, so
+DSH restarts). Rollback is the same with the older tarball.
+
+A rollback never needs a rebuild: every installed tarball stays under
+`releases/`, and `runtime/` is pruned/re-extracted by the entrypoint.
 
 ## Verify
 
