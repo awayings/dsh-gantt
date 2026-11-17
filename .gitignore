@@ -8,4 +8,4 @@ dist/
 coverage/
 .tmp/
 *.log
-.agents/
+.agents/worktrees/
