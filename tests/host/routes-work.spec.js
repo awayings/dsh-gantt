@@ -31,8 +31,24 @@ describe('GET /api/gantt/work', () => {
     expect(result.payload).toEqual({
       ok: true,
       cwd: DEFAULT_WORK_CWD,
-      task: { id: task.id, number: '1', ref: '', title: 'Work task', status: 'todo', progress: 0, doneWhen: '' },
+      task: { id: task.id, number: '1', ref: '', title: 'Work task', status: 'todo', progress: 0, doneWhen: '', operatorId: '', completedById: '', report: '' },
       sessionId: null,
+    })
+  })
+
+  it('reports the operator, completer, and completion report', async () => {
+    const { routes } = start()
+    const task = await createTask(routes)
+    const registered = await invoke(routes, ROUTES.registerAgent, { name: 'claude-code', type: 'ai-agent' })
+    const agentId = registered.payload.agent.id
+    await invoke(routes, ROUTES.reportCompletion, { taskId: task.id, agentId, report: 'verified in tests/host' })
+    const { payload } = await invoke(routes, `${ROUTES.work}?taskId=${task.id}`)
+    expect(payload.task).toMatchObject({
+      status: 'done',
+      progress: 100,
+      operatorId: agentId,
+      completedById: agentId,
+      report: 'verified in tests/host',
     })
   })
 

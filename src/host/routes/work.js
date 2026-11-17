@@ -45,12 +45,13 @@ function textOf(value) {
 }
 
 /**
- * The client-facing work task subset: identity, rendered number, status, and
- * completion standard.
+ * The client-facing work task subset: identity, rendered number, status,
+ * completion standard, and the completion write-back fields the workbench and
+ * the task dialog display.
  * @param {GanttStore} store
  * @param {string} taskId
  * @returns {{ id: string, number: string, ref: string, title: string, status: string,
- * progress: number, doneWhen: string }}
+ * progress: number, doneWhen: string, operatorId: string, completedById: string, report: string }}
  */
 function workTask(store, taskId) {
   const node = /** @type {TreeTaskNode} */ (store.getNode(taskId))
@@ -62,6 +63,9 @@ function workTask(store, taskId) {
     status: node.status,
     progress: node.progress,
     doneWhen: node.doneWhen,
+    operatorId: node.operatorId,
+    completedById: node.completedById,
+    report: node.report,
   }
 }
 
