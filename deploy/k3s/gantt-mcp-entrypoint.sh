@@ -51,7 +51,11 @@ resolve_version() {
 }
 
 install_release() {
-  local version="$1" target="$RUNTIME/$version" tarball="$RELEASES/dsh-gantt-$version.tgz" staging="$RUNTIME/.$version.staging"
+  # Keep this on its own line: bash expands a whole `local` line before it
+  # assigns anything, so `local version="$1" target="$RUNTIME/$version"` reads
+  # $version from the caller's scope and dies under `set -u`.
+  local version="$1"
+  local target="$RUNTIME/$version" tarball="$RELEASES/dsh-gantt-$version.tgz" staging="$RUNTIME/.$version.staging"
   if [[ "$(readlink -f "$CURRENT" 2>/dev/null || true)" == "$target" && -f "$CURRENT/bin/gantt-mcp.js" ]]; then
     log "release $version already installed"
     return 0

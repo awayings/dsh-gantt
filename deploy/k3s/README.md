@@ -166,6 +166,7 @@ the installed release.
 | log `address already in use` | another MCP process on the port (e.g. a leftover manual run) |
 | probe failures, `kubectl describe pod` shows `connection refused` on `/healthz` | probe `host` omitted: with `hostNetwork` the Pod IP is the host IP, but the sidecar binds the tailnet address, so `httpGet` must repeat that literal `host` |
 | UI unreachable while the sidecar crash-loops | the Service selects the Pod, and an unready Pod leaves the endpoints list; fix the sidecar or remove it, the `dsh` container itself is healthy |
+| sidecar `CrashLoopBackOff`, log `<script>: line N: version: unbound variable` | stale entrypoint in the `gantt-entrypoint` ConfigMap: `set -u` plus a one-line `local a="$1" b="$a"` reads `$a` from the caller's scope. Regenerate the ConfigMap from `deploy/k3s/gantt-mcp-entrypoint.sh`; `tests/e2e/sidecar-entrypoint.spec.js` executes the script so this class of bug fails the gate |
 | two containers writing the DB | expected: SQLite WAL supports concurrent processes; keep transactions short (the store already does) |
 
 ## Clients
