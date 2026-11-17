@@ -301,6 +301,12 @@ the Codex script replaces a delimited block in `~/.codex/AGENTS.md` from
 substituting the worker name (`GANTT_AGENT_NAME`, default `codex-http` /
 `claude-code-http`). Re-running only replaces the managed block.
 
+Unlike the rest of `docs/`, both templates are written in Chinese: they are
+operating instructions the worker model reads, and the humans who run those
+workers read Chinese. Tool names, field names, ids, and the
+`<gantt-agent-name>` placeholder stay verbatim so the substitution and the
+server contract keep working.
+
 ### 7.1 Client gotchas learned in production
 
 - **A `lo`-style wrapper that does not quote `$@` splits a prompt.** Pipe it

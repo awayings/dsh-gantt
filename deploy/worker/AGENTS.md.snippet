@@ -1,33 +1,27 @@
-## Shared task tree: the `gantt` MCP server
+## 共享任务树：`gantt` MCP server
 
-A remote MCP server named `gantt` holds this project's shared task tree: tracks,
-tasks, decomposition, progress, completion reports, and an append-only
-trajectory of worker rounds. It is already registered here (HTTP over the
-tailnet, bearer token from `GANTT_MCP_TOKEN`); nothing to install locally.
+远端 MCP server `gantt` 保存着本项目的共享任务树：轨道、任务、拆解、进度、完成
+报告，以及只追加的 worker 轮次轨迹。它已经在这里注册好了（tailnet 上的 HTTP，
+bearer token 来自 `GANTT_MCP_TOKEN`），本地不需要安装任何东西。
 
-**Identity.** Your stable agent name is `<gantt-agent-name>`. Pass it as
-`agentName` on every gantt write, and pass your Codex session id as `session`
-when you have one. Register once per session with `register_agent`
-(`type: "ai-agent"`); re-registering the same name keeps the same agent id.
+**身份。** 你的固定 agent 名是 `<gantt-agent-name>`。每次写 gantt 都把它作为
+`agentName` 传进来；有会话 id 时再作为 `session` 传。每个会话调用一次
+`register_agent`（`type: "ai-agent"`）注册；同名重复注册会得到同一个 agent id。
 
-**Start of a Gantt task.** Call `get_worker_guide` once and follow it. Pull with
-`list_ready_tasks` (`tag`: `ready`, `next`, or `todo`), then read
-`get_task_context` for the task you picked - its ancestor chain and background
-come before any write.
+**接到甘特任务时。** 先调用一次 `get_worker_guide` 并照它执行。用
+`list_ready_tasks`（`tag` 取 `ready`、`next` 或 `todo`）拉取任务，然后对你选中的
+任务读 `get_task_context` —— 先读到它的祖先链路和背景，再动手写。
 
-**Loop.** register -> pull -> read context -> work -> `decompose_task` (1-100
-children, max 4 levels, every child needs a verifiable `doneWhen`) or a peer via
-`create_task` (exactly one of `parentId` / `afterTaskId`) -> `update_task` ->
-`report_completion`.
+**循环。** register -> 拉取 -> 读上下文 -> 干活 -> `decompose_task`（1–100 个子
+任务、最多 4 层、每个子任务都要有可验证的 `doneWhen`），或用 `create_task` 建同级
+任务（`parentId` / `afterTaskId` 二选一）-> `update_task` -> `report_completion`。
 
-**Close every round with exactly one call**: `create_task`, `decompose_task`,
-`update_task`, or `report_completion`; or `track_task` when the round wrote no
-task tree. Never end with only a message, never pair a write with `track_task`,
-and never use `track_task` as a completion report - finishing means
-`report_completion` with what was produced and where it was verified.
+**每轮必须以恰好一次调用收尾**：`create_task`、`decompose_task`、`update_task` 或
+`report_completion`；本轮没有写任务树时用 `track_task`。不要只发一条消息就结束，
+不要同时发任务树写操作和 `track_task`，也不要把 `track_task` 当作完成报告 ——
+完成意味着用 `report_completion` 写清产出了什么、在哪里验证过。
 
-**Never fabricate ids.** Act only on ids or numbers the server returned or a
-human gave you; an unknown id answers `task ... was not found`, so re-resolve it
-with `list_ready_tasks` instead of guessing. Nothing is dispatched to you: you
-pull. If the chain is ambiguous, ask the human; if nobody can answer, set
-`status: "blocked"` with the blocker in `summary`.
+**不要编造 id。** 只对 server 返回的或人给你的 id / 编号动手；未知 id 会回
+`task ... was not found`，此时用 `list_ready_tasks` 重新解析，不要猜。没有人给你
+派单：任务是你自己拉取的。链路不明确就问人；没人能回答，就把 `status` 设为
+`"blocked"`，并在 `summary` 里写清阻塞条件。
