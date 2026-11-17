@@ -6,7 +6,10 @@
 // per-session URL: `window.name` (per-window, survives the navigation) and a
 // localStorage handoff for the plugin boot. Before navigating we also seed the
 // app's own last-selection key, so the new window's initial restoration picks
-// the target instead of racing the plugin's `openSession`.
+// the target instead of racing the plugin's `openSession`. The window that
+// consumes the per-window carrier also clears the shared fallback, so the
+// opener (whose plugin entry a rebuild may reload) cannot pick it up later and
+// jump away from the page the user is on.
 
 /** localStorage key carrying one pending session between two windows. */
 export const HANDOFF_KEY = 'gantt.pendingSession'
@@ -106,7 +109,12 @@ function takeWindowHandoff(now) {
  */
 export function takeSessionHandoff(now = Date.now()) {
   const fromName = takeWindowHandoff(now)
-  if (fromName !== null) return fromName
+  if (fromName !== null) {
+    // This window was the one that was handed the target; the shared fallback
+    // must not linger for another window (the opener reloading its plugin).
+    discardSessionHandoff()
+    return fromName
+  }
   try {
     const raw = globalThis.localStorage.getItem(HANDOFF_KEY)
     if (raw === null) return null

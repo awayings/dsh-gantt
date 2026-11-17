@@ -171,7 +171,16 @@ keeps working on the wrong task.
 
 The editor is deliberately client-side: the model receives the composed text as
 a normal user message, and the host never stores it. That keeps the system
-prompt and the tool contract unchanged.
+prompt and the tool contract unchanged. The window that consumes the per-window
+handoff clears the shared `localStorage` fallback, so the opener cannot be
+navigated away later when its plugin entry is replaced by a client rebuild.
+
+The workbench lives beside a global `main` panel whose selection the shell keeps
+in memory. A client reload (a rebuilt `lib/client.js` replaced by client-hmr, or
+a browser reload) would drop the Gantt page back to the conversation;
+`src/client/panel-session.js` remembers the selected page per tab and re-selects
+it after the plugin applies again (see
+[development.md](development.md#active-main-panel-across-client-reloads)).
 
 ## Adding a context field
 

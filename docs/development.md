@@ -59,7 +59,7 @@ script because the DSH client loader fetches a single artifact per package.
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | host | Five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
 | `src/host/prompt.js` | host | Static task-protocol section and dynamic focus trajectory context (optional `systemPrompt`) |
-| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), dialogs, and stylesheet modules (ESM) |
+| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), active-page restore across client reloads (`panel-session.js`), dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
 
@@ -77,7 +77,23 @@ only (mtime, ctime, size) and serves chunk URLs as immutable, so runtime-split
 chunks would keep the old revision and stale bytes. `react` arrives through the
 factory `require`, so leave it external. The artifact is gitignored; the e2e
 gate rebuilds it before driving it, and `pnpm run deploy` builds it before
-linking the checkout.
+linking the checkout. The build compares the rendered bundle with the current
+file and skips the write when they match: client-hmr reacts to mtime/size, so
+rewriting identical bytes would reload every open page for nothing.
+
+### Active main panel across client reloads
+
+`gantt` and `today` are global `main` panels of the shell, not conversations:
+the layout keeps the selected panel id in its store's memory and resets it as
+soon as a keyed entry unregisters (`retainMainPanels`). DSH replaces a plugin
+client entry whenever `lib/client.js` is rebuilt, so a `pnpm run check` from any
+running task session used to drop an open Gantt page back to the conversation;
+a full browser reload starts with no selection at all. `src/client/panel-session.js`
+remembers the selected plugin page in `sessionStorage` (per tab) when the entry
+unloads or the page hides, and the next apply re-selects it once the keyed
+entries are registered again. The marker is short-lived (15 s) and only a
+`gantt`/`today` selection is restored; when the host exposes no usable layout
+service the plugin simply keeps the conversation.
 
 ## Quality gate commands
 
@@ -196,7 +212,7 @@ Recorded decisions:
 | `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, catalog-aware resume) and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
@@ -405,10 +421,13 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 3. Edit `src/host/`: these modules run in the `dsh web` server process and are
    re-read on restart, so restart `dsh web` after host changes. The daily-brief
    scheduler restarts with the process.
-4. Edit `src/client/`, then run `pnpm run build`: the artifact file changes, so
-   DSH derives a new client artifact revision and a page reload picks up the new
-   bytes. Forgetting the build serves the previous artifact — run
-   `pnpm run build` whenever `git status` shows `src/client/` edits.
+4. Edit `src/client/`, then run `pnpm run build`: a changed bundle gets a new
+   artifact revision, client-hmr replaces the entry in every open page, and the
+   open Gantt/Today page re-selects itself instead of falling back to the
+   conversation. Forgetting the build serves the previous artifact — run
+   `pnpm run build` whenever `git status` shows `src/client/` edits; an
+   unchanged bundle is not rewritten, so a repeated gate run does not reload
+   open pages.
 5. Run the narrow test first (`pnpm exec vitest run tests/<area> -t "…"`), then
    commit and push. The commit hook runs the static check; the push hook runs
    the full gate before anything reaches `main`.

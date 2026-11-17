@@ -43,8 +43,15 @@ const source = [
 await mkdir(dirname(outFile), { recursive: true })
 // Write-then-rename: the artifact is read while a rebuild is in flight (a page
 // load, the e2e suite, `pnpm run package`), and a reader must never see a
-// truncated bundle.
-const tempFile = `${outFile}.${process.pid}.tmp`
-await writeFile(tempFile, source)
-await rename(tempFile, outFile)
-console.log(`build-client: lib/client.js (${(Buffer.byteLength(source) / 1024).toFixed(1)} KiB)`)
+// truncated bundle. An unchanged artifact is left alone: client-hmr reloads an
+// entry when this file's mtime/size changes, so rewriting identical bytes would
+// reload every open page for no reason (the check gate rebuilds on every run).
+const existing = await readFile(outFile, 'utf8').catch(() => null)
+if (existing === source) {
+  console.log('build-client: lib/client.js unchanged')
+} else {
+  const tempFile = `${outFile}.${process.pid}.tmp`
+  await writeFile(tempFile, source)
+  await rename(tempFile, outFile)
+  console.log(`build-client: lib/client.js (${(Buffer.byteLength(source) / 1024).toFixed(1)} KiB)`)
+}

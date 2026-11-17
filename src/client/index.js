@@ -6,6 +6,7 @@ import { GanttPage } from './pages/gantt.js'
 import { GanttPanel } from './pages/panel.js'
 import { TodayPage } from './pages/today.js'
 import { GanttWorkbench } from './pages/workbench.js'
+import { installPanelCapture, restorePanel } from './panel-session.js'
 import { resumeHandedSession } from './session-window.js'
 
 // The browser half of the plugin: registers the two sidebar entries, the two
@@ -18,6 +19,9 @@ export const plugin = {
   inject: ['slots', 'locale'],
   apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTS), 'gantt: locale dictionaries')
+    // Installed before the `main` entries so its unload cleanup still sees the
+    // selected page while they unregister; the next apply restores it.
+    installPanelCapture(ctx)
     const t = ctx.locale.bind(NS)
     // A window opened by the workbench's execute button carries its target
     // conversation in a short-lived handoff; select it once the catalog is ready.
@@ -65,5 +69,7 @@ export const plugin = {
       name: 'main',
       key: 'today',
     }, () => h(TodayPage, { ctx })))
+    // After both keyed entries exist: the layout rejects an unknown panel id.
+    restorePanel(ctx)
   },
 }

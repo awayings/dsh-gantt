@@ -667,7 +667,10 @@ from the injected `gantt:focus` runtime context. The full context layout is in
 [work-context.md](work-context.md). The
 new window restores that exact conversation: the opener seeds the workspace
 selection key and a short-lived `window.name`/localStorage handoff, so the window
-does not come up on the previously selected conversation. The **Active** view filter keeps only tasks whose dedicated
+does not come up on the previously selected conversation. The window that
+consumes the per-window carrier also clears the shared localStorage fallback, so
+the opener — whose plugin entry a client rebuild may replace — cannot pick the
+handoff up later and navigate away from the page the user is on. The **Active** view filter keeps only tasks whose dedicated
 conversation is running or waiting for a user choice, and those waiting rows
 carry a visual warning badge.
 

@@ -90,7 +90,8 @@ pnpm run deploy --uninstall     # remove the bundle from the profile
 
 Every form records a pnpm `link:` dependency, so the profile resolves this
 directory rather than a copy: restart `dsh web` after editing anything under
-`src/host/`, and run `pnpm run build` (it rewrites `lib/client.js`) plus reload
+`src/host/`, and run `pnpm run build` (it rewrites `lib/client.js` when the bundler
+output changed) plus reload
 the page after editing `src/client/` — no reinstall step.
 `pnpm run deploy` takes `--profile <name>` and `--home <dir>` when the target is
 not the default `web` profile under `$DSH_HOME` (`~/.dsh`).
@@ -307,7 +308,7 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/mcp.js`, `bin/gantt-mcp.js` | external-agent MCP server and its CLI (stdio or optional HTTP) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
-| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), dialogs, styles |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 
@@ -318,7 +319,9 @@ every chunk URL as immutable, so splitting the entry across runtime chunks would
 leave the revision unchanged and the browser on stale bytes. React stays
 external — the DSH loader injects `require` into the factory, so the platform
 React instance arrives through `require('react')` and the artifact has no
-top-level `import`/`export`. The e2e suite rebuilds the artifact and pins both
+top-level `import`/`export`. A bundle whose bytes did not change is left
+untouched, so a no-op gate run does not change the artifact revision (which
+would reload every open page). The e2e suite rebuilds the artifact and pins both
 rules; `pnpm run build` also runs from the `prepare` hook.
 
 ## Development / quality gates

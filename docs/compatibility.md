@@ -19,8 +19,10 @@ background assistant protocol context; the work-mode round adds schema-v6
 `work_sessions`, the `gantt_track`/`gantt_create_task` round-closing tools, and
 the `gantt-work` workbench tab; the cancelled-status round adds schema-v7
 (`tasks.status` widened with `cancelled`, excluded from rollups/stats) and
-conversation titles on trajectory rows, covered by the same gate. The manual GUI
-checklist is in `docs/development.md` and had not been run at that date.
+conversation titles on trajectory rows, covered by the same gate; the
+page-restore round adds the sessionStorage main-panel marker and stops a no-op
+build from rewriting the artifact (which used to reload open pages). The manual
+GUI checklist is in `docs/development.md` and had not been run at that date.
 
 ## 1 · Supported set
 
@@ -150,6 +152,22 @@ checklist is in `docs/development.md` and had not been run at that date.
    when the rendered text changes, so an unchanged focus keeps the cache prefix
    stable. Without the service the plugin registers neither piece and keeps
    working.
+12. **The selected global `main` panel is shell state, and a client reload
+   drops it.** The shell renders one keyed `main` entry (`dsh:
+   dsh-client-ui-layout/lib/client.js:127`) and keeps the selection in the
+   layout store's memory; it resets a selection whose key is no longer
+   registered (`retainMainPanels`, `dsh: dsh-client-ui-layout/lib/client.js:464-465`).
+   client-hmr replaces an entry when its bundle is rebuilt (`dsh:
+   dsh-client-hmr/lib/client.js:272` → `dsh: dsh-client-modules/lib/client.js:492-499`),
+   and a full browser reload starts with no selection. `src/client/panel-session.js`
+   relies on two public faces to survive both: `ctx.get("layout").panelInfo`
+   snapshots (read the selected id) and `layout.selectPanel(id)` (select the
+   remembered `gantt`/`today` key once the keyed entries are registered again).
+   Both are also the sidebar's faces (`dsh:
+   dsh-client-ui-sidebar/lib/client.js:719-720`), so they stay within the
+   supported set; a host without a usable layout service keeps the conversation,
+   and a stale marker (older than 15 s) is dropped instead of restoring an old
+   page.
 
 ## 3 · Rules
 
@@ -165,7 +183,10 @@ checklist is in `docs/development.md` and had not been run at that date.
    external for the loader-injected `require`. The artifact is gitignored build
    output: `prepare`, `pnpm run build`, `pnpm run deploy`, and `pnpm run e2e`
    all rebuild it, and the e2e artifact spec pins the single-loader /
-   no-module-syntax contract. The former 4800-line ratchet cap is retired in
+   no-module-syntax contract. The build skips the write when the rendered
+   bundle equals the current file, because client-hmr reacts to mtime/size:
+   rewriting identical bytes would reload every open page, and the check gate
+   rebuilds on every run. The former 4800-line ratchet cap is retired in
    favour of the <1000-line per-file rule (decision in
    `docs/development.md`).
 2. **One SQLite writer per database file.** One `GanttStore` is opened per DSH

@@ -160,12 +160,14 @@ describe('takeSessionHandoff', () => {
     expect(localStorage.getItem(HANDOFF_KEY)).toBeNull()
   })
 
-  it('prefers and clears the per-window handoff', () => {
+  it('prefers the per-window handoff and clears the shared fallback', () => {
     winScope.name = `${WINDOW_NAME_PREFIX}${Date.now()}:session-window`
     stash('session-storage')
     expect(takeSessionHandoff()).toBe('session-window')
     expect(winScope.name).toBe('')
-    expect(JSON.parse(localStorage.getItem(HANDOFF_KEY))).toMatchObject({ sessionId: 'session-storage' })
+    // The opener reloading its plugin must not pick the shared carrier up and
+    // navigate away from the page the user is on.
+    expect(localStorage.getItem(HANDOFF_KEY)).toBeNull()
   })
 
   it('ignores a stale or malformed per-window handoff', () => {
