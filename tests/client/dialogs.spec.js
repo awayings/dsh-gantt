@@ -1,11 +1,12 @@
 // Dialog behavior of the Gantt client: create/edit/delete, split, and the data
 // API catalog. Every mutation is asserted through the recorded fetch calls so
 // the suite proves the wire contract, not just the rendered text.
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import {
   buttonByText,
   click,
+  deferred,
   dialog,
   dialogTitle,
   flush,
@@ -25,6 +26,7 @@ import {
   unmountAll,
 } from './harness.js'
 import { metaPayload, mutationTask, treePayload } from './fixtures.js'
+import { resetAgentNames } from '../../src/client/agent-labels.js'
 
 const TREE = 'api/gantt/tree'
 const TASKS = 'api/gantt/tasks'
@@ -33,8 +35,11 @@ const STATUS = 'api/gantt/task/status'
 const DELETE = 'api/gantt/task/delete'
 const SPLIT = 'api/gantt/task/split'
 const META = 'api/gantt/meta'
+const AGENTS = 'api/gantt/agents'
 
+beforeEach(resetAgentNames)
 afterEach(unmountAll)
+afterEach(resetAgentNames)
 
 const OK_TASK = () => jsonResponse({ ok: true, task: mutationTask() })
 
@@ -48,6 +53,13 @@ async function renderPage(routes = {}) {
     [DELETE]: () => jsonResponse({ ok: true, deleted: 1 }),
     [SPLIT]: () => jsonResponse({ ok: true, parent: { id: 'c1' } }),
     [META]: () => jsonResponse(metaPayload()),
+    [AGENTS]: () => jsonResponse({
+      ok: true,
+      agents: [
+        { id: 'a1', name: 'reviewer' },
+        { id: 'a2', name: 'builder' },
+      ],
+    }),
     ...routes,
   })
   const app = setupApp()
@@ -361,6 +373,72 @@ describe('edit dialog', () => {
     expect(dialog(view.container)).toBeNull()
     expect(row(view.container, '1.1 Write spec')).toBeNull()
     expect(q(view.container, '.gantt-row[data-selected="true"]')).toBeNull()
+  })
+})
+
+describe('write-back info', () => {
+  const block = container => q(container, '[data-block="writeback"]')
+  const valueOf = (container, name) => text(container, `[data-field="${name}"] .gantt-writeback-value`)
+
+  it('shows the registered operator and completer names with the full report', async () => {
+    const { calls, view } = await renderPage({})
+    openEditor(view, '1.1 Write spec')
+    await flush()
+
+    expect(block(view.container)).not.toBeNull()
+    expect(valueOf(view.container, 'operator')).toBe('reviewer')
+    expect(valueOf(view.container, 'completedBy')).toBe('builder')
+    expect(valueOf(view.container, 'report')).toBe('Spec written and reviewed.\nVerified with tests/client/dialogs.spec.js.')
+    expect(q(view.container, '[data-field="report"] .gantt-writeback-report')).not.toBeNull()
+    expect(calls.filter(call => call.path === AGENTS)).toHaveLength(1)
+  })
+
+  it('localizes an unassigned operator and an empty report', async () => {
+    const { view } = await renderPage({})
+    openEditor(view, '2.1 Announce')
+    await flush()
+
+    expect(valueOf(view.container, 'operator')).toBe('Unassigned')
+    expect(valueOf(view.container, 'completedBy')).toBe('Unassigned')
+    expect(valueOf(view.container, 'report')).toBe('No report')
+  })
+
+  it('falls back to the raw agent ids when the registry request fails', async () => {
+    const { view } = await renderPage({
+      [AGENTS]: () => jsonResponse({ ok: false, error: 'registry down' }, 500),
+    })
+    openEditor(view, '1.1 Write spec')
+    await flush()
+
+    expect(valueOf(view.container, 'operator')).toBe('a1')
+    expect(valueOf(view.container, 'completedBy')).toBe('a2')
+    expect(q(view.container, '.gantt-form-error')).toBeNull()
+  })
+
+  it('renders no write-back block and loads no registry while creating', async () => {
+    const { calls, view } = await renderPage({})
+    openCreate(view)
+
+    expect(block(view.container)).toBeNull()
+    await flush()
+    expect(block(view.container)).toBeNull()
+    expect(calls.filter(call => call.path === AGENTS)).toHaveLength(0)
+  })
+
+  it('ignores a registry response that arrives after the dialog closed', async () => {
+    const agents = deferred()
+    const { view } = await renderPage({ [AGENTS]: () => agents.promise })
+    openEditor(view, '1.1 Write spec')
+
+    expect(valueOf(view.container, 'operator')).toBe('a1')
+    click(buttonByText(view.container, 'Cancel'))
+    expect(dialog(view.container)).toBeNull()
+
+    agents.resolve(jsonResponse({ ok: true, agents: [{ id: 'a1', name: 'reviewer' }] }))
+    await flush()
+
+    expect(dialog(view.container)).toBeNull()
+    expect(view.container.textContent).not.toContain('reviewer')
   })
 })
 
