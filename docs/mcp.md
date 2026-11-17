@@ -85,10 +85,10 @@ When a token is configured, every `POST /mcp` must send
 (`refusing to serve 0.0.0.0 without a bearer token …`), so a LAN address cannot
 expose task writes unauthenticated. Only a loopback bind may serve token-less.
 
-For a host deployment where a remote client (for example Codex on a Mac) needs
-the HTTP endpoint while a local client uses stdio, follow
-[deployment.md](deployment.md): systemd unit, `/healthz` probe, token file, port
-and firewall rules, and both client configurations.
+For the supported deployment — `gantt-mcp` as a sidecar in the DSH Pod, behind a
+bearer token — follow [deployment.md](deployment.md): the two deployment units in
+one release tarball, the install/upgrade/rollback sequence, the schema contract,
+and the client setup for Claude Code and Codex.
 
 The MCP process and the DSH Web UI may open the same `tasks.db`: WAL lets
 readers proceed concurrently, the store sets a five-second `busy_timeout`, and
@@ -98,12 +98,12 @@ short and do not run long ad-hoc transactions against the same file.
 
 ### Kubernetes
 
-Exposing the MCP port from a cluster (Service, Ingress, NetworkPolicy, and a
-stable token Secret) is **not part of this feature**. The HTTP transport only
-opens a local listener; a deployment needs a separate networking task. The
-default loopback bind is deliberate, and a non-loopback bind is refused unless a
-token is configured. Host-level service deployment is covered in
-[deployment.md](deployment.md).
+The HTTP transport only opens a listener; it creates no Kubernetes objects. The
+supported shape is a same-Pod sidecar under `hostNetwork` that binds the node's
+tailnet address with a token from a Secret, so no Service or Ingress is involved.
+Install, upgrade, rollback and the schema contract are in
+[deployment.md](deployment.md); Service/Ingress/NetworkPolicy and multi-replica
+deployments stay out of scope because one SQLite file has one writer.
 
 ## Database path
 

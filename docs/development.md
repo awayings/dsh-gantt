@@ -469,6 +469,12 @@ conversation tab additionally needs `dsh-better-sidebar` in the same profile; th
 full pages and API work without it, and the assistant tools need the host
 `tools` service.
 
+Contributor installs are `link:` by design. A deployed profile is not: the k3s
+deployment installs the release tarball as a `file:` dependency
+(`dsh plugin --profile web add file:/data/dsh-home/gantt/releases/dsh-gantt-<v>.tgz`),
+so the profile pins a version instead of pointing at this checkout — see
+[deployment.md](deployment.md).
+
 | Command | Effect |
 | --- | --- |
 | `pnpm run deploy` | Link this checkout, select it as a bundle, verify the composed tree; safe to repeat |
