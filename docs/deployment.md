@@ -138,6 +138,12 @@ systemd/monitoring probe; the handshake check above is the readiness probe (it
 proves the store opened and the MCP dispatcher answers). The server speaks MCP
 revision `2025-06-18` and echoes the client's requested revision.
 
+`pnpm run e2e` includes `tests/e2e/mcp-cli.spec.js`, which spawns the real CLI
+and covers the same surface automatically: `/healthz`, `401` without the token,
+`initialize`/`tools/list`, `202` notifications, unknown paths, malformed JSON,
+the stdio handshake, and the refusal of a token-less network bind. Run it before
+trusting a new checkout on the host.
+
 ## 6. Client configuration
 
 Register each tool under a distinct agent name so `operator`/`completedBy` stay
@@ -147,7 +153,7 @@ readable in the UI.
 
 ```sh
 claude mcp add gantt -- node /data/home/ws-plugin/dsh-gantt/bin/gantt-mcp.js
-claude mcp list          # gantt: connected
+claude mcp list          # gantt: ✔ Connected, with the five tools
 ```
 
 Stdio needs no port, no token, and starts one short-lived process per session.
@@ -167,6 +173,10 @@ claude mcp add --transport http gantt http://127.0.0.1:8765/mcp \
 url = "http://<host-lan-ip>:8765/mcp"
 bearer_token_env_var = "GANTT_MCP_TOKEN"
 ```
+
+The CLI form is `codex mcp add gantt --url http://<host-lan-ip>:8765/mcp`; add
+the `bearer_token_env_var` line to the resulting table because Codex has no
+token flag for that field. `codex mcp list` shows the server and its tools.
 
 Export `GANTT_MCP_TOKEN` in the shell that starts Codex (same token as the
 service), then check the connection:
