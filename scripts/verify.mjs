@@ -1,4 +1,4 @@
-// Syntax-check every JavaScript source, test, and script file.
+// Syntax-check every JavaScript source, CLI, test, and script file.
 //
 // `node --check` takes one file per call; this walks the tracked trees and must
 // stay dependency-free (it backs `pnpm run verify` and the release script).
@@ -8,7 +8,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const seeds = ['src', 'tests', 'scripts']
+const seeds = ['src', 'bin', 'tests', 'scripts']
 
 /** Every .js/.mjs file below `dir`, recursively. */
 function walk(dir) {

@@ -61,8 +61,9 @@ checklist is in `docs/development.md` and had not been run at that date.
    `dsh-client-connection/lib/types/index.d.ts`; an in-tree usage is
    `dsh-client-file-upload/lib/index.js:179`). The route path is absolute below
    `/api`; `requestBody: 'buffered'` applies the channel's JSON cap; the handler
-   returns a `Response`. `src/host/routes/` registers twenty-three exact paths this
-   way via `src/host/routes/http.js`.
+   returns a `Response`. `src/host/routes/` registers twenty-eight endpoints (on
+   twenty-seven exact paths; GET and POST share `/api/gantt/agents`) this way
+   via `src/host/routes/http.js`.
 3. **A sidebar entry id selects the keyed `main` page.** The sidebar renders
    `sidebar.panellist` entries and calls `ctx.layout.selectPanel(id)`
    (`dsh: dsh-client-ui-sidebar/lib/client.js:223,719-720`); the layout renders
@@ -219,12 +220,20 @@ checklist is in `docs/development.md` and had not been run at that date.
 
 ## 4 · Data model layering and migration
 
-Schema version 7 widens the task status vocabulary with `cancelled`; version 6
-adds the task ⇄ content-dedicated conversation mapping and the `track`
+Schema version 8 adds the task write-back columns `operator_id`,
+`completed_by_id`, and `report` plus the `agents` operator registry; version 7
+widens the task status vocabulary with `cancelled`; version 6 adds the task ⇄
+content-dedicated conversation mapping and the `track`
 trajectory action; version 5 had added the append-only task trajectory; version 4 had added the persisted daily brief report; version 3
 had already unified the plugin's two previous datasets into one working tree. `tracks`/`nodes` remain as import
 snapshots, and the importer materializes them into `tasks` in the same
 transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v7 → v8 upgrade:** the base schema creates `agents` (`id` primary key, unique
+`name`, `type` CHECK `human`/`ai-agent`, `role`, `description`, `details`,
+`endpoint`, timestamps) and the migration appends the three task columns with
+empty defaults. Existing task rows, trajectory, focus, and work-session rows are
+untouched; the migration bumps `PRAGMA user_version` to 8 with no backfill.
 
 **v6 → v7 upgrade:** the migration rebuilds `tasks` with the status CHECK
 widened to `todo`/`in_progress`/`blocked`/`done`/`cancelled`, copying every
@@ -233,6 +242,8 @@ column and row and recreating the `(parent_id, sort_order, created_at)` and
 `focus`, `task_events`, and `work_sessions` rows that reference `tasks` are not
 cascade-deleted; re-enabling them leaves `PRAGMA foreign_key_check` empty. The
 migration bumps `PRAGMA user_version` to 7; no status or event backfill runs.
+When the same open continues to v8, the rebuild also copies the three write-back
+columns added just before it, so a v6 database reaches v8 intact.
 
 **v5 → v6 upgrade:** the base schema adds `work_sessions` (`task_id` primary
 key with `ON DELETE CASCADE`, unique `session_id`, `created_at`, `updated_at`,
@@ -388,14 +399,18 @@ the task they point at.
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
-- **Check — schema migration:** open a copy of a v2, v3, v4, or v5 database with
-  the current build and assert `GET /api/gantt/meta` returns `schemaVersion: 7`.
+- **Check — schema migration:** open a copy of a v2, v3, v4, v5, v6, or v7
+  database with the current build and assert `GET /api/gantt/meta` returns
+  `schemaVersion: 8`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
   unchanged and only gain `daily_briefs`; a v4 copy must keep the tree and
   reports and only gain `task_events` plus its two indexes; a v5 copy must keep
   every row and gain `work_sessions` plus the rebuilt `task_events` with the
-  `track` action. All also gain the additive `focus` table. Then read `/api/gantt/brief` and assert the report is
+  `track` action; a v6 copy must keep every row while gaining the `cancelled`
+  status and v8 columns; a v7 copy must keep every row while gaining the three
+  write-back columns and the `agents` table. All also gain the additive `focus`
+  table. Then read `/api/gantt/brief` and assert the report is
   computed and cached for today, `/api/gantt/focus?sessionId=…` returns
   `taskId: null` on a fresh database, and `/api/gantt/trajectory` returns an
   empty `events` array before any assistant-tool write.
@@ -409,7 +424,7 @@ the task they point at.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 6, twenty-three endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 8, twenty-eight endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,

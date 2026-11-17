@@ -8,10 +8,10 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
-/** Columns added by schema v3/v4; the migration appends whichever is missing. @type {Record<string, string>} */
-const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'" }
+/** Columns added by schema v3, v4, and v8; the migration appends whichever is missing. @type {Record<string, string>} */
+const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'", operator_id: "TEXT NOT NULL DEFAULT ''", completed_by_id: "TEXT NOT NULL DEFAULT ''", report: "TEXT NOT NULL DEFAULT ''" }
 
 const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tasks (
@@ -37,7 +37,10 @@ const CREATE_SCHEMA = `
     category TEXT NOT NULL DEFAULT '',
     inspiration TEXT NOT NULL DEFAULT '',
     links TEXT NOT NULL DEFAULT '[]',
-    source TEXT NOT NULL DEFAULT 'manual'
+    source TEXT NOT NULL DEFAULT 'manual',
+    operator_id TEXT NOT NULL DEFAULT '',
+    completed_by_id TEXT NOT NULL DEFAULT '',
+    report TEXT NOT NULL DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id, sort_order, created_at);
   CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY, name TEXT NOT NULL, lane TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '', blocker TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0);
@@ -65,6 +68,18 @@ const CREATE_SCHEMA = `
     updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_work_sessions_session ON work_sessions(session_id);
+  CREATE TABLE IF NOT EXISTS agents (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'ai-agent' CHECK (type IN ('human', 'ai-agent')),
+    role TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    details TEXT NOT NULL DEFAULT '',
+    endpoint TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_name ON agents(name);
 `
 
 /**
@@ -94,6 +109,10 @@ export function openDatabase(file) {
     }
   }
   db.exec('PRAGMA journal_mode = WAL')
+  // The Web UI and an MCP CLI process can hold this file at the same time; WAL
+  // lets readers proceed and the timeout lets a writer wait out a short lock
+  // instead of failing with SQLITE_BUSY.
+  db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA foreign_keys = ON')
   db.exec(CREATE_SCHEMA)
   return db
@@ -175,17 +194,22 @@ export function migrateDatabase(db, transaction, syncTrackerTree) {
             category TEXT NOT NULL DEFAULT '',
             inspiration TEXT NOT NULL DEFAULT '',
             links TEXT NOT NULL DEFAULT '[]',
-            source TEXT NOT NULL DEFAULT 'manual'
+            source TEXT NOT NULL DEFAULT 'manual',
+            operator_id TEXT NOT NULL DEFAULT '',
+            completed_by_id TEXT NOT NULL DEFAULT '',
+            report TEXT NOT NULL DEFAULT ''
           );
           INSERT INTO tasks_v7 (
             id, parent_id, title, description, status, progress, start_date, end_date,
             sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
-            landing, estimate, category, inspiration, links, source
+            landing, estimate, category, inspiration, links, source, operator_id,
+            completed_by_id, report
           )
             SELECT
             id, parent_id, title, description, status, progress, start_date, end_date,
             sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
-            landing, estimate, category, inspiration, links, source
+            landing, estimate, category, inspiration, links, source, operator_id,
+            completed_by_id, report
             FROM tasks;
           DROP TABLE tasks;
           ALTER TABLE tasks_v7 RENAME TO tasks;

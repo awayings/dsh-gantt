@@ -13,12 +13,14 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 6: one working tree in `tasks` (track roots, imported
+- The schema is version 8: one working tree in `tasks` (track roots, imported
   nodes, decomposed and manual tasks), the persisted daily brief report,
-  per-conversation `focus` rows, the append-only `task_events` trajectory, and
-  the `work_sessions` mapping from a task to its dedicated main conversation.
-  The domain model is in [personal-task-system.md](personal-task-system.md);
-  the migration in [compatibility.md](compatibility.md).
+  per-conversation `focus` rows, the append-only `task_events` trajectory, the
+  `work_sessions` mapping from a task to its dedicated main conversation, and
+  the `agents` operator registry. The domain model is in
+  [personal-task-system.md](personal-task-system.md); the migration in
+  [compatibility.md](compatibility.md) and
+  [development.md](development.md#schema-version-8-one-working-tree-plus-reports-trajectory-work-sessions-and-agents).
 
 Base URL: the origin printed by your own `dsh web` launch, for example
 `http://127.0.0.1:3080`.
@@ -28,6 +30,11 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | Method | Path | Body / Query | Success |
 | --- | --- | --- | --- |
 | `GET` | `/api/gantt/tree` | — | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats |
+| `GET` | `/api/gantt/agents` | `?type=&role=&q=&limit=` | `200 { ok, agents }` |
+| `POST` | `/api/gantt/agents` | `{ id?, name, type, role?, description?, details?, endpoint? }` | `200 { ok, agent }` |
+| `GET` | `/api/gantt/task/context` | `?taskId=<id>` | `200 { ok, taskId, markdown, chars, task }` |
+| `GET` | `/api/gantt/ready` | `?tag=ready\|next\|todo&limit=` | `200 { ok, tag, tasks }` |
+| `POST` | `/api/gantt/task/report` | `{ taskId, agentId, report, status?, progress? }` | `200 { ok, task, event }` |
 | `GET` | `/api/gantt/focus` | `?sessionId=<id>` | `200 { ok, taskId }` |
 | `POST` | `/api/gantt/focus/set` | `{ sessionId, taskId? }` | `200 { ok, taskId }` |
 | `GET` | `/api/gantt/trajectory` | `?taskId=&sessionId=&limit=` | `200 { ok, events }` |
@@ -51,11 +58,14 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/brief` | `?date=YYYY-MM-DD` | `200 { ok, today, date, brief, cached }` |
 | `POST` | `/api/gantt/brief/compute` | `{ date? }` | `200 { ok, today, date, brief, cached: false }` |
 
-Twenty-three routes are registered. Routes that read a body require a JSON
-object; any other JSON value is rejected with `400`. `GET` routes and `seed` do
+Twenty-eight endpoints are registered on twenty-seven exact paths (GET and POST
+share `/api/gantt/agents`; the connection service rejects duplicate paths).
+Routes that read a body require a JSON object; any other JSON value is rejected
+with `400`. `GET` routes and `seed` do
 not read a body. The focus routes and the assistant tools share one
 per-conversation focus; the work routes and `gantt_track` share one
-task ⇄ dedicated-conversation mapping; the plugin itself never calls a model.
+task ⇄ dedicated-conversation mapping; the agent routes and the MCP transport
+share the `agents` table. The plugin itself never calls a model.
 
 ## Conventions
 
@@ -147,6 +157,9 @@ on read.
   "inspiration": "",
   "links": [],
   "source": "tracker",
+  "operatorId": "",
+  "completedById": "",
+  "report": "",
   "workSessionId": null,
   "title": "投资系统",
   "description": "主线数据底座还没收口。",
@@ -179,6 +192,9 @@ on read.
 | `inspiration` | string | idea-store id; writable |
 | `links` | array | `{ type, ref, label? }`; writable, replaced as a whole |
 | `source` | string | `tracker` \| `manual`; read-only |
+| `operatorId` | string | agent id that first took the task; written by `report_completion`, empty when unclaimed |
+| `completedById` | string | agent id that most recently reported completion; empty when never reported |
+| `report` | string | latest completion report, at most 4000 characters; empty when never reported |
 | `workSessionId` | string \| null | the task's dedicated work conversation from `work_sessions`, or `null` |
 | `title` | string | 1–200 characters |
 | `description` | string | may be empty |
@@ -456,6 +472,180 @@ curl -s 'http://127.0.0.1:3080/api/gantt/trajectory?limit=100'
   and use the title only as a readable prefix.
 - An invalid `limit` is a `400`; an unknown `taskId` is a `404`.
 
+## External agents
+
+External coding tools can identify themselves once, then pull a task's context
+and write a completion report back without opening a DSH conversation. The same
+operations are exposed over MCP (see [mcp.md](mcp.md)); these routes are the
+authenticated HTTP form.
+
+### Register an agent
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/agents \
+  -H 'content-type: application/json' \
+  -d '{
+    "name": "Codex",
+    "type": "ai-agent",
+    "role": "implementer",
+    "description": "Terminal coding agent",
+    "details": "Uses the gantt MCP server",
+    "endpoint": "local"
+  }'
+```
+
+```json
+{
+  "ok": true,
+  "agent": {
+    "id": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
+    "name": "Codex",
+    "type": "ai-agent",
+    "role": "implementer",
+    "description": "Terminal coding agent",
+    "details": "Uses the gantt MCP server",
+    "endpoint": "local",
+    "createdAt": "2026-11-17T00:00:00.000Z",
+    "updatedAt": "2026-11-17T00:00:00.000Z"
+  }
+}
+```
+
+- `name` is required, trimmed and whitespace-collapsed, 1–100 characters, and
+  unique. Registering the same name again updates that row and returns the same
+  `id`; passing an existing `id` updates by id. An unknown `id` falls back to
+  the name upsert.
+- `type` is `human` or `ai-agent` (default `ai-agent`). `role`, `description`,
+  `details`, and `endpoint` are optional strings of at most 2000 characters.
+- Renaming an agent onto another agent's name is a `409`
+  (`agent name <name> already exists`).
+- There is no delete route; a stale agent stays queryable.
+
+### List agents
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/agents?type=ai-agent&q=codex&limit=20'
+```
+
+```json
+{ "ok": true, "agents": [ { "id": "…", "name": "Codex", "type": "ai-agent", "…": "…" } ] }
+```
+
+Filters are optional: `type` (`human`/`ai-agent`), `role` (exact), `q` (fuzzy
+over name/role/description/details), and `limit` (integer 1–100, default 20).
+Rows are ordered by name.
+
+### Read a task's context
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/task/context?taskId=<task-id>'
+```
+
+```json
+{
+  "ok": true,
+  "taskId": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
+  "markdown": "# 任务上下文：node:1.8.1 读数收口（节点）\n- 状态：进行中（in_progress）\n…\n## 任务链路（从支线根到当前任务）\n…\n## 当前任务\n…\n## 任务轨迹\n…\n",
+  "chars": 1234,
+  "task": {
+    "id": "0f0c1c2e-6f4a-4d1e-9f4a-1f0b2f5c8a11",
+    "number": "1.8.1",
+    "ref": "node:1.8.1",
+    "title": "读数收口",
+    "status": "in_progress",
+    "progress": 40,
+    "doneWhen": "每天一句读数"
+  }
+}
+```
+
+- `taskId` is required and must be the internal task id; a missing/blank value is
+  a `400`, an unknown task is a `404`.
+- The markdown is stable and deterministic (no current time): title, status,
+  progress, operator, completer, description, `doneWhen`, dates, category,
+  estimate, landing, inspiration, dependency, the link list, the ancestor chain,
+  the task detail, `## 汇报结果` when a report exists, and `## 任务轨迹`.
+- `chars` is the markdown length; `task` is the same compact `{ id, number, ref, title, status, progress, doneWhen }` object the work routes use.
+
+### List ready tasks
+
+```sh
+curl -s 'http://127.0.0.1:3080/api/gantt/ready?tag=ready&limit=20'
+```
+
+```json
+{
+  "ok": true,
+  "tag": "ready",
+  "tasks": [
+    {
+      "id": "…",
+      "number": "1.8.1",
+      "ref": "node:1.8.1",
+      "title": "S2 每日交易仓读数",
+      "status": "todo",
+      "description": "",
+      "doneWhen": "每天一句读数 + 三条腿各一个数",
+      "trackId": "…",
+      "trackName": "投资系统"
+    }
+  ]
+}
+```
+
+- `tag` is `ready` (default), `next`, or `todo`; any other value is a `400`.
+  `ready` keeps pending leaves whose dependency is empty or already done;
+  `next` reuses the tree brief's per-track pick; `todo` keeps every pending leaf.
+- `limit` is an integer 1–100 (default 20), and the rows are grouped by track in
+  rendered tree order.
+
+### Report a completion
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/gantt/task/report \
+  -H 'content-type: application/json' \
+  -d '{
+    "taskId": "<task-id>",
+    "agentId": "<agent-id>",
+    "report": "Shipped the reading table; verified in tests/report.spec.js",
+    "status": "done",
+    "progress": 100
+  }'
+```
+
+```json
+{
+  "ok": true,
+  "task": {
+    "id": "…",
+    "status": "done",
+    "progress": 100,
+    "operatorId": "…",
+    "completedById": "…",
+    "report": "Shipped the reading table; verified in tests/report.spec.js",
+    "…": "…"
+  },
+  "event": {
+    "id": "…",
+    "taskId": "…",
+    "sessionId": "",
+    "turn": null,
+    "action": "complete",
+    "detail": "Shipped the reading table; verified in tests/report.spec.js",
+    "at": "2026-11-17T00:00:00.000Z"
+  }
+}
+```
+
+- `taskId` and `agentId` must exist (`404` otherwise); `report` is required,
+  trimmed, non-empty, and at most 4000 characters.
+- `status` defaults to `done`; `progress` defaults through `defaultProgress`
+  (100 for done, 0 for todo, 50 for a fresh in-progress task).
+- One transaction writes `operator_id` (only when empty), `completed_by_id`,
+  `report`, status/progress, recomputes ancestor rollups, and appends one
+  `complete` event whose `detail` is the report truncated to 200 characters
+  (the full text stays in `tasks.report`).
+
 ## Work mode
 
 Work mode turns a task-row click into a workbench interaction instead of
@@ -577,7 +767,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "statuses": ["todo", "in_progress", "blocked", "done", "cancelled"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -587,7 +777,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
 ```
 
 `dbPath` is the resolved absolute path (`:memory:` for an in-memory store);
-`endpoints` is the host's own twenty-three-entry route catalog (abbreviated above);
+`endpoints` is the host's own twenty-eight-entry route catalog (abbreviated above);
 `taskCount` counts every row of the unified tree.
 
 ## Create a task
@@ -1243,9 +1433,12 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | invalid focus input | `sessionId is required`, `sessionId must be at most 200 characters` |
 | `400` | invalid trajectory input | `limit must be an integer from 1 to 100`, `sessionId must be at most 200 characters` |
 | `400` | invalid work input | `taskId or sessionId is required`, `taskId is required`, `sessionId is required` |
+| `400` | invalid agent input | `name is required`, `type must be one of human, ai-agent`, `report is required`, `limit must be an integer from 1 to 100`, `tag must be one of ready, next, todo`, `taskId is required`, `agentId is required` |
 | `404` | unknown task id | `task <id> was not found` |
+| `404` | unknown agent id | `agent <id> was not found` |
 | `404` | unknown plan block id | `plan block <id> was not found` |
 | `409` | duplicate `(kind, ref)` | `task with kind node and ref node:1.8.1 already exists` |
+| `409` | duplicate agent name | `agent name Codex already exists` |
 | `500` | the optional skills service rejected | the service's message |
 | `500` | unexpected host failure | the thrown error's message |
 

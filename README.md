@@ -142,10 +142,10 @@ DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 08:00 brief recompute; it defaults to `Asia/Shanghai` (this deployment's host
 process runs in UTC). An invalid IANA zone falls back to the default.
 
-The schema is created on first activation and upgraded in place; a v2, v3, v4,
-or v5 database is migrated to schema version 6 on open (the append-only
-migration, the one-time tree backfill for v2, and the
-`daily_briefs`/`focus`/`task_events`/`work_sessions` additions are in
+The schema is created on first activation and upgraded in place; a v2–v7
+database is migrated to schema version 8 on open (the append-only migration,
+the one-time tree backfill for v2, and the
+`daily_briefs`/`focus`/`task_events`/`work_sessions`/agent additions are in
 [docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
 task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`, `cancelled`;
 plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
@@ -191,7 +191,7 @@ axis changes.
 
 ## JSON API
 
-All twenty-three routes are mounted on the harness's existing authenticated `/api` channel.
+All twenty-eight routes are mounted on the harness's existing authenticated `/api` channel.
 The browser sends its normal session cookie; there is no second port, token, or
 CORS setup. Errors use `{ "ok": false, "error": "..." }` with a `4xx`/`5xx`
 status.
@@ -199,6 +199,11 @@ status.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief` |
+| `GET` | `/api/gantt/agents` | Registered external operators (`?type=&role=&q=&limit=`) |
+| `POST` | `/api/gantt/agents` | Register or update an external operator |
+| `GET` | `/api/gantt/task/context` | One task's stable markdown context (`?taskId=`) |
+| `GET` | `/api/gantt/ready` | Ready/next/todo work (`?tag=&limit=`) |
+| `POST` | `/api/gantt/task/report` | Write an external completion report back (`{taskId, agentId, report, ...}`) |
 | `GET` | `/api/gantt/focus` | The task a conversation is focused on (`?sessionId=`) |
 | `POST` | `/api/gantt/focus/set` | Focus one task for a conversation, or clear it |
 | `GET` | `/api/gantt/trajectory` | Newest-first task provenance events (`?taskId=&sessionId=&limit=`) |
@@ -233,6 +238,14 @@ writes tasks through the host assistant tools (`gantt_context`,
 described in [docs/api.md](docs/api.md).
 Full request/response examples, field tables, focus, tool parameters, and error
 codes: [docs/api.md](docs/api.md).
+
+## MCP server
+
+The package also ships a zero-dependency
+[Model Context Protocol](docs/mcp.md) server for external coding tools
+(stdio by default, optional authenticated HTTP): `gantt-mcp` exposes agent
+registration, ready-task listing, per-task context, and completion write-back
+against the same SQLite store.
 
 ## Verification
 
@@ -283,12 +296,13 @@ one concern per file, and every source file stays under 1000 lines.
 | Path | Role |
 | --- | --- |
 | `src/host/index.js` | plugin entry: store lifecycle, 08:00 scheduler, route and assistant-tool registration |
-| `src/host/routes/` | the twenty-three `/api/gantt/*` route specs split by resource (including `focus.js`, the trajectory read, and `work.js`); `http.js` holds shared plumbing |
-| `src/host/store/` | SQLite schema and migrations, task/tree writes, task-event trajectory, work-session mapping, daily-brief persistence, context document |
+| `src/host/routes/` | the twenty-eight `/api/gantt/*` route specs split by resource (including `focus.js`, the trajectory read, `work.js`, and `agents.js`); `http.js` holds shared plumbing |
+| `src/host/store/` | SQLite schema and migrations, task/tree writes, task-event trajectory, agent registry, work-session mapping, daily-brief persistence, context document |
 | `src/host/work.js` | work directory for dedicated conversations (`DSH_GANTT_WORK_CWD`) |
 | `src/host/tracker/` | tracker markdown parsers and importer |
 | `src/host/tree/` | pure tree helpers: numbering, rollups, frontier/next, materialisation, context markdown, `chain.js` focus rendering |
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
+| `src/host/mcp.js`, `bin/gantt-mcp.js` | external-agent MCP server and its CLI (stdio or optional HTTP) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
 | `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), brief strip, dialogs, styles |
@@ -340,6 +354,7 @@ database/API debugging, and the full verification procedure are in
 - [docs/README.md](docs/README.md) — documentation index
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
+- [docs/mcp.md](docs/mcp.md) — MCP server, transports, five tools, troubleshooting
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations
 - [docs/personal-task-system.md](docs/personal-task-system.md) — unified task tree model, decomposition discipline, frontier/next, daily 该动 brief, perspectives, native-conversation assistant tools, task trajectory/protocol context, links, context export
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow, commits, release checklist

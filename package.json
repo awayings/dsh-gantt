@@ -14,8 +14,12 @@
     "./store": "./src/host/store.js",
     "./icon": "./icon.svg"
   },
+  "bin": {
+    "gantt-mcp": "./bin/gantt-mcp.js"
+  },
   "files": [
     "src",
+    "bin",
     "lib/client.js",
     "cordis.patch.yml",
     "icon.svg",
@@ -28,6 +32,7 @@
     "test": "vitest run --project host --project client",
     "coverage": "vitest run --project host --project client --coverage",
     "e2e": "node scripts/build-client.mjs && vitest run --project e2e",
+    "mcp": "node bin/gantt-mcp.js",
     "static": "pnpm run lint && pnpm run typecheck",
     "check": "node scripts/run-bash.mjs scripts/check.sh",
     "deploy": "node scripts/deploy.mjs",

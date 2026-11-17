@@ -7,7 +7,7 @@ import { apply } from '../../src/host/index.js'
  * @param {Record<string, unknown>} [services]
  */
 export function createContext(services = {}) {
-  const routes = new Map()
+  const routes = createRouteTable()
   const disposers = []
   const ctx = {
     effect(fn) {
@@ -21,12 +21,38 @@ export function createContext(services = {}) {
     connection: {
       fetch: {
         register(definition) {
-          routes.set(definition.path, definition)
+          for (const method of definition.methods) {
+            routes.set(`${method} ${definition.path}`, { ...definition, methods: [method] })
+          }
         },
       },
     },
   }
   return { ctx, routes, disposers }
+}
+
+/**
+ * A path-and-method route table. GET and POST share `/api/gantt/agents`, so the
+ * fake connection registers on the method-qualified key while the tests still
+ * read a route by path (GET wins when both exist).
+ * @returns {Map<string, any> & { get: (path: string, method?: string) => any }}
+ */
+function createRouteTable() {
+  /** @type {Map<string, any>} */
+  const definitions = new Map()
+  const getByKey = definitions.get.bind(definitions)
+  return Object.assign(definitions, {
+    /** @param {string} path @param {string} [method] */
+    get(path, method) {
+      if (method !== undefined) return getByKey(`${method} ${path}`)
+      const matches = [...definitions.values()].filter(definition => definition.path === path)
+      return matches.find(definition => definition.methods[0] === 'GET') ?? matches[0]
+    },
+    /** @returns {string[]} */
+    keys() {
+      return [...definitions.values()].map(definition => definition.path)
+    },
+  })
 }
 
 /**
@@ -55,7 +81,9 @@ export function bootPlugin(options = {}) {
  * JSON-encoded, and `undefined` sends no body at all.
  */
 export async function invoke(routes, apiPath, body) {
-  const definition = routes.get(new URL(apiPath, 'http://localhost').pathname)
+  const pathname = new URL(apiPath, 'http://localhost').pathname
+  const requested = body === undefined ? 'GET' : 'POST'
+  const definition = routes.get(pathname, requested) ?? routes.get(pathname)
   if (!definition) throw new Error(`route ${apiPath} was not registered`)
   const init = { method: definition.methods[0] }
   if (body !== undefined) init.body = typeof body === 'string' ? body : JSON.stringify(body)
@@ -98,4 +126,9 @@ export const ROUTES = {
   workSession: '/api/gantt/work/session',
   workSkills: '/api/gantt/work/skills',
   workTeam: '/api/gantt/work/team',
+  agents: '/api/gantt/agents',
+  registerAgent: '/api/gantt/agents',
+  taskContext: '/api/gantt/task/context',
+  ready: '/api/gantt/ready',
+  reportCompletion: '/api/gantt/task/report',
 }

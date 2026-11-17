@@ -3,8 +3,9 @@
 // service.
 
 import { createSessionTitles } from '../session-titles.js'
+import { agentsRoute, readyRoute, registerAgentRoute, reportCompletionRoute, taskContextRoute } from './agents.js'
 import { briefComputeRoute, briefRoute } from './brief.js'
-import { registerRoute } from './http.js'
+import { registerRouteGroup } from './http.js'
 import { focusRoute, setFocusRoute, trajectoryRoute } from './focus.js'
 import { contextRoute, metaRoute, seedRoute } from './meta.js'
 import { dayRoute, planImportRoute, planStatusRoute } from './plan.js'
@@ -18,6 +19,11 @@ import { workRoute, workSessionRoute, workSkillsRoute, workTeamRoute } from './w
 /** @type {RouteSpec[]} */
 const ROUTES = [
   treeRoute,
+  agentsRoute,
+  registerAgentRoute,
+  taskContextRoute,
+  readyRoute,
+  reportCompletionRoute,
   focusRoute,
   setFocusRoute,
   trajectoryRoute,
@@ -55,5 +61,12 @@ export const ENDPOINTS = ROUTES.map(({ method, path, description }) => ({ method
 export function registerRoutes(ctx, store, titles = createSessionTitles()) {
   /** @type {import('./http.js').RouteDeps} */
   const deps = { store, endpoints: ENDPOINTS, get: name => ctx.get?.(name), titles }
-  for (const spec of ROUTES) registerRoute(ctx, spec, deps)
+  /** @type {Map<string, RouteSpec[]>} */
+  const byPath = new Map()
+  for (const spec of ROUTES) {
+    const specs = byPath.get(spec.path)
+    if (specs === undefined) byPath.set(spec.path, [spec])
+    else specs.push(spec)
+  }
+  for (const specs of byPath.values()) registerRouteGroup(ctx, specs, deps)
 }

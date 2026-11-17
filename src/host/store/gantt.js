@@ -5,12 +5,20 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { GanttError } from '../errors.js'
 import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
+import { collectReadyTasks } from '../tree/ready.js'
+import { renderTaskContext } from '../tree/task-context.js'
+import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, normalizeAgentFields, normalizeAgentFilter } from './agents.js'
 import { buildDailyReport, computeDailyBrief, dailyBrief, persistDailyBrief, previousDailyBriefs, readDailyBrief } from './brief.js'
 import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
 import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
 import { startScheduler } from './scheduler.js'
-import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
+import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeAgentRef, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeReport, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
+
+/** @typedef {import('./agents.js').AgentFilter} AgentFilter */
+/** @typedef {import('./agents.js').AgentInput} AgentInput */
+/** @typedef {import('./agents.js').AgentRow} AgentRow */
+/** @typedef {import('../tree/ready.js').ReadyTag} ReadyTag */
 
 /** @typedef {import('../daily.js').DailyReport} DailyReport */
 /** @typedef {import('../tree.js').Brief} Brief */
@@ -51,6 +59,21 @@ import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MAT
  * @typedef {{ sessionId?: string, turn?: number | null, summary?: string }} TaskOrigin */
 /** Filters accepted by {@link GanttStore.trajectory}.
  * @typedef {{ taskId?: unknown, sessionId?: unknown, limit?: unknown }} TrajectoryQuery */
+/** One external completion report: the task, the reporting agent, and the write-back.
+ * @typedef {{ taskId?: unknown, agentId?: unknown, status?: unknown, progress?: unknown,
+ * report?: unknown }} ReportCompletionInput */
+/** The ready-list query: which vocabulary and how many rows.
+ * @typedef {{ tag?: unknown, limit?: unknown }} ReadyTasksInput */
+/** A compact task row returned by the ready list. @typedef {{ id: string, number: string,
+ * ref: string, title: string, status: TaskStatus, description: string, doneWhen: string,
+ * trackId: string, trackName: string }} ReadyTask */
+/** A compact task row returned beside the task-context markdown. @typedef {{ id: string,
+ * number: string, ref: string, title: string, status: TaskStatus, progress: number,
+ * doneWhen: string }} ContextTask */
+
+/** Longest completion report kept in the `complete` event detail; the full
+ * report stays in `tasks.report`. */
+const MAX_EVENT_REPORT = 200
 
 /**
  * SQLite-backed task store. Hierarchical numbers and rollups are derived at
@@ -241,7 +264,8 @@ export class GanttStore {
       id, fields.parentId, fields.title, fields.description, fields.status, fields.progress,
       fields.startDate, fields.endDate, fields.sortOrder, fields.kind, fields.ref, fields.state,
       fields.lane, fields.dep, fields.doneWhen, fields.landing, fields.estimate, fields.category,
-      fields.inspiration, JSON.stringify(fields.links), fields.source, now, now,
+      fields.inspiration, JSON.stringify(fields.links), fields.source, fields.operatorId,
+      fields.completedById, fields.report, now, now,
     )
     return id
   }
@@ -277,7 +301,8 @@ export class GanttStore {
   /** Validate the task fields shared by {@link create} and {@link createSibling}.
    * @param {TaskInput} input @returns {{ title: string, description: string, status: TaskStatus,
    * progress: number, startDate: string, endDate: string, lane: string, dep: string, doneWhen: string,
-   * landing: string, estimate: string, category: string, inspiration: string, links: TaskLink[] }} */
+   * landing: string, estimate: string, category: string, inspiration: string, links: TaskLink[],
+   * operatorId: string, completedById: string, report: string }} */
   normalizeCreateFields(input) {
     const title = normalizeTitle(input.title)
     const description = normalizeDescription(input.description)
@@ -286,7 +311,19 @@ export class GanttStore {
     const startDate = assertDate(input.startDate ?? todayIso(), 'startDate')
     const endDate = assertDate(input.endDate ?? addDays(startDate, 3), 'endDate')
     assertRange(startDate, endDate)
-    return { title, description, status, progress, startDate, endDate, ...normalizeExtras(input), links: this.normalizeLinks(input.links) }
+    return {
+      title,
+      description,
+      status,
+      progress,
+      startDate,
+      endDate,
+      ...normalizeExtras(input),
+      links: this.normalizeLinks(input.links),
+      operatorId: normalizeAgentRef(input.operatorId, 'operatorId'),
+      completedById: normalizeAgentRef(input.completedById, 'completedById'),
+      report: normalizeReport(input.report),
+    }
   }
 
   /** Create a task as the immediate next sibling of `referenceId`: same parent,
@@ -330,6 +367,9 @@ export class GanttStore {
     assertRange(next.startDate, next.endDate)
     for (const field of TEXT_FIELDS) if (patch[field] !== undefined) next[field] = textField(patch[field], field)
     if (patch.links !== undefined) next.links = this.normalizeLinks(patch.links)
+    if (patch.operatorId !== undefined) next.operatorId = normalizeAgentRef(patch.operatorId, 'operatorId')
+    if (patch.completedById !== undefined) next.completedById = normalizeAgentRef(patch.completedById, 'completedById')
+    if (patch.report !== undefined) next.report = normalizeReport(patch.report)
     let parentChanged = false
     if (Object.prototype.hasOwnProperty.call(patch, 'parentId')) {
       const parentId = normalizeParent(patch.parentId)
@@ -353,7 +393,8 @@ export class GanttStore {
       this.db.prepare(UPDATE_TASK).run(
         next.parentId, next.title, next.description, next.status, next.progress, next.startDate, next.endDate,
         next.sortOrder, next.kind, next.ref, next.state, next.lane, next.dep, next.doneWhen, next.landing,
-        next.estimate, next.category, next.inspiration, JSON.stringify(next.links), next.source, now, id,
+        next.estimate, next.category, next.inspiration, JSON.stringify(next.links), next.source,
+        next.operatorId, next.completedById, next.report, now, id,
       )
       this.recomputeAncestors(row.parentId)
       if (next.parentId !== row.parentId) this.recomputeAncestors(next.parentId)
@@ -388,7 +429,16 @@ export class GanttStore {
     this.transaction(() => {
       const base = this.nextSortOrder(id)
       normalized.forEach((child, index) => created.push(this.insertTask({
-        parentId: id, ...child, sortOrder: base + index, kind: 'task', ref: '', state: '', source: 'manual',
+        parentId: id,
+        ...child,
+        sortOrder: base + index,
+        kind: 'task',
+        ref: '',
+        state: '',
+        source: 'manual',
+        operatorId: '',
+        completedById: '',
+        report: '',
       })))
       this.recomputeAncestors(id)
     })
@@ -413,7 +463,7 @@ export class GanttStore {
     const ids = []
     this.transaction(() => {
       for (const [parent, title, description, status, progress, startOffset, endOffset, sortOrder] of SEED_TASKS) {
-        ids.push(this.insertTask({ parentId: parent === null ? null : ids[parent], title, description, status, progress, startDate: addDays(today, startOffset), endDate: addDays(today, endOffset), sortOrder, kind: 'task', ref: '', state: '', lane: '', dep: '', doneWhen: '', landing: '', estimate: '', category: '', inspiration: '', links: [], source: 'manual' }))
+        ids.push(this.insertTask({ parentId: parent === null ? null : ids[parent], title, description, status, progress, startDate: addDays(today, startOffset), endDate: addDays(today, endOffset), sortOrder, kind: 'task', ref: '', state: '', lane: '', dep: '', doneWhen: '', landing: '', estimate: '', category: '', inspiration: '', links: [], source: 'manual', operatorId: '', completedById: '', report: '' }))
       }
     })
     return { seeded: true, taskCount: ids.length }
@@ -430,6 +480,7 @@ export class GanttStore {
     const now = new Date().toISOString()
     const existing = this.listRows()
     const { inserts, updates, deletes } = materializeTracker({ tracks, nodes, existing, today: todayIso() })
+    const rowById = new Map(existing.map(row => [row.id, row]))
     /** @type {Map<string, string>} */
     const idByRef = new Map()
     for (const row of existing) if (row.ref !== '') idByRef.set(row.ref, row.id)
@@ -441,14 +492,17 @@ export class GanttStore {
       insert.run(id, draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
         draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
         draft.kind, draft.ref, draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing,
-        draft.estimate, draft.category, draft.inspiration, JSON.stringify(draft.links), draft.source, now, now)
+        draft.estimate, draft.category, draft.inspiration, JSON.stringify(draft.links), draft.source,
+        '', '', '', now, now)
       idByRef.set(draft.ref, id)
     }
     for (const draft of updates) {
+      const previous = /** @type {TaskRow} */ (rowById.get(draft.id))
       update.run(draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
         draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
         draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing, draft.estimate, draft.category,
-        draft.inspiration, JSON.stringify(draft.links), now, draft.id)
+        draft.inspiration, JSON.stringify(draft.links), previous.operatorId, previous.completedById,
+        previous.report, now, draft.id)
     }
     for (const id of deletes) remove.run(id)
     return { inserted: inserts.length, updated: updates.length, removed: deletes.length }
@@ -512,7 +566,7 @@ export class GanttStore {
       /** @type {string[]} */
       const blockIds = []
       const childIds = normalized.map((child, index) => {
-        const childId = this.insertTask({ parentId: id, title: child.title, description: child.description, status: child.status, progress: child.progress, startDate: child.startDate, endDate: child.endDate, sortOrder: base + index, kind: 'task', ref: '', state: '', lane: child.lane, dep: child.dep, doneWhen: child.doneWhen, landing: child.landing, estimate: child.estimate, category: child.category, inspiration: child.inspiration, links: child.links, source: 'manual' })
+        const childId = this.insertTask({ parentId: id, title: child.title, description: child.description, status: child.status, progress: child.progress, startDate: child.startDate, endDate: child.endDate, sortOrder: base + index, kind: 'task', ref: '', state: '', lane: child.lane, dep: child.dep, doneWhen: child.doneWhen, landing: child.landing, estimate: child.estimate, category: child.category, inspiration: child.inspiration, links: child.links, source: 'manual', operatorId: '', completedById: '', report: '' })
         if (child.plan !== null) {
           blockIds.push(this.writeTaskBlock(childId, {
             date: child.plan.date,
@@ -697,6 +751,142 @@ export class GanttStore {
     }
     const where = clauses.length === 0 ? '' : ` WHERE ${clauses.join(' AND ')}`
     return /** @type {TaskEvent[]} */ (this.db.prepare(`${EVENT_SELECT}${where} ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(...params, limit))
+  }
+
+  /** Register or update an external operator. An existing id updates that row;
+   * otherwise the name is the upsert key, so re-registering the same tool is
+   * idempotent.
+   * @param {AgentInput} [input]
+   * @returns {AgentRow} */
+  registerAgent(input = {}) {
+    const id = typeof input.id === 'string' ? input.id.trim() : ''
+    const fields = normalizeAgentFields(input)
+    const now = new Date().toISOString()
+    const existing = id === '' ? null : this.getAgent(id)
+    if (existing !== null) {
+      const owner = /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE name = ?`).get(fields.name) ?? null)
+      if (owner !== null && owner.id !== existing.id) throw new GanttError(`agent name ${fields.name} already exists`, 409)
+      this.db.prepare(UPDATE_AGENT).run(
+        fields.name, fields.type, fields.role, fields.description, fields.details,
+        fields.endpoint, now, existing.id,
+      )
+      return /** @type {AgentRow} */ (this.getAgent(existing.id))
+    }
+    const byName = /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE name = ?`).get(fields.name) ?? null)
+    if (byName !== null) {
+      this.db.prepare(UPDATE_AGENT).run(
+        fields.name, fields.type, fields.role, fields.description, fields.details,
+        fields.endpoint, now, byName.id,
+      )
+      return /** @type {AgentRow} */ (this.getAgent(byName.id))
+    }
+    const created = randomUUID()
+    this.db.prepare(INSERT_AGENT).run(
+      created, fields.name, fields.type, fields.role, fields.description, fields.details,
+      fields.endpoint, now, now,
+    )
+    return /** @type {AgentRow} */ (this.getAgent(created))
+  }
+
+  /** @param {AgentFilter} [filter] @returns {AgentRow[]} */
+  listAgents(filter = {}) {
+    const query = normalizeAgentFilter(filter)
+    /** @type {string[]} */
+    const clauses = []
+    /** @type {import('node:sqlite').SQLInputValue[]} */
+    const params = []
+    if (query.type !== '') {
+      clauses.push('type = ?')
+      params.push(query.type)
+    }
+    if (query.role !== '') {
+      clauses.push('role = ?')
+      params.push(query.role)
+    }
+    if (query.q !== '') {
+      clauses.push('(name LIKE ? OR role LIKE ? OR description LIKE ? OR details LIKE ?)')
+      const pattern = `%${query.q}%`
+      params.push(pattern, pattern, pattern, pattern)
+    }
+    const where = clauses.length === 0 ? '' : ` WHERE ${clauses.join(' AND ')}`
+    return /** @type {AgentRow[]} */ (this.db.prepare(`${AGENT_SELECT}${where} ORDER BY name, id LIMIT ?`).all(...params, query.limit))
+  }
+
+  /** @param {unknown} id @returns {AgentRow | null} */
+  getAgent(id) {
+    if (typeof id !== 'string' || id.trim() === '') return null
+    return /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE id = ?`).get(id.trim()) ?? null)
+  }
+
+  /** @param {unknown} id @returns {AgentRow} */
+  requireAgent(id) {
+    const agent = this.getAgent(id)
+    if (agent === null) throw new GanttError(`agent ${typeof id === 'string' ? id : String(id)} was not found`, 404)
+    return agent
+  }
+
+  /** Write back one agent's completion report. The operator is recorded only
+   * the first time; the completer and the report always overwrite. Ancestor
+   * rollups are refreshed, and one `complete` event captures the report.
+   * @param {ReportCompletionInput} input
+   * @returns {{ task: TaskNode | null, event: TaskEvent }} */
+  reportCompletion(input) {
+    if (typeof input.taskId !== 'string' || input.taskId.trim() === '') throw new GanttError('taskId is required')
+    const task = this.requireRow(input.taskId.trim())
+    if (typeof input.agentId !== 'string' || input.agentId.trim() === '') throw new GanttError('agentId is required')
+    const agent = this.requireAgent(input.agentId.trim())
+    const report = normalizeReport(input.report)
+    if (report === '') throw new GanttError('report is required')
+    const status = input.status === undefined ? 'done' : normalizeStatus(input.status)
+    const progress = input.progress === undefined ? defaultProgress(status, task.progress) : normalizeProgress(input.progress)
+    const now = new Date().toISOString()
+    const event = this.transaction(() => {
+      this.db.prepare(
+        `UPDATE tasks SET operator_id = CASE WHEN operator_id = '' THEN ? ELSE operator_id END,
+         completed_by_id = ?, report = ?, status = ?, progress = ?, updated_at = ? WHERE id = ?`,
+      ).run(agent.id, agent.id, report, status, progress, now, task.id)
+      this.recomputeAncestors(task.parentId)
+      const chars = [...report]
+      const summary = chars.length > MAX_EVENT_REPORT ? `${chars.slice(0, MAX_EVENT_REPORT).join('')}…` : report
+      return this.recordEvent({ taskId: task.id, action: 'complete', detail: summary })
+    })
+    return { task: this.getNode(task.id), event }
+  }
+
+  /** Stable markdown context for one task: fields, ancestor chain, detail,
+   * completion report, and recent trajectory.
+   * @param {unknown} taskId
+   * @returns {{ taskId: string, markdown: string, chars: number }} */
+  taskContext(taskId) {
+    const row = this.requireRow(/** @type {string} */ (taskId))
+    const tasks = this.tree()
+    const task = /** @type {TaskNode} */ (flattenTree(tasks).find(node => node.id === row.id))
+    const events = this.trajectory({ taskId: row.id, limit: 8 })
+    const markdown = renderTaskContext(tasks, task, events)
+    return { taskId: row.id, markdown, chars: markdown.length }
+  }
+
+  /** The ready/next/todo leaves, grouped by track and capped by `limit`.
+   * @param {ReadyTasksInput} [input]
+   * @returns {{ tag: ReadyTag, tasks: ReadyTask[] }} */
+  readyTasks(input = {}) {
+    const tag = input.tag === undefined || input.tag === null || input.tag === '' ? 'ready' : input.tag
+    const limit = normalizeLimit(input.limit)
+    const entries = collectReadyTasks(this.tree(), /** @type {ReadyTag} */ (tag)).slice(0, limit)
+    return {
+      tag: /** @type {ReadyTag} */ (tag),
+      tasks: entries.map(entry => ({
+        id: entry.task.id,
+        number: entry.task.number,
+        ref: entry.task.ref,
+        title: entry.task.title,
+        status: entry.task.status,
+        description: entry.task.description,
+        doneWhen: entry.task.doneWhen,
+        trackId: entry.trackId,
+        trackName: entry.trackName,
+      })),
+    }
   }
 
   /** Export the unified tree plus one day plan as a stable markdown context document.

@@ -17,15 +17,20 @@ afterEach(() => {
 })
 
 describe('route registration', () => {
-  it('registers the twenty-three documented endpoints with their methods', () => {
+  it('registers the twenty-eight documented endpoints with their methods', () => {
     const { routes } = start()
-    expect(routes.size).toBe(23)
+    expect(routes.size).toBe(28)
     expect([...routes.keys()].sort()).toEqual(Object.values(ROUTES).sort())
     for (const definition of routes.values()) {
       expect(definition.requestBody).toBe('buffered')
       expect(typeof definition.fetch).toBe('function')
     }
     expect(routes.get(ROUTES.tree).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.agents).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.registerAgent, 'POST').methods).toEqual(['POST'])
+    expect(routes.get(ROUTES.taskContext).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.ready).methods).toEqual(['GET'])
+    expect(routes.get(ROUTES.reportCompletion, 'POST').methods).toEqual(['POST'])
     expect(routes.get(ROUTES.meta).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.day).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.context).methods).toEqual(['GET'])
@@ -33,8 +38,9 @@ describe('route registration', () => {
     expect(routes.get(ROUTES.focus).methods).toEqual(['GET'])
     expect(routes.get(ROUTES.briefCompute).methods).toEqual(['POST'])
     for (const writePath of [ROUTES.tasks, ROUTES.update, ROUTES.status, ROUTES.split, ROUTES.remove, ROUTES.seed,
-      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule, ROUTES.briefCompute, ROUTES.focusSet]) {
-      expect(routes.get(writePath).methods).toEqual(['POST'])
+      ROUTES.planStatus, ROUTES.planImport, ROUTES.decompose, ROUTES.schedule, ROUTES.briefCompute, ROUTES.focusSet,
+      ROUTES.registerAgent, ROUTES.reportCompletion]) {
+      expect(routes.get(writePath, 'POST').methods).toEqual(['POST'])
     }
   })
 
@@ -82,10 +88,41 @@ describe('route registration', () => {
           disposers.push(dispose)
           return dispose
         },
-        connection: { fetch: { register: definition => routes.set(definition.path, definition) } },
+        connection: { fetch: { register: (definition) => { for (const method of definition.methods) routes.set(`${method} ${definition.path}`, { ...definition, methods: [method] }) } } },
       }
       apply(ctx)
-      expect(routes.size).toBe(23)
+      expect(routes.size).toBe(28)
+      disposeAll(disposers)
+    } finally {
+      if (saved === undefined) delete process.env.DSH_GANTT_DB
+      else process.env.DSH_GANTT_DB = saved
+    }
+  })
+
+  it('registers one exact path per path and combines the agents methods', () => {
+    const saved = process.env.DSH_GANTT_DB
+    process.env.DSH_GANTT_DB = ':memory:'
+    try {
+      const routes = new Map()
+      const disposers = []
+      const ctx = {
+        effect(fn) {
+          const dispose = fn()
+          disposers.push(dispose)
+          return dispose
+        },
+        connection: {
+          fetch: {
+            register(definition) {
+              if (routes.has(definition.path)) throw new Error(`duplicate route ${definition.path}`)
+              routes.set(definition.path, definition)
+            },
+          },
+        },
+      }
+      apply(ctx)
+      expect(routes.size).toBe(27)
+      expect(routes.get(ROUTES.agents).methods).toEqual(['GET', 'POST'])
       disposeAll(disposers)
     } finally {
       if (saved === undefined) delete process.env.DSH_GANTT_DB
@@ -177,11 +214,12 @@ describe('GET /api/gantt/meta', () => {
     expect(payload.engine).toBe('node:sqlite')
     expect(payload.kinds).toEqual(['track', 'node', 'task'])
     expect(payload.linkTypes).toEqual(['memory', 'file', 'url', 'task', 'note'])
-    expect(payload.endpoints).toHaveLength(23)
+    expect(payload.endpoints).toHaveLength(28)
     expect(payload.endpoints.map(endpoint => endpoint.path).sort()).toEqual(Object.values(ROUTES).sort())
     expect(payload.endpoints.map(endpoint => endpoint.method)).toEqual([
-      'GET', 'GET', 'POST', 'GET', 'GET', 'POST', 'GET', 'GET', 'GET', 'POST', 'POST', 'POST',
-      'POST', 'POST', 'POST', 'GET', 'POST', 'POST', 'POST', 'POST', 'GET', 'GET', 'POST',
+      'GET', 'GET', 'POST', 'GET', 'GET', 'POST', 'GET', 'POST', 'GET', 'GET', 'POST', 'GET',
+      'GET', 'GET', 'POST', 'POST', 'POST', 'POST', 'POST', 'POST', 'GET', 'POST', 'POST',
+      'POST', 'POST', 'GET', 'GET', 'POST',
     ])
     for (const endpoint of payload.endpoints) {
       expect(typeof endpoint.description).toBe('string')

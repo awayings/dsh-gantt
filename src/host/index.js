@@ -1,5 +1,5 @@
 // The gantt plugin's host entry: one SQLite store, its task-day 08:00 daily
-// recompute, the twenty-three authenticated `/api/gantt/*` JSON routes, the
+// recompute, the twenty-eight authenticated `/api/gantt/*` JSON routes, the
 // assistant tools a DSH conversation uses to read, track, and decompose tasks,
 // and the background context that puts the focused task chain into each
 // conversation.

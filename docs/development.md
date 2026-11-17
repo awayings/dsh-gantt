@@ -47,7 +47,7 @@ script because the DSH client loader fetches a single artifact per package.
 | Path | Half | Role |
 | --- | --- | --- |
 | `src/host/index.js` | host | Entry: store lifecycle, brief scheduler, route/tool/prompt registration |
-| `src/host/routes/` | host | The twenty-three `/api/gantt/*` route specs split by resource (including focus, trajectory, and work mode); `http.js` is shared plumbing |
+| `src/host/routes/` | host | The twenty-eight `/api/gantt/*` route specs split by resource (including focus, trajectory, work mode, and external agents); `http.js` is shared plumbing |
 | `src/host/routes/focus.js` | host | `GET /focus` and `POST /focus/set`: per-conversation task focus |
 | `src/host/routes/work.js` | host | `GET /work`, `POST /work/session`, `GET /work/skills`, `GET /work/team`: task ⇄ work-conversation mapping, work directory, optional skills and agent-team reads |
 | `src/host/store/` | host | SQLite schema/migrations, task/tree writes, task-event trajectory, work-session mapping, brief persistence, context document, 08:00 scheduler |
@@ -184,11 +184,11 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v7 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
-| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-three routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
 | `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, catalog-aware resume) and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 7, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 New in the native-conversation round: `tests/store/focus.spec.js`,
@@ -211,7 +211,13 @@ extends the page filter and row-activity tests, and pins the `workSessionId`
 field that `/tree` derives from `work_sessions`. The in-page-panel round moves
 the workbench beside the tree, seeds `dsh.sessions.current` plus a per-window
 handoff before opening a conversation in a new window, and adds the
-ui-session main-binding fallback for the on-screen conversation id. Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
+ui-session main-binding fallback for the on-screen conversation id. The
+external-agent round adds `tests/store/schema-v8.spec.js`,
+`tests/store/agents.spec.js`, `tests/store/task-context.spec.js`,
+`tests/store/ready.spec.js`, `tests/host/mcp.spec.js`,
+`tests/host/routes-agents.spec.js`, and `tests/e2e/agents.spec.js`, and widens
+the endpoint count to 28.
+Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
 
@@ -274,7 +280,7 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
-### Schema version 6: one working tree plus daily reports, trajectory, and work sessions
+### Schema version 8: one working tree plus reports, trajectory, work sessions, and agents
 
 The tree data lives in `tasks`, one row per node, with `kind` marking the layer:
 
@@ -304,7 +310,16 @@ open and has no data backfill. Schema version 6 adds `work_sessions`
 conversation mapping, and rebuilds `task_events` with the widened `action`
 vocabulary (`create`/`update`/`complete`/`decompose`/`track`) because SQLite
 cannot alter a CHECK constraint in place. Both are idempotent and keep existing
-rows. The rationale is in
+rows. Schema version 7 widens the `tasks.status` CHECK with `cancelled` by
+rebuilding the table in place (ids and the referencing `focus`/`task_events`/
+`work_sessions` rows are preserved; the rebuild runs with foreign keys off and
+re-enables them afterwards). Schema version 8 adds the task write-back columns
+`operator_id`, `completed_by_id`, and `report` (all `TEXT NOT NULL DEFAULT ''`)
+and the `agents` table (`id` primary key, unique `name`, `type` CHECK
+`human`/`ai-agent`, `role`, `description`, `details`, `endpoint`, timestamps);
+the table is created by `CREATE_SCHEMA` and the columns are appended by the
+migration, so both a fresh and an upgraded database are idempotent. The
+rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
 
@@ -312,10 +327,10 @@ The host also starts an in-process scheduler: a `setTimeout` to the next 08:00
 in the task-day zone recomputes today's report with `source: 'auto'`; the timer
 is unref'ed and disposed with the plugin, so it only runs while `dsh web` is up.
 
-#### Migrate a v2–v6 database
+#### Migrate a v2–v7 database
 
 The host runs the append-only migration when it opens a database whose
-`PRAGMA user_version` is below 7. A v2 database additionally gets the twelve
+`PRAGMA user_version` is below 8. A v2 database additionally gets the twelve
 `tasks` columns, the `(kind, ref)` index, and the one-time backfill of
 `tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and gains
 `daily_briefs`; a v4 database keeps the tree and reports and gains only
@@ -324,14 +339,15 @@ The host runs the append-only migration when it opens a database whose
 database is rebuilt in place to widen the `tasks.status` CHECK with `cancelled`,
 preserving every id and the `focus`/`task_events`/`work_sessions` rows that
 reference it (the rebuild runs with foreign keys disabled and they are
-re-enabled afterwards). No event backfill runs.
+re-enabled afterwards); a v7 database gains the three write-back columns and the
+`agents` table without touching existing task rows. No event backfill runs.
 
 1. Stop `dsh web`, then copy the database aside:
    `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v3.db` (also copy `-wal`/`-shm` if
    present, or run `sqlite3 tasks.db 'PRAGMA wal_checkpoint(TRUNCATE)'` first).
 2. Start the new build / restart `dsh web`. No separate migration command
    exists; opening the store performs it.
-3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `7` and `taskCount`
+3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `8` and `taskCount`
    is unchanged on a v3/v4 upgrade. `GET /api/gantt/tree` still has the same
    tree and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
    today's report; `GET /api/gantt/trajectory` returns an empty `events` array
@@ -498,7 +514,7 @@ curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/work/team?sessionI
 Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
 `DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
 returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
-schemaVersion:7, kinds:[…], linkTypes:[…], endpoints:[…23 routes…]}`; `seed`
+schemaVersion:8, kinds:[…], linkTypes:[…], endpoints:[…28 routes…]}`; `seed`
 on an empty database inserts 13 demo tasks and returns
 `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry

@@ -6,12 +6,14 @@ by a local SQLite database and an authenticated JSON API.
 ## Shape
 
 - Host `src/host/`: `index.js` owns the store lifecycle, the 08:00 scheduler, and
-  route/tool/prompt registration; `routes/` holds twenty-three route specs incl.
-  `focus.js`/trajectory and `work.js` (plumbing in `http.js`); `store/` owns
-  SQLite, briefs, `task_events`, and the task ⇄ work-conversation mapping; `tracker/` parses the tracker markdown; `tree/` holds pure
+  route/tool/prompt registration; `routes/` holds twenty-eight route specs incl.
+  `focus.js`/trajectory, `work.js`, and `agents.js` (plumbing in `http.js`);
+  `store/` owns SQLite, briefs, `task_events`, the agent registry, and the task ⇄
+  work-conversation mapping; `tracker/` parses the tracker markdown; `tree/` holds pure
   tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
   builds the daily report; `tools.js` declares the five assistant tools and records
-  provenance. Four facades keep the public surface stable for tests.
+  provenance; `mcp.js` is the external-agent JSON-RPC server behind
+  `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
   right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation,
   brief strip, dialogs, styles) bundled by

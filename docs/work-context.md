@@ -110,6 +110,33 @@ back to `## 当前会话没有聚焦任务` plus the whole-tree context document
 The tool is the fallback for models that need the current state mid-round; the
 runtime context is the always-present snapshot.
 
+## `get_task_context` result
+
+External coding tools pull context by task id instead of via a conversation:
+`GanttStore.taskContext(taskId)` calls `renderTaskContext(tasks, task, events)`
+in `src/host/tree/task-context.js`. It reuses the same `renderFocusChain`,
+`renderFocusDetail`, and `renderTrajectory` renderers, so a field added to the
+focus detail also appears here.
+
+The output starts with `# 任务上下文：{ref|number} {title}（{kind}）`, then one
+line per populated field (status, progress, operator, completer, description,
+doneWhen, dates, category, estimate, landing, inspiration, dependency, and the
+link list; empty optional fields add no line). It continues with:
+
+```
+## 任务链路（从支线根到当前任务）
+## 当前任务
+## 汇报结果          ← only when the task carries a report
+## 任务轨迹          ← newest 8 events; （暂无会话记录） when empty
+```
+
+The renderer is pure: it reads the tree, the task row, and recorded events, and
+never the current time. The HTTP route `GET /api/gantt/task/context` adds the
+compact task object beside the markdown, and the MCP tool
+`get_task_context` returns `{ok, taskId, markdown, chars}`. Unlike
+`gantt_context`, there is no fallback to the whole tree: the caller must name a
+task, and an unknown id is a `404`/isError.
+
 ## Workbench prompt editor
 
 The task view in the workbench (both the in-page panel and the right-rail tab)

@@ -15,12 +15,14 @@ export const STATUSES = /** @type {TaskStatus[]} */ (STATUS_WORDS)
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 4000
+const MAX_REPORT = 4000
+const MAX_AGENT_REF = 100
 
-const TASK_COLUMNS = 'id, parent_id AS parentId, title, description, status, progress, start_date AS startDate, end_date AS endDate, sort_order AS sortOrder, created_at AS createdAt, updated_at AS updatedAt, kind, ref, state, lane, dep, done_when AS doneWhen, landing, estimate, category, inspiration, links, source'
+const TASK_COLUMNS = 'id, parent_id AS parentId, title, description, status, progress, start_date AS startDate, end_date AS endDate, sort_order AS sortOrder, created_at AS createdAt, updated_at AS updatedAt, kind, ref, state, lane, dep, done_when AS doneWhen, landing, estimate, category, inspiration, links, source, operator_id AS operatorId, completed_by_id AS completedById, report'
 export const TASK_SELECT = `SELECT ${TASK_COLUMNS} FROM tasks`
-export const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description, status, progress, start_date, end_date, sort_order, kind, ref, state, lane, dep, done_when, landing, estimate, category, inspiration, links, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-export const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, source = ?, updated_at = ? WHERE id = ?'
-export const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, updated_at = ? WHERE id = ?'
+export const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description, status, progress, start_date, end_date, sort_order, kind, ref, state, lane, dep, done_when, landing, estimate, category, inspiration, links, source, operator_id, completed_by_id, report, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+export const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, source = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
+export const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
 
 /** Recorded trajectory actions; the closed vocabulary of `task_events.action`. */
 export const EVENT_ACTIONS = /** @type {const} */ (['create', 'update', 'complete', 'decompose', 'track'])
@@ -48,15 +50,18 @@ export const SEED_TASKS = [
 /** @typedef {{ parentId: string | null, title: string, description: string, status: TaskStatus,
  * progress: number, startDate: string, endDate: string, sortOrder: number, kind: TaskKind, ref: string,
  * state: string, lane: string, dep: string, doneWhen: string, landing: string, estimate: string,
- * category: string, inspiration: string, links: TaskLink[], source: string }} TaskInsert */
+ * category: string, inspiration: string, links: TaskLink[], source: string, operatorId: string,
+ * completedById: string, report: string }} TaskInsert */
 /** Task fields accepted by create(). @typedef {{ title?: unknown, description?: unknown,
  * parentId?: unknown, status?: unknown, progress?: unknown, startDate?: unknown, endDate?: unknown,
  * kind?: unknown, ref?: unknown, lane?: unknown, dep?: unknown, doneWhen?: unknown, landing?: unknown,
- * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown }} TaskInput */
+ * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, operatorId?: unknown,
+ * completedById?: unknown, report?: unknown }} TaskInput */
 /** Task fields accepted by update(); kind and ref are ignored. @typedef {{ title?: unknown,
  * description?: unknown, parentId?: unknown, status?: unknown, progress?: unknown, startDate?: unknown,
  * endDate?: unknown, lane?: unknown, dep?: unknown, doneWhen?: unknown, landing?: unknown,
- * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown }} TaskPatch */
+ * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, operatorId?: unknown,
+ * completedById?: unknown, report?: unknown }} TaskPatch */
 /** One child task accepted by split(). @typedef {{ title: unknown, description?: unknown,
  * status?: unknown, progress?: unknown, startDate?: unknown, endDate?: unknown, lane?: unknown,
  * dep?: unknown, doneWhen?: unknown, landing?: unknown, estimate?: unknown, category?: unknown,
@@ -87,6 +92,23 @@ export function normalizeDescription(value) {
   if (typeof value !== 'string') throw new GanttError('description must be a string')
   if ([...value].length > MAX_DESCRIPTION) throw new GanttError(`description must be at most ${MAX_DESCRIPTION} characters`)
   return value.trim()
+}
+/** The free-form completion report written back by an external agent.
+ * @param {unknown} value @returns {string} */
+export function normalizeReport(value) {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') throw new GanttError('report must be a string')
+  if ([...value].length > MAX_REPORT) throw new GanttError(`report must be at most ${MAX_REPORT} characters`)
+  return value.trim()
+}
+/** An operator/completer agent reference: an optional id-like string.
+ * @param {unknown} value @param {string} field @returns {string} */
+export function normalizeAgentRef(value, field) {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') throw new GanttError(`${field} must be a string`)
+  const ref = value.trim()
+  if ([...ref].length > MAX_AGENT_REF) throw new GanttError(`${field} must be at most ${MAX_AGENT_REF} characters`)
+  return ref
 }
 /** @param {unknown} value @returns {TaskStatus} */
 export function normalizeStatus(value) {

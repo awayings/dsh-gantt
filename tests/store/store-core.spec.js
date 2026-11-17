@@ -175,6 +175,9 @@ describe('row access', () => {
       inspiration: '',
       links: [],
       source: 'manual',
+      operatorId: '',
+      completedById: '',
+      report: '',
       workSessionId: null,
     })
     expect(store.getRow('child').parentId).toBe('root')

@@ -44,7 +44,16 @@ function downgradeToV6(file) {
       links TEXT NOT NULL DEFAULT '[]',
       source TEXT NOT NULL DEFAULT 'manual'
     );
-    INSERT INTO tasks_v6 SELECT * FROM tasks;
+    INSERT INTO tasks_v6 (
+      id, parent_id, title, description, status, progress, start_date, end_date,
+      sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
+      landing, estimate, category, inspiration, links, source
+    )
+      SELECT
+      id, parent_id, title, description, status, progress, start_date, end_date,
+      sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
+      landing, estimate, category, inspiration, links, source
+      FROM tasks;
     DROP TABLE tasks;
     ALTER TABLE tasks_v6 RENAME TO tasks;
     CREATE INDEX idx_tasks_parent ON tasks(parent_id, sort_order, created_at);
@@ -57,7 +66,7 @@ function downgradeToV6(file) {
 describe('schema v7', () => {
   it('creates the widened status vocabulary', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(7)
+    expect(SCHEMA_VERSION).toBe(8)
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(() => store.create({ title: 'Dropped', status: 'cancelled' })).not.toThrow()
     expect(() => store.db.prepare(

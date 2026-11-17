@@ -39,13 +39,13 @@ function reject(res, status, message) {
  * Translate one node request into a `Request`, dispatch it to the registered
  * handler, and copy the `Response` back out. This mirrors what the host
  * connection layer does for the plugin.
- * @param {Map<string, import('../../src/host/index.js').GanttRoute>} routes
+ * @param {Map<string, import('../../src/host/index.js').GanttRoute> & { get: (path: string, method?: string) => any }} routes
  * @param {{ origin: string }} state
  */
 function createHandler(routes, state) {
   return async (req, res) => {
     const { pathname } = new URL(String(req.url), 'http://127.0.0.1')
-    const definition = routes.get(pathname)
+    const definition = routes.get(pathname, String(req.method)) ?? routes.get(pathname)
     if (!definition) {
       reject(res, 404, `no route for ${pathname}`)
       return

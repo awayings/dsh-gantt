@@ -103,8 +103,25 @@ export function requestedDate(request) {
 }
 
 /**
- * Register one route, mapping a `GanttError` status and hiding any
- * other failure behind a 500.
+ * Run one route handler, mapping a `GanttError` status and hiding any other
+ * failure behind a 500.
+ * @param {RouteSpec} spec
+ * @param {Request} request
+ * @param {RouteDeps} deps
+ * @returns {Promise<Response>}
+ */
+async function routeResponse(spec, request, deps) {
+  try {
+    return await spec.fetch(request, deps)
+  } catch (error) {
+    const status = error instanceof GanttError ? error.status : 500
+    const message = error instanceof Error ? error.message : String(error)
+    return json({ ok: false, error: message }, status)
+  }
+}
+
+/**
+ * Register one route.
  * @param {GanttContext} ctx
  * @param {RouteSpec} spec
  * @param {RouteDeps} deps
@@ -115,14 +132,32 @@ export function registerRoute(ctx, spec, deps) {
     path: spec.path,
     methods: [spec.method],
     requestBody: 'buffered',
-    fetch: async (request) => {
-      try {
-        return await spec.fetch(request, deps)
-      } catch (error) {
-        const status = error instanceof GanttError ? error.status : 500
-        const message = error instanceof Error ? error.message : String(error)
-        return json({ ok: false, error: message }, status)
-      }
+    fetch: request => routeResponse(spec, request, deps),
+  })
+}
+
+/**
+ * Register every spec that shares one exact path as a single Fetch route with
+ * all of its methods. The connection service rejects a second registration for
+ * the same path, so GET and POST `/api/gantt/agents` must be combined here.
+ * @param {GanttContext} ctx
+ * @param {RouteSpec[]} specs
+ * @param {RouteDeps} deps
+ * @returns {void}
+ */
+export function registerRouteGroup(ctx, specs, deps) {
+  if (specs.length === 1) {
+    registerRoute(ctx, specs[0], deps)
+    return
+  }
+  const [first] = specs
+  ctx.connection.fetch.register({
+    path: first.path,
+    methods: specs.map(spec => spec.method),
+    requestBody: 'buffered',
+    fetch: (request) => {
+      const spec = /** @type {RouteSpec} */ (specs.find(candidate => candidate.method === request.method))
+      return routeResponse(spec, request, deps)
     },
   })
 }

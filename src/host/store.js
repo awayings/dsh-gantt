@@ -4,6 +4,7 @@
 
 export { GanttError } from './errors.js'
 export { SCHEMA_VERSION, resolveDatabasePath } from './store/db.js'
+export { AGENT_TYPES } from './store/agents.js'
 export { GanttStore } from './store/gantt.js'
 export { PLAN_STATUSES } from './store/plan.js'
 export { STATUSES } from './store/tasks.js'
@@ -11,6 +12,14 @@ export { addDays, buildTree, dayToIso, deriveSummaryStatus, isoToDay, summarize,
 export { DEFAULT_WORK_CWD, resolveWorkCwd } from './work.js'
 
 /** @typedef {import('./store/context.js').ContextOptions} ContextOptions */
+/** @typedef {import('./store/agents.js').AgentFilter} AgentFilter */
+/** @typedef {import('./store/agents.js').AgentInput} AgentInput */
+/** @typedef {import('./store/agents.js').AgentRow} AgentRow */
+/** @typedef {import('./store/gantt.js').ContextTask} ContextTask */
+/** @typedef {import('./store/gantt.js').ReadyTask} ReadyTask */
+/** @typedef {import('./store/gantt.js').ReadyTasksInput} ReadyTasksInput */
+/** @typedef {import('./store/gantt.js').ReportCompletionInput} ReportCompletionInput */
+/** @typedef {import('./tree/ready.js').ReadyTag} ReadyTag */
 /** @typedef {import('./store/plan.js').BlockDraft} BlockDraft */
 /** @typedef {import('./store/plan.js').BlockUpsertCounts} BlockUpsertCounts */
 /** @typedef {import('./store/plan.js').DayPlanBundle} DayPlanBundle */
