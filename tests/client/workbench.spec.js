@@ -3,13 +3,14 @@
 // refresh, focus revision, after a conversation action). The new-window and
 // execute/decompose entries live in workbench-execute.spec.js.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act } from 'react'
+import { act, createElement } from 'react'
 import {
   click,
   deferred,
   flush,
   installFetch,
   jsonResponse,
+  mount,
   q,
   qa,
   text,
@@ -17,6 +18,7 @@ import {
 } from './harness.js'
 import { noteWorkFocus } from '../../src/client/work-nav.js'
 import { resetAgentNames } from '../../src/client/agent-labels.js'
+import { GanttWorkbench } from '../../src/client/pages/workbench.js'
 import {
   AGENTS,
   SKILLS,
@@ -377,6 +379,86 @@ describe('skills and team panels', () => {
     click(tab(view.container, 'team'))
     expect(qa(view.container, 'li[data-agent-id]')).toHaveLength(3)
     expect(qa(view.container, 'button[data-action="open-agent"]')).toHaveLength(0)
+  })
+})
+
+describe('controlled tabs', () => {
+  function renderControlled(options = {}) {
+    const services = options.services ?? fakeServices()
+    const props = {
+      ctx: buildCtx({ services }),
+      scope: { sessionId: 's1' },
+      ...(options.tab === undefined ? {} : { tab: options.tab }),
+      onTabChange: options.onTabChange ?? null,
+    }
+    const view = mount(createElement(GanttWorkbench, props))
+    return { view, props }
+  }
+
+  it('renders the tab named by the controlled prop', async () => {
+    installFetch(defaultRoutes())
+    const { view } = renderControlled({ tab: 'skills' })
+    await flush()
+
+    expect(tab(view.container, 'skills').getAttribute('data-active')).toBe('true')
+    expect(tab(view.container, 'skills').getAttribute('aria-selected')).toBe('true')
+    expect(tab(view.container, 'task').hasAttribute('data-active')).toBe(false)
+    expect(tab(view.container, 'task').getAttribute('aria-selected')).toBe('false')
+    expect(q(view.container, 'section[data-panel="skills"]')).not.toBeNull()
+    expect(q(view.container, 'section[data-panel="task"]')).toBeNull()
+  })
+
+  it('reports a controlled click without changing the active tab itself', async () => {
+    installFetch(defaultRoutes())
+    const onTabChange = vi.fn()
+    const { view, props } = renderControlled({ tab: 'skills', onTabChange })
+    await flush()
+
+    click(tab(view.container, 'team'))
+    expect(onTabChange.mock.calls).toEqual([['team']])
+    expect(tab(view.container, 'skills').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, 'section[data-panel="team"]')).toBeNull()
+
+    view.rerender(createElement(GanttWorkbench, { ...props, tab: 'team' }))
+    expect(tab(view.container, 'team').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, 'section[data-panel="team"]')).not.toBeNull()
+    expect(onTabChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the internal tab when the prop is absent', async () => {
+    installFetch(defaultRoutes())
+    const onTabChange = vi.fn()
+    const { view } = renderControlled({ onTabChange })
+    await flush()
+
+    expect(tab(view.container, 'task').getAttribute('data-active')).toBe('true')
+    click(tab(view.container, 'skills'))
+    expect(tab(view.container, 'skills').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, 'section[data-panel="skills"]')).not.toBeNull()
+    expect(onTabChange).not.toHaveBeenCalled()
+  })
+
+  it('treats an unknown tab as uncontrolled and starts on the task tab', async () => {
+    installFetch(defaultRoutes())
+    const onTabChange = vi.fn()
+    const { view } = renderControlled({ tab: 'bogus', onTabChange })
+    await flush()
+
+    expect(tab(view.container, 'task').getAttribute('data-active')).toBe('true')
+    click(tab(view.container, 'skills'))
+    expect(tab(view.container, 'skills').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, 'section[data-panel="skills"]')).not.toBeNull()
+    expect(onTabChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps the rendered tab in place when a controlled click has no handler', async () => {
+    installFetch(defaultRoutes())
+    const { view } = renderControlled({ tab: 'skills' })
+    await flush()
+
+    click(tab(view.container, 'team'))
+    expect(tab(view.container, 'skills').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, 'section[data-panel="team"]')).toBeNull()
   })
 })
 

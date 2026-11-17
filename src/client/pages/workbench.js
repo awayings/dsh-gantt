@@ -353,16 +353,24 @@ function section(name, content) {
  * one task's dedicated conversation, its trajectory, the available skills, and
  * the subagent team. Without a `taskId` the panel follows the conversation's
  * focused task; the in-page panel pins the task the user just activated.
+ * A valid `tab` turns the sub-tabs controlled: the rendered tab follows the
+ * prop and a click only reports the requested name through `onTabChange`, so a
+ * host can restore and persist the active tab. Without a valid `tab` the panel
+ * keeps its own state.
  * @param {{
  *   ctx: any,
  *   scope?: { sessionId?: string },
  *   visible?: boolean,
  *   taskId?: string | null,
  *   onClose?: (() => void) | null,
+ *   tab?: string | null,
+ *   onTabChange?: ((name: string) => void) | null,
  * }} props
  * @returns {any} the rendered workbench element
  */
-export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onClose = null }) {
+export function GanttWorkbench({
+  ctx, scope, visible = true, taskId = null, onClose = null, tab = null, onTabChange = null,
+}) {
   const { locale, t } = useLocale(ctx)
   const sessionId = scope?.sessionId ?? ''
   const targetTaskId = typeof taskId === 'string' && taskId !== '' ? taskId : null
@@ -371,7 +379,9 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
   // A pinned task panel always shows the task the user activated; only the
   // conversation sidebar's workbench follows the focus revision.
   const followFocus = targetTaskId === null ? focusRevision : 0
-  const [tab, setTab] = useState('task')
+  const [internalTab, setInternalTab] = useState('task')
+  const controlledTab = typeof tab === 'string' && WORK_TABS.includes(tab)
+  const activeTab = controlledTab ? tab : internalTab
   const [revision, setRevision] = useState(0)
   const [prompt, setPrompt] = useState('')
   const [state, setState] = useState({ status: 'loading', work: null, panels: null, error: null })
@@ -509,9 +519,9 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
       type: 'button',
       role: 'tab',
       'data-work-tab': name,
-      'data-active': tab === name ? 'true' : undefined,
-      'aria-selected': tab === name ? 'true' : 'false',
-      onClick: () => setTab(name),
+      'data-active': activeTab === name ? 'true' : undefined,
+      'aria-selected': activeTab === name ? 'true' : 'false',
+      onClick: () => (controlledTab ? onTabChange?.(name) : setInternalTab(name)),
     }, t(`workbench.tab.${name}`))),
   )
 
@@ -533,7 +543,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
     )
   } else {
     body = h('div', { className: 'gantt-workbench-body' },
-      tab === 'task'
+      activeTab === 'task'
         ? taskPanel({
           work: { ...state.work, ctx },
           trajectory: state.panels.trajectory,
@@ -550,7 +560,7 @@ export function GanttWorkbench({ ctx, scope, visible = true, taskId = null, onCl
           onSend: send,
           onOpenWindow: openInWindow,
         })
-        : tab === 'skills'
+        : activeTab === 'skills'
           ? skillsPanel(state.panels.skills, t)
           : teamPanel(state.panels.team, t, openSession),
     )
