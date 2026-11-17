@@ -661,7 +661,7 @@ Open the page in the connected Web GUI and check:
       `## 任务轨迹（会话与轮次）` section), then `gantt_decompose`, and the new
       children appear in the tree without any propose/apply card.
       `gantt_update_task` changes a task's
-      status/progress/title/`doneWhen` the same way.
+      status/progress/title/description/`doneWhen` the same way.
 - [ ] After those tool calls, `GET /api/gantt/trajectory?taskId=…` shows the
       `decompose`/`create`/`update`/`complete` events with the conversation's
       full session id and turn; a new conversation focused on the same task

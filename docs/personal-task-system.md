@@ -552,10 +552,11 @@ results straight into the tree.
   `gantt:focus` snapshot renders the same chain and detail; the full context
   layout, its data sources, and the rules for adding a field are in
   [work-context.md](work-context.md).
-- **Writes.** `gantt_decompose` creates children (`id`, `children`, optional
-  `planDate`), `gantt_update_task` changes `status`/`progress`/`title`/
-  `doneWhen`, and `gantt_create_task` inserts a new sibling right after the
-  reference (focused) task with later siblings shifted down. There is no
+- **Writes.** `gantt_decompose` creates children (`id`, `children` including an
+  optional child `description`, optional `planDate`), `gantt_update_task`
+  changes `status`/`progress`/`title`/`description`/`doneWhen`, and
+  `gantt_create_task` inserts a new sibling right after the reference (focused)
+  task with later siblings shifted down. There is no
   proposal card and no apply button: the model calls the tool in the
   conversation, the tool calls the store, and the normal validation (depth cap,
   status vocabulary, dates, one transaction) applies. Tool writes are ordinary

@@ -1332,6 +1332,7 @@ Create child tasks under one task.
 | `children` | yes | 1–100 child objects |
 | `children[].title` | yes | 1–200 characters |
 | `children[].doneWhen` | yes | Verifiable completion standard |
+| `children[].description` | no | Markdown or plain text, up to 4000 characters, trimmed |
 | `children[].estimate`, `category`, `landing`, `inspiration` | no | Optional metadata strings |
 | `children[].status` | no | `todo` (default), `in_progress`, `blocked`, `done`, or `cancelled` |
 
@@ -1351,12 +1352,14 @@ Update one task's fields.
 | `status` | no | New status vocabulary value |
 | `progress` | no | 0–100 |
 | `title` | no | New title |
+| `description` | no | New description: markdown or plain text, up to 4000 characters, trimmed; an empty string clears it |
 | `doneWhen` | no | New completion standard |
 | `summary` | no | Short note stored as the event detail |
 
 Returns `{ ok: true, message: string }` with the updated task's ref/number,
 title, status label, and progress. At least one of `status`/`progress`/`title`/
-`doneWhen` is required (`400 nothing to update`); an unknown task is a `404`.
+`description`/`doneWhen` is required (`400 nothing to update`); an unknown task
+is a `404`.
 Status/progress follow the same pairing rules as the HTTP update route. The call
 records an `update` event, or a `complete` event when the task is marked done.
 

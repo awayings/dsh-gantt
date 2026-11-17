@@ -139,7 +139,7 @@ function updateTask(store, args, exec) {
   const id = resolveTaskId(store, args.id)
   /** @type {Record<string, unknown>} */
   const patch = {}
-  for (const field of ['title', 'status', 'progress', 'doneWhen']) {
+  for (const field of ['title', 'description', 'status', 'progress', 'doneWhen']) {
     if (args[field] !== undefined) patch[field] = args[field]
   }
   if (Object.keys(patch).length === 0) throw new GanttError('nothing to update')
@@ -263,6 +263,7 @@ export function toolDefinitions(store, titles = null) {
               properties: {
                 title: { type: 'string', description: '子任务标题。' },
                 doneWhen: { type: 'string', description: '可验证的完成标准：做完了吗？怎么证明？' },
+                description: { type: 'string', description: '可选，子任务描述（纯文本或 markdown，最多 4000 字符）。' },
                 estimate: { type: 'string', description: '可选，预计耗时，如 30min。' },
                 category: { type: 'string', description: '可选，A/B 类或自定义分类。' },
                 landing: { type: 'string', description: '可选，落点。' },
@@ -290,7 +291,7 @@ export function toolDefinitions(store, titles = null) {
     },
     {
       name: TOOL_NAMES.update,
-      description: '更新一个甘特图任务的状态、进度、标题或完成标准。标记 done 会自动记录完成它的会话与轮次；用 summary 写完成证据或更新说明。',
+      description: '更新一个甘特图任务的状态、进度、标题、描述或完成标准。标记 done 会自动记录完成它的会话与轮次；用 summary 写完成证据或更新说明。',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -299,6 +300,7 @@ export function toolDefinitions(store, titles = null) {
           status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: '可选，新状态；cancelled 表示废弃，不计入父任务进度。' },
           progress: { type: 'integer', description: '可选，0–100 的进度。' },
           title: { type: 'string', description: '可选，新标题。' },
+          description: { type: 'string', description: '可选，新描述（纯文本或 markdown，最多 4000 字符；传空字符串清空）。' },
           doneWhen: { type: 'string', description: '可选，新的完成标准。' },
           summary: { type: 'string', description: '可选，完成证据或更新说明（写入任务轨迹）。' },
         },

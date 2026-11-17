@@ -51,6 +51,10 @@ describe('gantt assistant tools', () => {
       expect(entry.output.schema.type).toBe('object')
       expect(typeof entry.output.render).toBe('function')
     }
+    const update = /** @type {any} */ (tool(tools, TOOL_NAMES.update))
+    expect(update.parameters.properties.description.type).toBe('string')
+    const decompose = /** @type {any} */ (tool(tools, TOOL_NAMES.decompose))
+    expect(decompose.parameters.properties.children.items.properties.description.type).toBe('string')
   })
 
   it('resolves a task by internal id, ref, or point number', () => {
@@ -156,6 +160,33 @@ describe('gantt assistant tools', () => {
     expect(stored?.status).toBe('in_progress')
     expect(stored?.progress).toBe(40)
     expect(stored?.doneWhen).toBe('Rows exported')
+  })
+
+  it('updates a description on its own and clears it with an empty string', async () => {
+    const { task } = focusTask()
+    const update = tool(toolDefinitions(store), TOOL_NAMES.update)
+    const value = /** @type {any} */ (await update.execute({ id: task.id, description: '## Steps\n\n- pull rows' }, {}))
+    expect(value.message).toContain('已更新')
+    expect(store.getNode(task.id)?.description).toBe('## Steps\n\n- pull rows')
+    await update.execute({ id: task.id, description: '  padded  ' }, {})
+    expect(store.getNode(task.id)?.description).toBe('padded')
+    await update.execute({ id: task.id, description: '' }, {})
+    expect(store.getNode(task.id)?.description).toBe('')
+    await expectToolError(
+      update.execute({ id: task.id, description: 'x'.repeat(4001) }, {}),
+      'description must be at most 4000 characters',
+      400,
+    )
+  })
+
+  it('decomposes children with a description', async () => {
+    const { task } = focusTask()
+    const decompose = tool(toolDefinitions(store), TOOL_NAMES.decompose)
+    await decompose.execute({
+      id: task.number,
+      children: [{ title: 'Child', doneWhen: 'Done', description: 'Child detail' }],
+    }, {})
+    expect(store.getNode(task.id)?.children[0].description).toBe('Child detail')
   })
 
   it('renders refs and an unknown status for a synthetic decompose/update result', async () => {
