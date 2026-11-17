@@ -85,6 +85,10 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
 - Zero runtime dependencies (Node built-ins + loader-provided React); dev
   tooling is pinned and locked (rolldown builds the browser half).
 - Conventional Commits, English, imperative subject, one concern per commit.
+  When the work belongs to a Gantt task (the focused task, or the task this
+  session is working under), end the subject with its point number —
+  `feat(today): keep the plan row bold (1.8.1)`; template in
+  `CONTRIBUTING.md`, enforced for remote workers by the MCP `get_worker_guide`.
 - Release: `pnpm run release X.Y.Z --push` (validates a clean, synced `main` and
   its version, runs the full gate, packages, tags, pushes, waits for the
   workflow). The artifact is `pnpm run package`: one tarball for both deployment
