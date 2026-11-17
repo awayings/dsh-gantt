@@ -95,6 +95,11 @@ directory rather than a copy: restart `dsh web` after editing anything under
 `src/host/`, and run `pnpm run build` (it rewrites `lib/client.js` when the bundler
 output changed) plus reload
 the page after editing `src/client/` — no reinstall step.
+A deployed profile works the other way round: it pins the release tarball as a
+`file:` dependency, so checkout edits are not live there. Switching between the
+two forms, and the re-link/package loop against a pinned profile, are in
+[deployment.md](docs/deployment.md#34-switching-a-profile-from-link-to-file)
+and [development.md](docs/development.md#iterating-against-a-pinned-deployment).
 `pnpm run deploy` takes `--profile <name>` and `--home <dir>` when the target is
 not the default `web` profile under `$DSH_HOME` (`~/.dsh`).
 

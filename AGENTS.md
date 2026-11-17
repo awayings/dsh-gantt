@@ -101,6 +101,9 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   `Asia/Shanghai`).
 - Install with `pnpm run deploy` (`--check`, `--uninstall`) or GUI
   `plugin_manager install_bundle`; restart for host changes, rebuild+reload for client.
+  The deployed profile pins the release tarball (`file:`), so this checkout is
+  not live there: re-link with `pnpm run deploy` before iterating and repackage
+  to ship (`docs/development.md`, "Iterating against a pinned deployment").
 - `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
   manual checklist, acceptance pass, API — in `docs/development.md`,
   `docs/api.md`, `docs/compatibility.md`.

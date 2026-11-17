@@ -182,6 +182,12 @@ the package, and re-adding the checkout restored `link:`. Switching the live
 profile restarts DSH, so run it in a maintenance window and then check
 `--dump-config` and the Gantt page.
 
+After the switch the checkout is no longer live in that profile: edits under
+`src/` reach it only through a re-link or a repackaged tarball. That dev loop —
+`pnpm run deploy` to iterate, `pnpm run package` plus a reinstall to ship, and
+the same-version `runtime/<v>` pitfall — is documented in
+[development.md § Iterating against a pinned deployment](development.md#iterating-against-a-pinned-deployment).
+
 ## 4. Upgrade and rollback
 
 Two levels, because the artifact has two units.
@@ -205,6 +211,12 @@ The lab copy is `k3s-lab/dsh/upgrade-mcp.sh`; it can run inside the Pod as well.
 
 This relies on the sidecar keeping `GANTT_VERSION=auto`. Pinning an explicit
 version in the Deployment is supported but stops it from following `desired`.
+
+The path assumes a new version number, because the entrypoint skips the extract
+when `current` already points at `runtime/<version>`. Replacing a tarball under
+the version already running is a dev-stage shortcut: delete
+`runtime/<version>` first (or bump the version), or the sidecar logs
+`release <version> already installed` and keeps serving the old bytes.
 
 ### 4.2 Full upgrade (plugin half changes too)
 

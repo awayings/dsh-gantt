@@ -466,6 +466,9 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 1. `pnpm install`.
 2. `pnpm run deploy` links this checkout into the target DSH profile and
    verifies the composed tree (see [Install a checkout](#install-a-checkout)).
+   A profile pinned to a release (`file:` dependency) does not load this
+   checkout until you run this step — see
+   [Iterating against a pinned deployment](#iterating-against-a-pinned-deployment).
 3. Edit `src/host/`: these modules run in the `dsh web` server process and are
    re-read on restart, so restart `dsh web` after host changes. The daily-brief
    scheduler restarts with the process.
@@ -524,6 +527,48 @@ Because the dependency is a link, the profile never holds a copy:
 - No edit requires a reinstall. Run `pnpm run deploy` again only when the
   profile lost the link (profile reset, DSH reinstall, or another checkout won
   the dependency); `pnpm run deploy --check` reports which part is missing.
+
+### Iterating against a pinned deployment
+
+A profile resolves this package in one of two forms, and the form decides what
+it loads:
+
+| Dependency | The profile loads | Checkout edits go live after |
+| --- | --- | --- |
+| `link:/path/to/dsh-gantt` | this directory (nothing is copied) | restart `dsh web` (host); `pnpm run build` + reload (client) |
+| `file:/…/releases/dsh-gantt-<v>.tgz` | the packaged copy | a repackage and reinstall; the checkout plays no part |
+
+Both are the same package and both select the `@local/dsh-gantt` bundle.
+Contributor profiles are `link:` by design. The cluster profile `web` under
+`/data/dsh-home` was switched to `file:` at 1.6.0
+([deployment.md §3.4](deployment.md#34-switching-a-profile-from-link-to-file)),
+so the checkout is deliberately **not** what the live instance runs. The switch
+costs four habits:
+
+1. **Re-link before iterating.** `pnpm run deploy` replaces the `file:`
+   dependency in place (the bundle selection is kept and verified), then restart
+   `dsh web`; host edits are live again and client edits follow
+   `pnpm run build`.
+2. **A failing `--check` is the pinned state, not a broken profile.**
+   `pnpm run deploy --check` verifies a link and therefore fails while the
+   profile holds a `file:` dependency. Do not "repair" it by editing files under
+   `node_modules/@local/dsh-gantt` — that copy is replaced on the next install;
+   reinstall from a tarball instead.
+3. **Ship through the artifact.** `pnpm run package`, copy
+   `.tmp/dist/dsh-gantt-<v>.tgz` onto the PVC (`releases/`) and refresh
+   `SHA256SUMS`; then reinstall the plugin
+   (`dsh plugin --profile web add file:…`) plus a rollout for a host change, or
+   restart only the MCP sidecar for a server-half change
+   ([deployment.md §4.1](deployment.md#41-sidecar-only-most-upgrades)). The
+   k3s host scripts `install-gantt.sh` / `upgrade-mcp.sh` perform these steps.
+4. **Re-pin any time** with the reverse `add`:
+   `dsh plugin --profile web add file:/data/dsh-home/gantt/releases/dsh-gantt-<v>.tgz`.
+
+Refreshing a tarball under the same version is a dev-stage shortcut, not an
+upgrade: the sidecar entrypoint skips the extract when `current` already points
+at `runtime/<v>`, so delete `runtime/<v>` (or bump the version) before the
+sidecar restarts — otherwise it logs `release <v> already installed` and keeps
+serving the old bytes.
 
 ## Verification procedure
 
