@@ -16,10 +16,12 @@ function writebackRow(field, label, value, multiline = false) {
 }
 
 /** Create or edit task dialog. */
-export function TaskDialog({ mode, task, parentTask, parentOptions, t, onClose, onSaved, onSplit }) {
+export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, onClose, onSaved, onSplit }) {
   const hasChildren = Boolean(task && task.hasChildren)
-  const initialStart = task?.startDate ?? parentTask?.startDate ?? todayIso()
-  const initialEnd = task?.endDate ?? parentTask?.endDate ?? addDays(initialStart, 3)
+  // A new task starts on its creation day, even under a parent whose range began
+  // earlier; only an edit reopens the task's own dates.
+  const initialStart = mode === 'create' ? today ?? todayIso() : task?.startDate
+  const initialEnd = mode === 'create' ? addDays(initialStart, 3) : task?.endDate
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [parent, setParent] = useState(task?.parentId ?? parentTask?.id ?? '')
