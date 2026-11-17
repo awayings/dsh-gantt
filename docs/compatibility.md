@@ -169,12 +169,17 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    and a stale marker (older than 15 s) is dropped instead of restoring an old
    page.
 13. **Gantt page state is client-only `localStorage`.** `src/client/page-state.js`
-    keeps the page's own view state (tree depth, filter view, collapsed rows,
-    and task-pane scroll) in `localStorage` under `gantt.pageState`; it uses no
-    shell service, so no harness face has to be verified for it. The record is
-    per browser origin, not per conversation, and a missing, blocked, malformed,
-    or version-mismatched record falls back to the page defaults instead of
-    failing the page.
+    keeps the page's own view state in `localStorage` under `gantt.pageState`,
+    schema version 2: tree depth, filter view, collapsed rows, both task-pane
+    scroll offsets, the timeline scale and window anchor, the highlighted task,
+    the in-page work panel's task and sub-tab, and the work-mode switch. It uses
+    no shell service, so no harness face has to be verified for it. The record
+    is per browser origin, not per conversation. A v1 record (depth, filter,
+    collapse, and scroll only) reads as no record, so the view fields fall back
+    to the defaults once; the old standalone `gantt.workMode` key is read once
+    into the new record and removed on the next write. A missing, blocked,
+    malformed, or version-mismatched record falls back to the page defaults
+    instead of failing the page.
 
 ## 3 · Rules
 
