@@ -5,7 +5,8 @@
 // full browser reload). DSH keeps no per-page view state, so without this module
 // the page comes back at the default tree depth, status filter and scroll offset
 // every time. `panel-session.js` restores which page was on screen; this module
-// restores its view: depth, filter, folded tasks and scroll offsets.
+// restores its view: depth, filter, folded tasks, scroll offsets, timeline
+// window, highlighted task, work panel and work mode.
 //
 // The record lives in localStorage because it must survive a full browser
 // reload and a tab restore, not only a bundle swap. Storage is shared with the
@@ -17,13 +18,29 @@
 export const PAGE_STATE_KEY = 'gantt.pageState'
 
 /** Schema version of the stored record; bump it when the shape changes. */
-export const PAGE_STATE_VERSION = 1
+export const PAGE_STATE_VERSION = 2
+
+/** localStorage key an older client used for the standalone work-mode switch. */
+export const LEGACY_WORK_MODE_KEY = 'gantt.workMode'
 
 /** The status filters the page offers. */
 export const FILTERS = ['all', 'unfinished', 'active', 'frontier', 'next', 'today', 'done']
 
 /** The tree depths the page can show: every level, two levels, one level. */
 export const LEVELS = [99, 2, 1]
+
+/** The timeline scales the page can show. */
+export const SCALES = ['week', 'month']
+
+/** The right-rail work-panel tabs the page can show. */
+export const PANEL_TABS = ['task', 'skills', 'team']
+
+// The view a record falls back to when it carries no usable value for a field;
+// also the view a migrated legacy work-mode switch starts from.
+const DEFAULT_LEVEL = 99
+const DEFAULT_FILTER = 'all'
+const DEFAULT_SCALE = 'week'
+const DEFAULT_PANEL_TAB = 'task'
 
 /** The most collapsed task ids a stored record may restore. */
 const MAX_COLLAPSED_IDS = 2000
@@ -34,6 +51,9 @@ const MAX_ID_LENGTH = 200
 /** The largest scroll offset a stored record may restore. */
 const MAX_SCROLL = 10_000_000
 
+/** The exact shape of a timeline anchor day. */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
 /**
  * One persisted view of the Gantt page.
  * @typedef {object} PageState
@@ -42,6 +62,12 @@ const MAX_SCROLL = 10_000_000
  * @property {string[]} collapsed ids of the tasks whose children are folded
  * @property {number} scrollTop vertical scroll offset in pixels
  * @property {number} scrollLeft horizontal scroll offset in pixels
+ * @property {string} scale timeline scale, one of SCALES
+ * @property {string | null} anchor first day of the timeline window, YYYY-MM-DD
+ * @property {string | null} selectedId id of the highlighted task
+ * @property {string | null} panelTaskId id of the task the work panel shows
+ * @property {string} panelTab work-panel tab, one of PANEL_TABS
+ * @property {boolean} workMode whether the page drives the workbench
  */
 
 /**
@@ -52,6 +78,29 @@ const MAX_SCROLL = 10_000_000
 function sanitizeScroll(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0
   return Math.min(Math.round(value), MAX_SCROLL)
+}
+
+/**
+ * A usable task id, or null when the value is not a short non-empty string.
+ * @param {any} value
+ * @returns {string | null}
+ */
+function sanitizeId(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_ID_LENGTH) return null
+  return value
+}
+
+/**
+ * A calendar day in the one format the timeline accepts, or null. The UTC
+ * round-trip rejects dates such as 2026-02-30 that the format cannot.
+ * @param {any} value
+ * @returns {string | null}
+ */
+function sanitizeAnchor(value) {
+  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) !== value) return null
+  return value
 }
 
 /**
@@ -67,7 +116,7 @@ function sanitizeCollapsed(value) {
   const collapsed = []
   const seen = new Set()
   for (const id of value) {
-    if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID_LENGTH) continue
+    if (sanitizeId(id) === null) continue
     if (seen.has(id)) continue
     seen.add(id)
     collapsed.push(id)
@@ -86,11 +135,17 @@ export function sanitizePageState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
   if (raw.v !== PAGE_STATE_VERSION) return null
   return {
-    level: LEVELS.includes(raw.level) ? raw.level : 99,
-    filter: FILTERS.includes(raw.filter) ? raw.filter : 'all',
+    level: LEVELS.includes(raw.level) ? raw.level : DEFAULT_LEVEL,
+    filter: FILTERS.includes(raw.filter) ? raw.filter : DEFAULT_FILTER,
     collapsed: sanitizeCollapsed(raw.collapsed),
     scrollTop: sanitizeScroll(raw.scrollTop),
     scrollLeft: sanitizeScroll(raw.scrollLeft),
+    scale: SCALES.includes(raw.scale) ? raw.scale : DEFAULT_SCALE,
+    anchor: sanitizeAnchor(raw.anchor),
+    selectedId: sanitizeId(raw.selectedId),
+    panelTaskId: sanitizeId(raw.panelTaskId),
+    panelTab: PANEL_TABS.includes(raw.panelTab) ? raw.panelTab : DEFAULT_PANEL_TAB,
+    workMode: raw.workMode === true,
   }
 }
 
@@ -102,7 +157,31 @@ export function sanitizePageState(raw) {
 export function readPageState() {
   try {
     const raw = globalThis.localStorage.getItem(PAGE_STATE_KEY)
-    return typeof raw === 'string' ? sanitizePageState(JSON.parse(raw)) : null
+    if (typeof raw === 'string') {
+      const state = sanitizePageState(JSON.parse(raw))
+      if (state !== null) return state
+    }
+    // Work mode was its own switch before version 2, so it is the one thing
+    // carried across an upgrade. The version 1 view fields are deliberately
+    // dropped: they described a page shape this version no longer has, and
+    // restoring a half-understood layout is worse than starting from the
+    // defaults once.
+    if (globalThis.localStorage.getItem(LEGACY_WORK_MODE_KEY) === '1') {
+      return {
+        level: DEFAULT_LEVEL,
+        filter: DEFAULT_FILTER,
+        collapsed: [],
+        scrollTop: 0,
+        scrollLeft: 0,
+        scale: DEFAULT_SCALE,
+        anchor: null,
+        selectedId: null,
+        panelTaskId: null,
+        panelTab: DEFAULT_PANEL_TAB,
+        workMode: true,
+      }
+    }
+    return null
   } catch {
     // Missing or refusing storage, and malformed JSON, all read as "no state".
     return null
@@ -111,8 +190,10 @@ export function readPageState() {
 
 /**
  * Persist the current page state for the next visit. Storage failures are
- * swallowed: the page still works, it just will not remember.
- * @param {PageState} state
+ * swallowed: the page still works, it just will not remember. Fields this
+ * version added are optional in the argument so a caller can still pass only the
+ * view it owns; reading fills whatever is omitted from the defaults.
+ * @param {Partial<PageState>} state
  * @returns {void}
  */
 export function writePageState(state) {
@@ -124,7 +205,17 @@ export function writePageState(state) {
       collapsed: state.collapsed,
       scrollTop: state.scrollTop,
       scrollLeft: state.scrollLeft,
+      scale: state.scale,
+      anchor: state.anchor,
+      selectedId: state.selectedId,
+      panelTaskId: state.panelTaskId,
+      panelTab: state.panelTab,
+      workMode: state.workMode,
     }))
+    // The standalone switch is folded into this record now; clearing it in the
+    // same attempt keeps the migration one-shot instead of leaving a stale key
+    // that a later read could resurrect.
+    globalThis.localStorage.removeItem(LEGACY_WORK_MODE_KEY)
   } catch {
     // Private-mode browsers refuse reads and writes; remembering is best effort.
   }
