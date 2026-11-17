@@ -15,5 +15,8 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  // The Gantt page remembers its view in localStorage; a clean slate keeps
+  // each test's mount from restoring a view an earlier test left behind.
+  globalThis.localStorage.clear()
   document.body.replaceChildren()
 })

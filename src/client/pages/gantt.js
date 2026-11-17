@@ -9,6 +9,7 @@ import { SplitDialog } from '../dialogs/split.js'
 import { TaskDialog } from '../dialogs/task.js'
 import { requestJson, useGanttData, useLocale } from '../hooks.js'
 import { GanttGlyph, InfoGlyph } from '../icons.js'
+import { readPageState, writePageState } from '../page-state.js'
 import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
@@ -19,6 +20,9 @@ import { GanttWorkbench } from './workbench.js'
 import { h } from '../dom.js'
 
 const WORK_MODE_KEY = 'gantt.workMode'
+
+/** Debounce for persisting the pane scroll offsets while a gesture is running. */
+const SCROLL_WRITE_DELAY = 150
 
 /**
  * Read the persisted work-mode switch. Storage can be disabled or throwing
@@ -58,9 +62,12 @@ export function GanttPage({ ctx }) {
   const [panelTaskId, setPanelTaskId] = useState(null)
   const [scale, setScale] = useState('week')
   const [anchor, setAnchor] = useState(() => todayIso())
-  const [collapsed, setCollapsed] = useState(() => new Set())
-  const [level, setLevel] = useState(99)
-  const [filter, setFilter] = useState('all')
+  // The view left by the previous visit, read once per mount; the page-state
+  // module already normalized it, so every field is in range here.
+  const [saved] = useState(readPageState)
+  const [collapsed, setCollapsed] = useState(() => new Set(saved?.collapsed ?? []))
+  const [level, setLevel] = useState(() => saved?.level ?? 99)
+  const [filter, setFilter] = useState(() => saved?.filter ?? 'all')
   const [recomputing, setRecomputing] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [focusId, setFocusId] = useState(null)
@@ -70,6 +77,45 @@ export function GanttPage({ ctx }) {
   const statuses = useSessionStatuses(ctx)
   const initialized = useRef(false)
   const pageRef = useRef(null)
+  // The pane is the only scroll container on the page; keeping its offsets in a
+  // ref lets a scroll gesture write storage once per debounce window instead of
+  // on every frame.
+  const paneRef = useRef(null)
+  const scrollRef = useRef({ top: saved?.scrollTop ?? 0, left: saved?.scrollLeft ?? 0 })
+  const scrollTimer = useRef(null)
+  const restored = useRef(false)
+  const viewRef = useRef({ level, filter, collapsed })
+  const writePageStateNow = useCallback(() => {
+    const view = viewRef.current
+    const { top, left } = scrollRef.current
+    writePageState({
+      level: view.level,
+      filter: view.filter,
+      collapsed: [...view.collapsed],
+      scrollTop: top,
+      scrollLeft: left,
+    })
+  }, [])
+  useEffect(() => {
+    viewRef.current = { level, filter, collapsed }
+    writePageStateNow()
+  }, [level, filter, collapsed, writePageStateNow])
+  // A hide or an entry swap never waits for a debounce timer, so the latest
+  // offsets are flushed synchronously instead of being lost.
+  useEffect(() => {
+    const flush = () => {
+      if (scrollTimer.current !== null) {
+        clearTimeout(scrollTimer.current)
+        scrollTimer.current = null
+      }
+      writePageStateNow()
+    }
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      flush()
+    }
+  }, [writePageStateNow])
   useEffect(() => {
     if (data && !initialized.current) {
       initialized.current = true
@@ -156,6 +202,17 @@ export function GanttPage({ ctx }) {
   )
   const visibleTaskCount = useMemo(() => flattenTree(filteredTasks).length, [filteredTasks])
   const rows = useMemo(() => visibleRows(filteredTasks, collapsed), [filteredTasks, collapsed])
+  // Restore the saved pane offsets one time only, and only once the pane has
+  // rows: a loading or filtered-empty view has no pane to move, so wait for one
+  // instead of spending the one-shot restore on an empty view.
+  useEffect(() => {
+    if (restored.current || saved === null || rows.length === 0) return
+    const el = paneRef.current
+    if (!el) return
+    restored.current = true
+    el.scrollTop = saved.scrollTop
+    el.scrollLeft = saved.scrollLeft
+  }, [saved, rows])
   const timeline = useMemo(() => {
     const value = buildWindow(scale, anchor, today)
     return { ...value, today }
@@ -233,6 +290,16 @@ export function GanttPage({ ctx }) {
       return next
     })
   }, [])
+  const handlePaneScroll = useCallback(() => {
+    const el = paneRef.current
+    if (!el) return
+    scrollRef.current = { top: el.scrollTop, left: el.scrollLeft }
+    if (scrollTimer.current !== null) clearTimeout(scrollTimer.current)
+    scrollTimer.current = setTimeout(() => {
+      scrollTimer.current = null
+      writePageStateNow()
+    }, SCROLL_WRITE_DELAY)
+  }, [writePageStateNow])
   const changeLevel = useCallback((next) => {
     setLevel(next)
     setCollapsed(collapseForLevel(tasks, next))
@@ -385,7 +452,7 @@ export function GanttPage({ ctx }) {
         h('p', { className: 'gantt-hint' }, t(`filter.hint.${filter}`)),
       )
       : h('div', { className: 'gantt-body', 'data-panel': panelId === null ? undefined : 'work' },
-        h('div', { className: 'gantt-main' },
+        h('div', { className: 'gantt-main', ref: paneRef, onScroll: handlePaneScroll },
           h('div', {
             className: 'gantt-grid',
             style: { width: `calc(var(--gantt-left) + ${timeline.totalWidth}px)` },
