@@ -2,7 +2,7 @@
 // skills and agent-team panels, and the refetch rules (visible, window focus,
 // refresh, focus revision, after a conversation action). The new-window and
 // execute/decompose entries live in workbench-execute.spec.js.
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import {
   click,
@@ -16,7 +16,9 @@ import {
   unmountAll,
 } from './harness.js'
 import { noteWorkFocus } from '../../src/client/work-nav.js'
+import { resetAgentNames } from '../../src/client/agent-labels.js'
 import {
+  AGENTS,
   SKILLS,
   SKILLS_AVAILABLE,
   TASK,
@@ -51,6 +53,7 @@ describe('task view', () => {
       `${TRAJECTORY}?taskId=task-1&limit=20`,
       SKILLS,
       `${TEAM}?sessionId=session-work`,
+      AGENTS,
     ])
     expect(services.sessions.created).toEqual([])
 
@@ -65,6 +68,19 @@ describe('task view', () => {
 
     expect(q(view.container, 'section[data-panel="task"]')).not.toBeNull()
     expect(text(view.container, '[data-block="conversation"] .gantt-workbench-chat-title')).toBe('Work conversation')
+
+    const writeback = q(view.container, '[data-block="writeback"]')
+    expect(writeback).not.toBeNull()
+    expect(qa(writeback, '[data-field]').map(element => element.dataset.field))
+      .toEqual(['operator', 'completedBy', 'report'])
+    expect(text(writeback, '[data-field="operator"] .gantt-workbench-writeback-label')).toBe('Operator')
+    expect(text(writeback, '[data-field="operator"] .gantt-workbench-writeback-value')).toBe('reviewer')
+    expect(text(writeback, '[data-field="completedBy"] .gantt-workbench-writeback-value')).toBe('agent-2')
+    expect(text(writeback, '[data-field="report"] .gantt-workbench-writeback-value')).toBe('Wired the write-back rows.')
+    expect(q(writeback, '[data-field="report"] .gantt-workbench-writeback-value').getAttribute('title'))
+      .toBe(TASK.report)
+    expect(qa(view.container, '.gantt-workbench-task > [data-block]').map(element => element.dataset.block))
+      .toEqual(['conversation', 'writeback', 'trajectory'])
     expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
     expect(text(view.container, '.gantt-workbench-chat-state')).toBe('Running')
     expect(q(view.container, '.gantt-workbench-chat-state').getAttribute('data-running')).toBe('true')
@@ -100,6 +116,10 @@ describe('task view', () => {
     expect(tabs.map(element => element.textContent)).toEqual(['任务', '技能', '编队'])
     expect(text(view.container, '.gantt-workbench-chat-block .gantt-workbench-chat-title')).toBe('Ship work mode（work）')
     expect(text(view.container, '[data-block="conversation"] .gantt-workbench-chat-title')).toBe('关联对话')
+    expect(text(view.container, '[data-field="operator"] .gantt-workbench-writeback-label')).toBe('操作人')
+    expect(text(view.container, '[data-field="completedBy"] .gantt-workbench-writeback-label')).toBe('完成人')
+    expect(text(view.container, '[data-field="report"] .gantt-workbench-writeback-label')).toBe('汇报结果')
+    expect(text(view.container, '[data-field="report"] .gantt-workbench-writeback-value')).toBe('Wired the write-back rows.')
   })
 
   it('opens the bound conversation from the task view', async () => {
@@ -134,11 +154,67 @@ describe('task view', () => {
       `${TRAJECTORY}?taskId=task-1&limit=20`,
       SKILLS,
       `${TEAM}?sessionId=session-work`,
+      AGENTS,
     ])
     expect(text(view.container, '.gantt-workbench-chip-title')).toBe('Ship work mode')
 
     click(q(view.container, '[data-action="close-panel"]'))
     expect(closed).toBe(1)
+  })
+})
+
+describe('write-back rows', () => {
+  it('falls back to unassigned and no-report for empty fields', async () => {
+    installFetch(defaultRoutes({
+      work: { ...WORK_BY_SESSION, task: { ...TASK, operatorId: '', completedById: '', report: '' } },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    const writeback = q(view.container, '[data-block="writeback"]')
+    expect(text(writeback, '[data-field="operator"] .gantt-workbench-writeback-value')).toBe('Unassigned')
+    expect(text(writeback, '[data-field="completedBy"] .gantt-workbench-writeback-value')).toBe('Unassigned')
+    const report = q(writeback, '[data-field="report"] .gantt-workbench-writeback-value')
+    expect(report.textContent).toBe('No report')
+    expect(report.getAttribute('title')).toBe('No report')
+  })
+
+  it('previews a long report on one line and keeps the full text in the title', async () => {
+    const firstLine = 'a'.repeat(200)
+    const report = `${firstLine}\nsecond line hidden from the preview`
+    installFetch(defaultRoutes({
+      work: { ...WORK_BY_SESSION, task: { ...TASK, report } },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    const value = q(view.container, '[data-field="report"] .gantt-workbench-writeback-value')
+    expect(value.textContent).toBe(`${'a'.repeat(160)}…`)
+    expect(value.textContent).not.toContain('second line')
+    expect(value.getAttribute('title')).toBe(report)
+  })
+
+  it('degrades to the raw agent ids when the registry fails', async () => {
+    installFetch(defaultRoutes({
+      routes: { [AGENTS]: () => jsonResponse({ ok: false, error: 'registry down' }, 500) },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    const writeback = q(view.container, '[data-block="writeback"]')
+    expect(text(writeback, '[data-field="operator"] .gantt-workbench-writeback-value')).toBe('agent-1')
+    expect(text(writeback, '[data-field="completedBy"] .gantt-workbench-writeback-value')).toBe('agent-2')
+    expect(text(writeback, '[data-field="report"] .gantt-workbench-writeback-value')).toBe('Wired the write-back rows.')
+  })
+
+  it('keeps an unknown agent id visible instead of hiding it', async () => {
+    installFetch(defaultRoutes({
+      work: { ...WORK_BY_SESSION, task: { ...TASK, operatorId: 'agent-404' } },
+    }))
+    const { view } = renderWorkbench()
+    await flush()
+
+    expect(text(view.container, '[data-field="operator"] .gantt-workbench-writeback-value')).toBe('agent-404')
   })
 })
 
@@ -294,6 +370,7 @@ describe('empty, unavailable, and error states', () => {
     expect(text(view.container, '.gantt-workbench-none')).toBe('No focused task')
     expect(q(view.container, '.gantt-workbench-chip')).toBeNull()
     expect(text(view.container, 'section[data-panel="task"]')).toBe('No focused task')
+    expect(q(view.container, '[data-block="writeback"]')).toBeNull()
     expect(calls.some(call => call.path.startsWith(TRAJECTORY))).toBe(false)
     expect(calls).toContainEqual(expect.objectContaining({ path: `${TEAM}?sessionId=s1` }))
 
@@ -628,6 +705,8 @@ describe('robustness', () => {
   })
 })
 
+
+beforeEach(resetAgentNames)
 
 afterEach(() => {
   unmountAll()

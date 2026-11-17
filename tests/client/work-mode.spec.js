@@ -29,6 +29,7 @@ const SKILLS = 'api/gantt/work/skills'
 const TEAM = 'api/gantt/work/team'
 const TRAJECTORY = 'api/gantt/trajectory'
 const FOCUS = 'api/gantt/focus/set'
+const AGENTS = 'api/gantt/agents'
 const STORAGE_KEY = 'gantt.workMode'
 const WORK_CWD = '/data/home/ws-plugin'
 const EMPTY_STATUSES = new Map()
@@ -106,6 +107,7 @@ function defaultRoutes(overrides = {}) {
     [SKILLS]: () => jsonResponse({ ok: true, available: true, skills: [] }),
     [TEAM]: () => jsonResponse({ ok: true, available: true, agents: [] }),
     [TRAJECTORY]: () => jsonResponse({ ok: true, events: [] }),
+    [AGENTS]: () => jsonResponse({ ok: true, agents: [] }),
     ...overrides.routes,
   }
 }
@@ -216,6 +218,7 @@ describe('work-mode activation', () => {
       `${TRAJECTORY}?taskId=c1&limit=20`,
       SKILLS,
       `${TEAM}?sessionId=session-bound`,
+      AGENTS,
     ].sort())
     const focusCall = calls.find(call => call.path === FOCUS)
     expect(requestBody(focusCall)).toEqual({ sessionId: 'session-main', taskId: 'c1' })
