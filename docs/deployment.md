@@ -253,7 +253,7 @@ The database records its schema in `PRAGMA user_version` (currently **v8**).
 | Liveness (no auth, no DB write) | `curl -fsS http://100.83.77.65:18765/healthz` | `{"ok":true,"name":"dsh-gantt"}` |
 | Auth enforced | `curl -s -o /dev/null -w '%{http_code}' -X POST http://100.83.77.65:18765/mcp -H 'content-type: application/json' -d '{}'` | `401` |
 | Protocol handshake | `initialize` over the same endpoint | `result.serverInfo.name == "dsh-gantt"`, `version` = release |
-| Tool surface | `tools/list` | five tools |
+| Tool surface | `tools/list` | ten tools |
 | Pod shape | `kubectl -n dsh get pod -l app=dsh` | `2/2` after a restart |
 
 ```bash
@@ -406,7 +406,8 @@ overlay address instead of `0.0.0.0`.
 - **A second MCP deployment for a second client.** Clients are stateless; they
   all talk to the one sidecar and the same database.
 
-The MCP server itself — transports, authentication, the five tools and their
-schemas — is documented in [mcp.md](mcp.md). Contributor install from a checkout
+The MCP server itself — transports, authentication, the ten tools and their
+schemas — is documented in [mcp.md](mcp.md), and the worker-side loop in
+[worker-flow.md](worker-flow.md). Contributor install from a checkout
 (`pnpm run deploy`, `link:` dependencies) is documented in
 [development.md](development.md); it is not a deployment path for the cluster.

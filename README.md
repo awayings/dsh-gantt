@@ -362,7 +362,8 @@ database/API debugging, and the full verification procedure are in
 - [docs/README.md](docs/README.md) — documentation index
 - [docs/development.md](docs/development.md) — setup, toolchain, gates, verification
 - [docs/api.md](docs/api.md) — JSON API reference
-- [docs/mcp.md](docs/mcp.md) — MCP server, transports, five tools, troubleshooting
+- [docs/mcp.md](docs/mcp.md) — MCP server, transports, ten tools, troubleshooting
+- [docs/worker-flow.md](docs/worker-flow.md) — how a worker pulls context, decomposes, and closes rounds through the MCP
 - [docs/deployment.md](docs/deployment.md) — deploying the plugin and the MCP sidecar: k3s same-Pod install, upgrade/rollback, schema contract, Claude Code + Codex clients
 - [docs/remote-exec.md](docs/remote-exec.md) — safety-gated SSH wrapper for host-side steps: guard rules, audit log, tests
 - [docs/compatibility.md](docs/compatibility.md) — supported set, harness seams, limitations

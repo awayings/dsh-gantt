@@ -1,0 +1,33 @@
+## Shared task tree: the `gantt` MCP server
+
+A remote MCP server named `gantt` holds this project's shared task tree: tracks,
+tasks, decomposition, progress, completion reports, and an append-only
+trajectory of worker rounds. It is already registered here (HTTP over the
+tailnet, bearer token from `GANTT_MCP_TOKEN`); nothing to install locally.
+
+**Identity.** Your stable agent name is `<gantt-agent-name>`. Pass it as
+`agentName` on every gantt write, and pass your Codex session id as `session`
+when you have one. Register once per session with `register_agent`
+(`type: "ai-agent"`); re-registering the same name keeps the same agent id.
+
+**Start of a Gantt task.** Call `get_worker_guide` once and follow it. Pull with
+`list_ready_tasks` (`tag`: `ready`, `next`, or `todo`), then read
+`get_task_context` for the task you picked - its ancestor chain and background
+come before any write.
+
+**Loop.** register -> pull -> read context -> work -> `decompose_task` (1-100
+children, max 4 levels, every child needs a verifiable `doneWhen`) or a peer via
+`create_task` (exactly one of `parentId` / `afterTaskId`) -> `update_task` ->
+`report_completion`.
+
+**Close every round with exactly one call**: `create_task`, `decompose_task`,
+`update_task`, or `report_completion`; or `track_task` when the round wrote no
+task tree. Never end with only a message, never pair a write with `track_task`,
+and never use `track_task` as a completion report - finishing means
+`report_completion` with what was produced and where it was verified.
+
+**Never fabricate ids.** Act only on ids or numbers the server returned or a
+human gave you; an unknown id answers `task ... was not found`, so re-resolve it
+with `list_ready_tasks` instead of guessing. Nothing is dispatched to you: you
+pull. If the chain is ambiguous, ask the human; if nobody can answer, set
+`status: "blocked"` with the blocker in `summary`.
