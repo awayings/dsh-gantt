@@ -294,6 +294,13 @@ an unchanged token is not rewritten. Then they register the server at user scope
 and prove the connection with one real tool call. `--check` verifies without
 changing anything.
 
+They also install the worker skill shipped in [worker-flow.md](worker-flow.md):
+the Codex script replaces a delimited block in `~/.codex/AGENTS.md` from
+`deploy/worker/AGENTS.md.snippet`, and the Claude Code script writes
+`~/.claude/skills/gantt-worker/SKILL.md` from `deploy/worker/SKILL.md`, each
+substituting the worker name (`GANTT_AGENT_NAME`, default `codex-http` /
+`claude-code-http`). Re-running only replaces the managed block.
+
 ### 7.1 Client gotchas learned in production
 
 - **A `lo`-style wrapper that does not quote `$@` splits a prompt.** Pipe it
