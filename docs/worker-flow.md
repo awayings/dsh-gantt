@@ -67,10 +67,12 @@ Both are idempotent; `--check` verifies, `--no-model` skips the model call.
    it, non-interactive `co exec` answers "approval required".
 
 It then proves the wiring with one model call (`list_ready_tasks`,
-`get_task_context`, `register_agent`). Finish the install by appending
-[AGENTS.md.snippet](../deploy/worker/AGENTS.md.snippet) to `~/.codex/AGENTS.md`
-and replacing `<gantt-agent-name>` with this worker's stable name (for example
-`codex-http`, the name the script registers by default).
+`get_task_context`, `register_agent`). The same run installs
+[AGENTS.md.snippet](../deploy/worker/AGENTS.md.snippet) into `~/.codex/AGENTS.md`
+between the `<!-- gantt-mcp:begin -->` / `<!-- gantt-mcp:end -->` markers,
+substituting the worker name `codex-http` for `<gantt-agent-name>` (override with
+`GANTT_AGENT_NAME`); a re-run replaces the block in place and leaves the rest of
+the file untouched.
 
 ## Claude Code
 
@@ -85,10 +87,11 @@ claude mcp add --transport http gantt http://100.83.77.65:18765/mcp --scope user
 The header lives in Claude's own config, so a plain `claude` inherits the token.
 Tools appear as `mcp__gantt__<tool>`; a non-interactive run must allow them
 explicitly (`--allowedTools=mcp__gantt__list_ready_tasks`). The script finishes
-with `claude mcp get gantt` showing `Connected` plus one real tool run. Install
-the user skill from [SKILL.md](../deploy/worker/SKILL.md) as
-`~/.claude/skills/gantt-worker/SKILL.md`, replacing `<gantt-agent-name>` with
-this worker's stable name (for example `claude-code-http`).
+with `claude mcp get gantt` showing `Connected` plus one real tool run, and it
+writes [SKILL.md](../deploy/worker/SKILL.md) to
+`~/.claude/skills/gantt-worker/SKILL.md` with the worker name
+`claude-code-http` substituted for `<gantt-agent-name>` (override with
+`GANTT_AGENT_NAME`).
 
 ## The worker loop
 
