@@ -21,6 +21,7 @@ import {
   unmountAll,
 } from './harness.js'
 import { treePayload } from './fixtures.js'
+import { resetAgentNames } from '../../src/client/agent-labels.js'
 
 const TREE = 'api/gantt/tree'
 const WORK = 'api/gantt/work'
@@ -143,6 +144,7 @@ function closePanelButton(container) {
 }
 
 beforeEach(() => {
+  resetAgentNames()
   localStorage.clear()
 })
 
@@ -287,7 +289,7 @@ describe('work-mode activation', () => {
     await flush()
     expect(dialog(view.container)).not.toBeNull()
     expect(text(view.container, '.gantt-dialog-title')).toContain('Edit task · 1.1')
-    expect(calls.map(call => call.path)).toEqual([TREE])
+    expect(calls.map(call => call.path)).toEqual([TREE, AGENTS])
   })
 
   it('reports a failed focus in an error toast and keeps the panel open', async () => {

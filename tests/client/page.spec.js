@@ -28,6 +28,7 @@ import { emptyTreePayload, filterTreePayload, makeFilterTree, treePayload, unifi
 const TREE = 'api/gantt/tree'
 const STATUS = 'api/gantt/task/status'
 const SEED = 'api/gantt/seed'
+const AGENTS = 'api/gantt/agents'
 
 afterEach(unmountAll)
 
@@ -55,6 +56,7 @@ async function renderPage(routes) {
   const fetchState = installFetch({
     [TREE]: () => jsonResponse(treePayload()),
     [STATUS]: () => jsonResponse({ ok: true, task: {} }),
+    [AGENTS]: () => jsonResponse({ ok: true, agents: [] }),
     ...routes,
   })
   const app = setupApp()
@@ -383,6 +385,7 @@ describe('tree rendering', () => {
 
     click(q(row(view.container, '2.1 Announce'), '.gantt-bar'))
     expect(text(view.container, '.gantt-dialog-title')).toBe('Edit task · 2.1')
+    await flush()
   })
 
   it('cycles leaf status through the pill and refreshes the tree', async () => {
