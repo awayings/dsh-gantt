@@ -1,0 +1,42 @@
+# systemd unit for the dsh-gantt MCP server (HTTP transport).
+#
+# The service exposes the MCP endpoint to remote coding tools (for example a
+# Codex client on a laptop) while the host-local Claude Code keeps spawning the
+# stdio transport itself. A non-loopback bind requires GANTT_MCP_TOKEN.
+#
+# Install:
+#   sudo cp deploy/gantt-mcp.service /etc/systemd/system/
+#   sudo install -d -m 0750 /etc/dsh-gantt
+#   sudo install -m 0600 deploy/mcp.env.example /etc/dsh-gantt/mcp.env
+#   sudoedit /etc/dsh-gantt/mcp.env
+#   sudo systemctl daemon-reload && sudo systemctl enable --now gantt-mcp
+#   curl -fsS http://127.0.0.1:8765/healthz
+
+[Unit]
+Description=DSH Gantt MCP server (HTTP transport)
+Documentation=file:/data/home/ws-plugin/dsh-gantt/docs/deployment.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=node
+Group=node
+EnvironmentFile=/etc/dsh-gantt/mcp.env
+# Adjust the checkout path if the repository lives elsewhere. The CLI reads
+# GANTT_MCP_HOST, GANTT_MCP_PORT, GANTT_MCP_TOKEN, and DSH_GANTT_DB from the
+# environment file, so no CLI flags are needed here.
+ExecStart=/usr/bin/node /data/home/ws-plugin/dsh-gantt/bin/gantt-mcp.js --transport http
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# The SQLite database and its WAL files are the only writable state.
+ReadWritePaths=/data/dsh-home/gantt
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

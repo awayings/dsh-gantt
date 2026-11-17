@@ -79,9 +79,16 @@ Every other method/path is `404`. The startup log prints the bound address, for
 example `gantt-mcp listening on http://127.0.0.1:8765`.
 
 When a token is configured, every `POST /mcp` must send
-`Authorization: Bearer <token>`; a missing or wrong header is `401`. When no
-token is configured, the HTTP endpoint is unauthenticated — bind it to loopback
-or put it behind your own network control. `GET /healthz` is not authenticated.
+`Authorization: Bearer <token>`; a missing or wrong header is `401`.
+`GET /healthz` is not authenticated. A bind other than `127.0.0.1`, `::1`, or
+`localhost` **requires** a token: the process refuses to start without one
+(`refusing to serve 0.0.0.0 without a bearer token …`), so a LAN address cannot
+expose task writes unauthenticated. Only a loopback bind may serve token-less.
+
+For a host deployment where a remote client (for example Codex on a Mac) needs
+the HTTP endpoint while a local client uses stdio, follow
+[deployment.md](deployment.md): systemd unit, `/healthz` probe, token file, port
+and firewall rules, and both client configurations.
 
 The MCP process and the DSH Web UI may open the same `tasks.db`: WAL lets
 readers proceed concurrently, the store sets a five-second `busy_timeout`, and
@@ -94,8 +101,9 @@ short and do not run long ad-hoc transactions against the same file.
 Exposing the MCP port from a cluster (Service, Ingress, NetworkPolicy, and a
 stable token Secret) is **not part of this feature**. The HTTP transport only
 opens a local listener; a deployment needs a separate networking task. The
-default loopback bind is deliberate: do not bind `0.0.0.0` without a token and
-a network boundary.
+default loopback bind is deliberate, and a non-loopback bind is refused unless a
+token is configured. Host-level service deployment is covered in
+[deployment.md](deployment.md).
 
 ## Database path
 
