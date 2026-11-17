@@ -427,7 +427,7 @@ export function makeFilterTree() {
   return tree
 }
 
-/** GET /tree payload for filter pruning: frontier keeps t1, today keeps t1+t2. */
+/** GET /tree payload for filter pruning: frontier keeps t1, next keeps t2, today keeps t1+t2. */
 export function filterTreePayload(overrides = {}) {
   const dailyBrief = makeDailyBrief()
   const [t1, t2] = dailyBrief.tracks
@@ -440,13 +440,18 @@ export function filterTreePayload(overrides = {}) {
     dailyBrief.items[0],
     { ...dailyBrief.items[1], taskId: 'n31', ref: 'node:2.1', title: '生活实验', trackId: 't2', trackName: '生活系统', role: 'rotation' },
   ]
+  const brief = makeBrief()
+  const [t1Lane, t2Lane] = brief.lanes
+  const next = { id: 'n31', ref: 'node:2.1', number: '2.1', title: '生活实验', trackId: 't2', trackName: '生活系统' }
+  brief.lanes = [{ ...t1Lane, next: null }, { ...t2Lane, next }]
+  brief.next = [next]
   return {
     ok: true,
     today: TODAY,
     statuses: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
     tasks: makeFilterTree(),
     stats: { total: 8, done: 0, inProgress: 3, blocked: 2, overdue: 0, progress: 20 },
-    brief: makeBrief(),
+    brief,
     dailyBrief,
     ...overrides,
   }

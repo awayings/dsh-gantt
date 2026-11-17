@@ -23,7 +23,7 @@ import {
   unmountAll,
   unparsableResponse,
 } from './harness.js'
-import { emptyTreePayload, filterTreePayload, makeFilterTree, treePayload, unifiedTreePayload } from './fixtures.js'
+import { TODAY, emptyTreePayload, filterTreePayload, makeFilterTree, treePayload } from './fixtures.js'
 
 const TREE = 'api/gantt/tree'
 const STATUS = 'api/gantt/task/status'
@@ -574,8 +574,8 @@ describe('timeline window', () => {
 })
 
 describe('task filter', () => {
-  async function renderFiltered(payload = filterTreePayload(), options = {}) {
-    const fetchState = installFetch({ [TREE]: () => jsonResponse(payload) })
+  async function renderFiltered(payload = filterTreePayload(), options = {}, routes = {}) {
+    const fetchState = installFetch({ [TREE]: () => jsonResponse(payload), ...routes })
     const app = setupApp(options)
     const view = mount(createElement(app.page().component))
     await flush()
@@ -586,29 +586,58 @@ describe('task filter', () => {
     return q(view.container, `.gantt-filter [data-filter="${value}"]`)
   }
 
-  it('shows the perspectives and prunes to focus paths in To do', async () => {
+  function rowLabels(view) {
+    return qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))
+  }
+
+  it('offers the perspective views and starts on All', async () => {
     const { view } = await renderFiltered()
 
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.getAttribute('data-filter')))
-      .toEqual(['all', 'active', 'todo', 'done'])
+      .toEqual(['all', 'active', 'frontier', 'next', 'today', 'done'])
     expect(filterButton(view, 'all').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
+    expect(q(view.container, '.gantt-brief')).toBeNull()
+  })
 
-    click(filterButton(view, 'todo'))
-    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+  it('keeps only the frontier paths in Frontier', async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'frontier'))
+    expect(rowLabels(view)).toEqual([
       '1 投资系统',
-      '1.1 数据底座',
       '1.8 交易仓',
       '1.8.4 读数收口',
+    ])
+    expect(row(view.container, '2 生活系统')).toBeNull()
+    expect(row(view.container, '1.1 数据底座')).toBeNull()
+    expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('3 tasks')
+    expect(filterButton(view, 'frontier').getAttribute('data-active')).toBe('true')
+  })
+
+  it('keeps only the next paths in Next', async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'next'))
+    expect(rowLabels(view)).toEqual(['2 生活系统', '2.1 生活实验'])
+    expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('2 tasks')
+  })
+
+  it("keeps only today's picked paths in Today", async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'today'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.1 数据底座',
       '2 生活系统',
       '2.1 生活实验',
     ])
-    expect(row(view.container, '3 元能力')).toBeNull()
-    expect(qa(view.container, '.gantt-track')).toHaveLength(6)
-    expect(text(view.container, '.gantt-filter-count')).toBe('3 paths')
-    expect(text(view.container, '.gantt-corner-sub')).toBe('6 tasks')
-    expect(filterButton(view, 'todo').getAttribute('data-active')).toBe('true')
+    expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('4 tasks')
   })
 
   it('filters to tasks whose work conversation is running or waiting', async () => {
@@ -629,7 +658,7 @@ describe('task filter', () => {
       .toBe('The work conversation is waiting for your choice')
 
     click(filterButton(view, 'active'))
-    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+    expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.1 数据底座',
       '2 生活系统',
@@ -659,7 +688,7 @@ describe('task filter', () => {
     const { view } = await renderFiltered(filterTreePayload({ tasks }))
 
     click(filterButton(view, 'done'))
-    expect(qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))).toEqual([
+    expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.1 数据底座',
     ])
@@ -674,23 +703,30 @@ describe('task filter', () => {
     expect(qa(view.container, '.gantt-row')).toHaveLength(0)
     expect(q(view.container, '.gantt-body')).toBeNull()
     expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing is done yet.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All or To do to keep planning.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All or Next to keep planning.')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
 
     click(filterButton(view, 'all'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
   })
 
-  it('treats a tree without brief data as an empty To do view', async () => {
+  it('treats a tree without brief data as empty frontier, next, and today views', async () => {
     const fetchState = installFetch({ [TREE]: () => jsonResponse(treePayload()) })
     const app = setupApp()
     const view = mount(createElement(app.page().component))
     await flush()
 
-    click(q(view.container, '.gantt-filter [data-filter="todo"]'))
+    click(q(view.container, '.gantt-filter [data-filter="frontier"]'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(0)
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No focus paths in this view.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No pending frontier task in this view.')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
+
+    click(q(view.container, '.gantt-filter [data-filter="next"]'))
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing can start right now.')
+
+    click(q(view.container, '.gantt-filter [data-filter="today"]'))
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No frontier and next picks for today yet.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Recompute the frontier and next to fill today.')
     expect(fetchState.calls.filter(call => call.path === TREE)).toHaveLength(1)
   })
 
@@ -699,8 +735,8 @@ describe('task filter', () => {
     click(buttonByText(view.container, 'One level'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(3)
 
-    click(filterButton(view, 'todo'))
-    expect(qa(view.container, '.gantt-row')).toHaveLength(6)
+    click(filterButton(view, 'frontier'))
+    expect(rowLabels(view)).toEqual(['1 投资系统', '1.8 交易仓', '1.8.4 读数收口'])
 
     click(filterButton(view, 'all'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(3)
@@ -721,71 +757,55 @@ describe('task filter', () => {
 
     const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
     expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.textContent))
-      .toEqual(['全部', '进行中', '待做', '已完成'])
-    click(filterButton(view, 'todo'))
-    expect(text(view.container, '.gantt-filter-count')).toBe('3 条路径')
-    expect(text(view.container, '.gantt-corner-sub')).toBe('6 个任务')
+      .toEqual(['全部', '进行中', '前沿', '该动', '今日', '已完成'])
+    click(filterButton(view, 'frontier'))
+    expect(text(view.container, '.gantt-filter-count')).toBe('1 条路径')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('3 个任务')
+    expect(text(view.container, '.gantt-filter [data-action="recompute-brief"]')).toBe('重算前沿和该动')
   })
-})
 
-describe('brief strip fold and lane colours', () => {
-  async function renderBrief(options = {}, payload = unifiedTreePayload()) {
-    const fetchState = installFetch({ [TREE]: () => jsonResponse(payload) })
-    const app = setupApp(options)
-    const view = mount(createElement(app.page().component))
+  it('recomputes the frontier and next from the filter bar and refreshes the tree', async () => {
+    const gate = deferred()
+    const { calls, view } = await renderFiltered(filterTreePayload(), {}, {
+      'api/gantt/brief/compute': () => gate.promise,
+    })
+    const button = q(view.container, '.gantt-filter [data-action="recompute-brief"]')
+    expect(button.textContent).toBe('Recompute frontier and next')
+
+    click(button)
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('…')
+
+    gate.resolve(jsonResponse({ ok: true }))
     await flush()
-    return { ...fetchState, view }
-  }
 
-  it('folds and unfolds the brief card from the header chevron', async () => {
-    const { view } = await renderBrief()
-    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('false')
-    expect(qa(view.container, '.gantt-brief-lane')).toHaveLength(2)
-    expect(q(view.container, '.gantt-brief-today')).not.toBeNull()
-    expect(q(view.container, '.gantt-brief-summary')).toBeNull()
-
-    const toggle = q(view.container, '.gantt-brief-toggle')
-    expect(toggle.getAttribute('data-action')).toBe('brief-toggle')
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(toggle.getAttribute('aria-label')).toBe('Collapse frontier and next')
-    expect(toggle.textContent).toBe('▾')
-
-    click(toggle)
-    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('true')
-    expect(q(view.container, '.gantt-brief-lane')).toBeNull()
-    expect(q(view.container, '.gantt-brief-today')).toBeNull()
-    expect(text(view.container, '.gantt-brief-summary')).toBe('Frontier 1 · Next 1 · Today 2/4')
-    expect(q(view.container, '.gantt-brief-toggle').textContent).toBe('▸')
-    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-expanded')).toBe('false')
-    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('Expand frontier and next')
-
-    click(q(view.container, '.gantt-brief-toggle'))
-    expect(q(view.container, '.gantt-brief').getAttribute('data-collapsed')).toBe('false')
-    expect(qa(view.container, '.gantt-brief-lane')).toHaveLength(2)
+    const compute = calls.find(call => call.path === 'api/gantt/brief/compute')
+    expect(compute.options.method).toBe('POST')
+    expect(requestBody(compute)).toEqual({ date: TODAY })
+    expect(calls.filter(call => call.path === TREE)).toHaveLength(2)
+    expect(text(view.container, '.gantt-toast')).toBe('Frontier and next recomputed')
+    expect(button.disabled).toBe(false)
+    expect(button.textContent).toBe('Recompute frontier and next')
   })
 
-  it('tags column headers and pick cards with their lane colour', async () => {
-    const { view } = await renderBrief()
-    expect(qa(view.container, '.gantt-brief-col').map(cell => cell.getAttribute('data-kind')))
-      .toEqual(['track', 'frontier', 'next'])
-    const picks = qa(view.container, '.gantt-brief-pick')
-    expect(picks.map(pick => pick.getAttribute('data-kind'))).toEqual(['frontier', 'next'])
-    expect(qa(view.container, '.gantt-brief-tag').map(tag => tag.textContent)).toEqual(['Frontier', 'Next'])
+  it('reports a recompute failure in an error toast', async () => {
+    const { view } = await renderFiltered(filterTreePayload(), {}, {
+      'api/gantt/brief/compute': () => jsonResponse({ ok: false, error: 'brief is locked' }, 409),
+    })
 
-    const css = qa(view.container, 'style').map(node => node.textContent).join('\n')
-    expect(css).toContain('.gantt-brief-col[data-kind="frontier"] { color: var(--gantt-accent); }')
-    expect(css).toContain('.gantt-brief-col[data-kind="next"] { color: var(--dsw-alias-state-success-primary); }')
-    expect(css).toContain('.gantt-brief-pick[data-kind="frontier"] { border-left-color: var(--gantt-accent); }')
-    expect(css).toContain('.gantt-brief-pick[data-kind="next"] { border-left-color: var(--dsw-alias-state-success-primary); }')
-    expect(css).toContain('.gantt-brief[data-collapsed="true"]')
-    expect(css).toContain('margin: 12px 22px 0;')
-  })
+    click(q(view.container, '.gantt-filter [data-action="recompute-brief"]'))
+    await flush()
 
-  it('localizes the fold toggle and the collapsed summary', async () => {
-    const { view } = await renderBrief({ locale: 'zh' })
-    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('收起前沿与该动')
-    click(q(view.container, '.gantt-brief-toggle'))
-    expect(text(view.container, '.gantt-brief-summary')).toBe('前沿 1 · 该动 1 · 今天 2/4')
-    expect(q(view.container, '.gantt-brief-toggle').getAttribute('aria-label')).toBe('展开前沿与该动')
+    const toast = q(view.container, '.gantt-toast')
+    expect(toast.textContent).toBe('brief is locked')
+    expect(toast.getAttribute('data-error')).toBe('true')
+    view.unmount()
+
+    const exploding = await renderFiltered(filterTreePayload(), {}, {
+      'api/gantt/brief/compute': () => Promise.reject('compute exploded'),
+    })
+    click(q(exploding.view.container, '.gantt-filter [data-action="recompute-brief"]'))
+    await flush()
+    expect(text(exploding.view.container, '.gantt-toast')).toBe('compute exploded')
   })
 })

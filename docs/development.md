@@ -59,7 +59,7 @@ script because the DSH client loader fetches a single artifact per package.
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | host | Five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
 | `src/host/prompt.js` | host | Static task-protocol section and dynamic focus trajectory context (optional `systemPrompt`) |
-| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), brief strip, dialogs, and stylesheet modules (ESM) |
+| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
 
@@ -187,7 +187,7 @@ Recorded decisions:
 | `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), brief strip blocks and window cards, perspectives and path pruning, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, catalog-aware resume) and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the workbench (pinned task view with conversation and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the cross-window handoff (selection seed, `window.name` carrier, catalog-aware resume) and the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
@@ -575,22 +575,16 @@ Open the page in the connected Web GUI and check:
       `inspiration`, and links chips with the full link in a tooltip.
 - [ ] A running (`持续`) node's bar ends at today, and the depth zoom switches
       between all nodes, two levels, and one level.
-- [ ] The brief strip shows three aligned blocks — header (title, pending
-      count, generated-at, recompute), a three-column `支线 / 前沿 / 该动` grid
-      with single-line ellipsis and one row per track, and `今日窗口` cards with
-      time, role badge, task (`ref title`), or `未填`. Column alignment is
-      independent of title length at desktop width and the cards stack at
-      ~390 px; clicking a pick reveals that task.
-- [ ] The brief strip is an inset card with the frontier column/chevron in the
-      brand accent and the 该动 column/chevron in the success colour, clearly
-      separated from the plain task list below; the fold chevron collapses it to
-      a compact `前沿 n · 该动 m · 今天 filled/total` summary (the grid and window
-      cards hide) and expands back without breaking the three-column alignment.
-- [ ] The perspective switch offers 全部 / 待做 / 已完成: 待做 keeps only the
-      frontier/next/daily-brief paths to the track roots and hides completed
-      siblings, 已完成 keeps done nodes with their ancestors, and each view
-      shows its kept count and an empty hint. Switching clears the manual
-      collapse for 待做/已完成 and restores the depth-level collapse for 全部.
+- [ ] The perspective switch offers 全部 / 进行中 / 前沿 / 该动 / 今日 /
+      已完成: 前沿 keeps one path per track to its newest pending leaf, 该动
+      keeps each track's first executable leaf, 今日 keeps the paths of the
+      daily-brief picks, 已完成 keeps done nodes with their ancestors, and each
+      pruned view shows its kept count, a mode-specific empty hint, and hides
+      unrelated and completed siblings. Switching clears the manual collapse;
+      switching back to 全部 restores the depth-level collapse.
+- [ ] **重算前沿和该动** sits on the right of the switch; it POSTs
+      `api/gantt/brief/compute` for the current task-day, refreshes the tree,
+      and reports success or failure in a toast.
 - [ ] **Decompose** opens from a node row, requires a title and `done_when` per
       child, can add/remove rows, and schedules a child into a day when its
       date/time row is filled; success reports the child and block counts.

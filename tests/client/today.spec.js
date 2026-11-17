@@ -311,6 +311,20 @@ describe('daily brief section', () => {
     expect(q(section, '[data-action="recompute-brief"]')).not.toBeNull()
   })
 
+  it('treats a malformed report as empty windows', async () => {
+    const brief = { ...makeDailyBrief(), slots: 'nope', items: 'nope' }
+    const { view } = await renderToday({ [DAY]: () => jsonResponse(dayPayload({ brief })) })
+
+    expect(text(view.container, '.today-muted')).toBe('No windows for today.')
+  })
+
+  it('drops a malformed generated-at timestamp', async () => {
+    const brief = makeDailyBrief({ generatedAt: 'not-a-date' })
+    const { view } = await renderToday({ [DAY]: () => jsonResponse(dayPayload({ brief })) })
+
+    expect(text(view.container, '.today-brief-meta')).toBe('auto')
+  })
+
   it('falls back to the task id and shows a source-only meta line', async () => {
     const base = makeDailyBrief()
     const brief = makeDailyBrief({

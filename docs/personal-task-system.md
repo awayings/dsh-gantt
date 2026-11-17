@@ -315,9 +315,9 @@ the evening 21:00-22:00 slot, a weekend has a morning, an afternoon/daytime, and
 an evening block, and the personal track rotates across 主攻/轮转/定义 work. The
 selection layer is a deterministic heuristic, not the frozen M1–M3 solver; see
 [Not adopted](#not-adopted--deferred). It starts from the same per-track
-[frontier and next](#frontier-and-next) view, and the result is rendered both in
-the Gantt page's brief strip and in the [Today page](#day-plans-and-the-today-page)
-section.
+[frontier and next](#frontier-and-next) view, and the result drives the
+[Gantt page's 今日 view](#perspectives-all-active-frontier-next-today-done) and the
+[Today page](#day-plans-and-the-today-page) section.
 
 ### Windows
 
@@ -396,26 +396,33 @@ runs in UTC and the default zone has no DST. "Today" in the report is the same
 task-day date, not the host's UTC date. The timer only fires while the host
 process is running, and the manual route is the fallback after downtime.
 
-## Perspectives: all, to do, done
+## Perspectives: all, active, frontier, next, today, done
 
-The Gantt page can render the same tree through three perspectives; the
+The Gantt page can render the same tree through six perspectives; the
 timeline and row set are filtered from the pruned tree, not merely collapsed.
 
 - **All** — the full tree, using the depth level and manual collapse controls as
   before.
-- **To do** (待做) — keep only the **paths** from the focus leaves to their track
-  root. A focus leaf is a lane's frontier or next id, plus every
-  `dailyBrief.items[].taskId`. Siblings of a path ancestor that are not on a kept
-  path are pruned, which hides completed siblings and unrelated branches; a
-  track with no kept path disappears.
+- **Active** (进行中) — keep the tasks whose work conversation is running or
+  waiting for a choice, from the live session-status snapshot.
+- **Frontier** (前沿) — keep the **paths** from each track's frontier entry
+  (`brief.lanes[].frontier.id`) to its track root. Siblings on the path that are
+  not themselves kept are pruned, which hides completed siblings and unrelated
+  branches; a track with no frontier entry disappears.
+- **Next** (该动) — the same path rule for each track's next entry
+  (`brief.lanes[].next.id`).
+- **Today** (今日) — the same path rule for every daily-brief pick
+  (`dailyBrief.items[].taskId`).
 - **Done** (已完成) — keep done nodes and their not-done ancestors as path
   context, and prune the pending branches, so finished work can be reviewed.
 
 The pruning rule is: a node survives when it is in the keep set or has a
-surviving descendant. Switching to 待做/已完成 clears the collapse set so every
-kept path is visible; switching back to 全部 re-applies the depth-level
-collapse. The page shows the number of kept focus tasks next to the switch and a
-mode-specific empty hint when the result is empty.
+surviving descendant. 前沿/该动/今日 split what the old 待做 view aggregated.
+Switching to any pruned view clears the collapse set so every kept path is
+visible; switching back to 全部 re-applies the depth-level collapse. The page
+shows the number of kept tasks next to the switch, a mode-specific empty hint
+when the result is empty, and a **重算前沿和该动** button on the right that POSTs
+`api/gantt/brief/compute` and refreshes the tree.
 
 ## Links
 

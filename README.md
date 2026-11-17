@@ -9,11 +9,12 @@ sidebar:
   splitting, moving, deletion. The six imported tracks are the tree roots and
   their Hermes nodes hang below them, so the imported work is visible here.
   Decompose a node into subtasks, schedule a node into a day plan, and export
-  the whole tree as markdown model context. The **daily 该动 brief** above the
-  tree shows each track's frontier/next and today's windows with the task picked
-  for each role (core / rotation / definition); **全部 / 进行中 / 待做 /
-  已完成** perspectives prune the tree to the paths that matter (进行中 keeps
-  tasks whose work conversation is running or waiting for a choice). A **甘特** tab in the
+  the whole tree as markdown model context. **全部 / 进行中 / 前沿 / 该动 /
+  今日 / 已完成** perspectives prune the tree to the paths that matter (进行中
+  keeps tasks whose work conversation is running or waiting for a choice; 前沿
+  and 该动 keep each track's frontier and next paths; 今日 keeps the tasks the
+  daily brief picked for today), and **重算前沿和该动** on the right of the
+  switch recomputes the daily brief. A **甘特** tab in the
   native conversation sidebar focuses one task per conversation, and the host
   assistant tools let that conversation read the focused chain and write
   decompositions straight into the tree. Every tool write records the DSH
@@ -114,10 +115,11 @@ is always by path — it is not published to npm.
 6. On a tree row, **Decompose** creates subtasks (and optionally schedules each
    one), **Schedule** puts an existing node into a day's plan, and **Export
    context** copies the tree plus today's plan as markdown.
-7. Read the **daily brief** above the tree: the frontier/next table for each
-   track and today's windows with their picked tasks. **Recompute** refreshes
-   it; **待做** / **已完成** switch the tree to the focus paths or the finished
-   work only.
+7. The perspective switch (**All / Active / Frontier / Next / Today / Done**)
+   prunes the tree to the paths that matter: Frontier keeps each track's newest
+   pending leaf, Next the first executable leaf, and Today the tasks the daily
+   brief picked for today. **Recompute frontier and next** on the right of the
+   switch refreshes the daily brief.
 8. With `dsh-better-sidebar`, open the **甘特** tab in a native conversation
    and click a task to focus it. Ask the conversation model to decompose it:
    the assistant tools read the focused chain (`gantt_context`) and write the
@@ -305,7 +307,7 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/mcp.js`, `bin/gantt-mcp.js` | external-agent MCP server and its CLI (stdio or optional HTTP) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
-| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), brief strip, dialogs, styles |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 

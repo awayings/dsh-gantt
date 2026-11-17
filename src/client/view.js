@@ -105,18 +105,3 @@ export function collapseForLevel(nodes, level) {
   walk(nodes, 0)
   return ids
 }
-
-/** Root-to-node path, or null when the id is not in the current tree. */
-/** Root-to-node path for an id, or null when the id is not in the tree. */
-export function taskPath(nodes, id) {
-  const walk = (list, trail) => {
-    for (const node of list) {
-      const nextTrail = [...trail, node]
-      if (node.id === id) return nextTrail
-      const found = walk(node.children, nextTrail)
-      if (found !== null) return found
-    }
-    return null
-  }
-  return walk(nodes, [])
-}

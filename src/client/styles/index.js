@@ -1,5 +1,4 @@
 import { CSS_BASE } from './base.js'
-import { CSS_BRIEF } from './brief.js'
 import { CSS_DIALOG } from './dialog.js'
 import { CSS_EMPTY } from './empty.js'
 import { CSS_GRID } from './grid.js'
@@ -23,6 +22,5 @@ export const CSS = [
   CSS_EMPTY,
   CSS_DIALOG,
   CSS_MISC,
-  CSS_BRIEF,
   CSS_RESPONSIVE,
 ].join('\n')

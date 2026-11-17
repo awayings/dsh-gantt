@@ -36,6 +36,7 @@ export const CSS_MISC = `
   }
   .gantt-filter-label { font-size: 11px; color: var(--gantt-muted); }
   .gantt-filter-count { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
+  .gantt-filter-recompute { margin-left: auto; }
   .gantt-filter-empty {
     flex: 1;
     display: flex;

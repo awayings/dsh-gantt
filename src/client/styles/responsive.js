@@ -6,7 +6,6 @@ export const CSS_RESPONSIVE = `
     .gantt-stat-progress { max-width: none; }
     .gantt-api-meta { grid-template-columns: 1fr; }
     .gantt-head, .gantt-stats { padding-left: 14px; padding-right: 14px; }
-    .gantt-brief { margin: 12px 14px 0; }
   }
   @container (max-width: 720px) {
     .gantt-head, .gantt-stats, .gantt-body, .gantt-backdrop { --gantt-left: 230px; }
@@ -21,10 +20,6 @@ export const CSS_RESPONSIVE = `
     .gantt-api-desc { grid-column: 1 / -1; }
     .gantt-decompose-head { grid-template-columns: 18px minmax(0, 1fr) 32px; }
     .gantt-decompose-head > [data-field="doneWhen"] { grid-column: 2 / 4; }
-    .gantt-brief-lane-name { min-width: 0; }
-    .gantt-brief-lanes-head, .gantt-brief-lane { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
-    .gantt-brief-windows { grid-template-columns: 1fr; }
     .gantt-filter { padding-left: 14px; padding-right: 14px; }
-    .gantt-brief { margin: 10px 14px 0; padding: 8px 10px; }
   }
 `

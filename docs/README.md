@@ -6,8 +6,8 @@ API, backed by SQLite. The host half is seven ESM modules under `src/host/`; the
 browser half is ESM under `src/client/` bundled into the single `lib/client.js`
 artifact. The
 Gantt page and the Today page render one unified tree
-imported from an external task-tracker workspace; the Gantt page adds the brief
-strip and perspectives, and a native conversation gets a right-rail **甘特** tab
+imported from an external task-tracker workspace; the Gantt page adds the
+perspective filter (frontier / next / today), and a native conversation gets a right-rail **甘特** tab
 plus host assistant tools for focused-task context, decomposition, and automatic
 session/turn provenance. Start with the [README](../README.md) for installation
 and a feature tour.

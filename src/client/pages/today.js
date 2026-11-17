@@ -193,7 +193,7 @@ export function TodayPage({ ctx }) {
             h('span', { className: 'today-brief-track', title: item ? item.trackName : '' }, item ? item.trackName : '—'),
             item
               ? h('span', { className: 'today-brief-task', title: item.title },
-                `${item.ref ? refIdOf(item.ref) : item.taskId} ${item.title}`)
+                `${refIdOf(item.ref) || item.taskId} ${item.title}`)
               : h('span', { className: 'today-brief-unfilled' }, t('today.brief.unfilled')),
             )
           }),

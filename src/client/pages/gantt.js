@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BriefStrip } from '../brief.js'
 import { STATUS_COLOR } from '../constants.js'
 import { addDays, addMonths, todayIso } from '../dates.js'
 import { ApiDialog } from '../dialogs/api.js'
@@ -13,7 +12,7 @@ import { GanttGlyph, InfoGlyph } from '../icons.js'
 import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
 import { buildWindow, windowTitle } from '../timeline.js'
-import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, taskPath, visibleRows } from '../view.js'
+import { collapseForLevel, collectSubtree, filterTree, flattenTree, taskOptions, visibleRows } from '../view.js'
 import { activeSessionId, canExecuteWorkTask, noteWorkFocus } from '../work-nav.js'
 import { taskActivity, useSessionStatuses } from '../session-status.js'
 import { GanttWorkbench } from './workbench.js'
@@ -49,7 +48,7 @@ function writeWorkMode(on) {
   }
 }
 
-/** The Gantt tree page: brief strip, filter and timeline. */
+/** The Gantt tree page: perspective filter, recompute action and timeline. */
 export function GanttPage({ ctx }) {
   const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData()
@@ -110,15 +109,21 @@ export function GanttPage({ ctx }) {
   const allTasks = useMemo(() => flattenTree(tasks), [tasks])
   const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
   const options = useMemo(() => taskOptions(tasks), [tasks])
-  const focusIds = useMemo(() => {
+  const frontierIds = useMemo(() => {
     const ids = new Set()
     for (const lane of data?.brief?.lanes ?? []) {
       if (lane?.frontier) ids.add(lane.frontier.id)
+    }
+    return ids
+  }, [data?.brief])
+  const nextIds = useMemo(() => {
+    const ids = new Set()
+    for (const lane of data?.brief?.lanes ?? []) {
       if (lane?.next) ids.add(lane.next.id)
     }
-    for (const item of dailyBrief?.items ?? []) ids.add(item.taskId)
     return ids
-  }, [data?.brief, dailyBrief])
+  }, [data?.brief])
+  const todayIds = useMemo(() => new Set((dailyBrief?.items ?? []).map(item => item.taskId)), [dailyBrief])
   const doneIds = useMemo(
     () => new Set(allTasks.filter(task => task.status === 'done').map(task => task.id)),
     [allTasks],
@@ -133,10 +138,12 @@ export function GanttPage({ ctx }) {
   }, [allTasks, statuses])
   const filterIds = useMemo(() => {
     if (filter === 'active') return new Set(activityByTask.keys())
-    if (filter === 'todo') return focusIds
+    if (filter === 'frontier') return frontierIds
+    if (filter === 'next') return nextIds
+    if (filter === 'today') return todayIds
     if (filter === 'done') return doneIds
     return null
-  }, [filter, focusIds, doneIds, activityByTask])
+  }, [filter, frontierIds, nextIds, todayIds, doneIds, activityByTask])
   const filterCount = filterIds === null ? 0 : [...filterIds].filter(id => byId.has(id)).length
   const filteredTasks = useMemo(
     () => (filterIds === null ? tasks : filterTree(tasks, filterIds)),
@@ -206,13 +213,13 @@ export function GanttPage({ ctx }) {
         method: 'POST',
         body: JSON.stringify({ date: today }),
       })
-      refresh()
+      refreshWithToast(t('filter.recomputeDone'))
     } catch (failure) {
       setToast({ text: failure instanceof Error ? failure.message : String(failure), kind: 'error' })
     } finally {
       setRecomputing(false)
     }
-  }, [refresh, today])
+  }, [refreshWithToast, today, t])
   const toggleCollapse = useCallback((id) => {
     setCollapsed((current) => {
       const next = new Set(current)
@@ -229,17 +236,6 @@ export function GanttPage({ ctx }) {
     setFilter(next)
     setCollapsed(next === 'all' ? collapseForLevel(tasks, level) : new Set())
   }, [tasks, level])
-  const revealTask = useCallback((id) => {
-    const path = taskPath(tasks, id)
-    if (path === null) return
-    setCollapsed((current) => {
-      const next = new Set(current)
-      for (const ancestor of path.slice(0, -1)) next.delete(ancestor.id)
-      return next
-    })
-    setSelectedId(id)
-    setFocusId(id)
-  }, [tasks])
   const openCreate = useCallback((parentTask) => {
     setDialog({ type: 'create', parentId: parentTask?.id ?? null })
   }, [])
@@ -536,20 +532,11 @@ export function GanttPage({ ctx }) {
       h('span', null, error),
       h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
     ) : null,
-    h(BriefStrip, {
-      dailyBrief,
-      pending: data?.brief?.pending,
-      t,
-      locale,
-      onReveal: revealTask,
-      onRecompute: recomputeBrief,
-      recomputing,
-    }),
     tasks.length > 0
       ? h('section', { className: 'gantt-filter' },
         h('span', { className: 'gantt-filter-label' }, t('filter.label')),
         h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
-          [['all', 'filter.all'], ['active', 'filter.active'], ['todo', 'filter.todo'], ['done', 'filter.done']].map(([value, key]) => h('button', {
+          [['all', 'filter.all'], ['active', 'filter.active'], ['frontier', 'filter.frontier'], ['next', 'filter.next'], ['today', 'filter.today'], ['done', 'filter.done']].map(([value, key]) => h('button', {
             key: value,
             className: 'gantt-seg-btn',
             type: 'button',
@@ -561,6 +548,13 @@ export function GanttPage({ ctx }) {
         filterCount > 0
           ? h('span', { className: 'gantt-filter-count' }, `${filterCount} ${t('filter.paths')}`)
           : null,
+        h('button', {
+          className: 'gantt-btn gantt-filter-recompute',
+          type: 'button',
+          'data-action': 'recompute-brief',
+          disabled: recomputing,
+          onClick: recomputeBrief,
+        }, recomputing ? '…' : t('filter.recompute')),
       )
       : null,
     content,
