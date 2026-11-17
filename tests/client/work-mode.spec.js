@@ -22,6 +22,7 @@ import {
 } from './harness.js'
 import { treePayload } from './fixtures.js'
 import { resetAgentNames } from '../../src/client/agent-labels.js'
+import { LEGACY_WORK_MODE_KEY, PAGE_STATE_KEY, PAGE_STATE_VERSION } from '../../src/client/page-state.js'
 
 const TREE = 'api/gantt/tree'
 const WORK = 'api/gantt/work'
@@ -31,7 +32,6 @@ const TEAM = 'api/gantt/work/team'
 const TRAJECTORY = 'api/gantt/trajectory'
 const FOCUS = 'api/gantt/focus/set'
 const AGENTS = 'api/gantt/agents'
-const STORAGE_KEY = 'gantt.workMode'
 const WORK_CWD = '/data/home/ws-plugin'
 const EMPTY_STATUSES = new Map()
 
@@ -123,6 +123,12 @@ async function renderPage({ routes = {}, services = undefined, store = {} } = {}
   return { ...fetchState, app, view }
 }
 
+/** The parsed page-state record the page persists its view in. */
+function storedPageState() {
+  const raw = localStorage.getItem(PAGE_STATE_KEY)
+  return raw === null ? null : JSON.parse(raw)
+}
+
 function toggleButton(container) {
   return q(container, 'button[data-action="work-mode"]')
 }
@@ -156,7 +162,7 @@ afterEach(() => {
 
 describe('work-mode toggle', () => {
   it('renders a disabled toggle when the host exposes no session service', async () => {
-    const { view } = await renderPage({ store: { [STORAGE_KEY]: '1' } })
+    const { view } = await renderPage({ store: { [LEGACY_WORK_MODE_KEY]: '1' } })
     const toggle = toggleButton(view.container)
 
     expect(toggle).not.toBeNull()
@@ -172,7 +178,7 @@ describe('work-mode toggle', () => {
     expect(panel(view.container)).toBeNull()
   })
 
-  it('persists the switch across a remount and navigates nowhere on toggle', async () => {
+  it('persists the switch in the page-state record across a remount', async () => {
     const { services } = workServices()
     const { view, app, calls } = await renderPage({ services })
 
@@ -180,7 +186,10 @@ describe('work-mode toggle', () => {
     click(toggleButton(view.container))
     expect(toggleButton(view.container).getAttribute('data-active')).toBe('true')
     expect(toggleButton(view.container).getAttribute('aria-pressed')).toBe('true')
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('1')
+    // Work mode is part of the page state now: the record carries it and the
+    // standalone key an older client wrote is cleared by the same write.
+    expect(storedPageState()).toMatchObject({ v: PAGE_STATE_VERSION, workMode: true })
+    expect(localStorage.getItem(LEGACY_WORK_MODE_KEY)).toBeNull()
     expect(calls.map(call => call.path)).toEqual([TREE])
 
     view.unmount()
@@ -191,7 +200,8 @@ describe('work-mode toggle', () => {
     click(toggleButton(remounted.container))
     expect(toggleButton(remounted.container).getAttribute('data-active')).toBeNull()
     expect(toggleButton(remounted.container).getAttribute('aria-pressed')).toBe('false')
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+    expect(storedPageState()).toMatchObject({ v: PAGE_STATE_VERSION, workMode: false })
+    expect(localStorage.getItem(LEGACY_WORK_MODE_KEY)).toBeNull()
   })
 })
 
@@ -200,7 +210,7 @@ describe('work-mode activation', () => {
     const { services, opened } = workServices()
     const { view, calls } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => jsonResponse({ ok: true, taskId: 'c1', sessionId: 'session-main' }) },
     })
 
@@ -230,7 +240,7 @@ describe('work-mode activation', () => {
     const { services } = workServices({ sidebar: null })
     const { view, calls } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
     })
 
@@ -244,7 +254,7 @@ describe('work-mode activation', () => {
 
   it('still opens the panel when the host exposes no on-screen conversation', async () => {
     const { services } = workServices({ sidebar: null, mainSession: null })
-    const { view, calls } = await renderPage({ services, store: { [STORAGE_KEY]: '1' } })
+    const { view, calls } = await renderPage({ services, store: { [LEGACY_WORK_MODE_KEY]: '1' } })
 
     click(row(view.container, '1.1 Write spec'))
     await flush()
@@ -257,7 +267,7 @@ describe('work-mode activation', () => {
     const { services } = workServices()
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
     })
 
@@ -278,7 +288,7 @@ describe('work-mode activation', () => {
 
   it('keeps task editing reachable from the row action in work mode', async () => {
     const { services } = workServices()
-    const { view, calls } = await renderPage({ services, store: { [STORAGE_KEY]: '1' } })
+    const { view, calls } = await renderPage({ services, store: { [LEGACY_WORK_MODE_KEY]: '1' } })
 
     const edit = editButton(view.container, '1.1 Write spec')
     expect(edit).not.toBeNull()
@@ -296,7 +306,7 @@ describe('work-mode activation', () => {
     const { services } = workServices()
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => jsonResponse({ ok: false, error: 'focus write failed' }, 500) },
     })
 
@@ -312,7 +322,7 @@ describe('work-mode activation', () => {
     const { services } = workServices()
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => Promise.reject('session store offline') },
     })
 
@@ -327,7 +337,7 @@ describe('work-mode activation', () => {
     const { services } = workServices()
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [FOCUS]: () => jsonResponse({ ok: true }) },
     })
 
@@ -354,7 +364,7 @@ describe('work-mode activation', () => {
     let payload = treePayload()
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: {
         [TREE]: () => jsonResponse(payload),
         [FOCUS]: () => jsonResponse({ ok: true }),
@@ -386,7 +396,7 @@ describe('work-mode activation', () => {
     vi.stubGlobal('open', () => win)
     const { view } = await renderPage({
       services,
-      store: { [STORAGE_KEY]: '1' },
+      store: { [LEGACY_WORK_MODE_KEY]: '1' },
       routes: { [WORK]: () => jsonResponse(WORK_WITHOUT_SESSION) },
     })
 

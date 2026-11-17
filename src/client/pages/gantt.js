@@ -19,57 +19,30 @@ import { taskActivity, useSessionStatuses } from '../session-status.js'
 import { GanttWorkbench } from './workbench.js'
 import { h } from '../dom.js'
 
-const WORK_MODE_KEY = 'gantt.workMode'
-
 /** Debounce for persisting the pane scroll offsets while a gesture is running. */
 const SCROLL_WRITE_DELAY = 150
-
-/**
- * Read the persisted work-mode switch. Storage can be disabled or throwing
- * (private-mode browsers), in which case the switch starts off.
- * @returns {boolean}
- */
-function readWorkMode() {
-  try {
-    return globalThis.localStorage.getItem(WORK_MODE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-/**
- * Persist the work-mode switch. A rejected storage write keeps the switch
- * usable for the session instead of failing the click.
- * @param {boolean} on
- * @returns {void}
- */
-function writeWorkMode(on) {
-  try {
-    if (on) globalThis.localStorage.setItem(WORK_MODE_KEY, '1')
-    else globalThis.localStorage.removeItem(WORK_MODE_KEY)
-  } catch {
-    // Keep the in-memory switch when the browser refuses storage.
-  }
-}
 
 /** The Gantt tree page: perspective filter, recompute action and timeline. */
 export function GanttPage({ ctx }) {
   const { locale, t } = useLocale(ctx)
   const { status, data, error, refresh } = useGanttData()
   const workAvailable = canExecuteWorkTask(ctx)
-  const [workMode, setWorkMode] = useState(readWorkMode)
-  const workOn = workMode && workAvailable
-  const [panelTaskId, setPanelTaskId] = useState(null)
-  const [scale, setScale] = useState('week')
-  const [anchor, setAnchor] = useState(() => todayIso())
   // The view left by the previous visit, read once per mount; the page-state
   // module already normalized it, so every field is in range here.
   const [saved] = useState(readPageState)
+  const [workMode, setWorkMode] = useState(() => saved?.workMode ?? false)
+  const workOn = workMode && workAvailable
+  // Work mode is what makes a panel task meaningful, so a panel recorded while
+  // the switch was off is not restored.
+  const [panelTaskId, setPanelTaskId] = useState(() => (saved?.workMode ? saved.panelTaskId ?? null : null))
+  const [panelTab, setPanelTab] = useState(() => saved?.panelTab ?? 'task')
+  const [scale, setScale] = useState(() => saved?.scale ?? 'week')
+  const [anchor, setAnchor] = useState(() => saved?.anchor ?? todayIso())
   const [collapsed, setCollapsed] = useState(() => new Set(saved?.collapsed ?? []))
   const [level, setLevel] = useState(() => saved?.level ?? 99)
   const [filter, setFilter] = useState(() => saved?.filter ?? 'all')
   const [recomputing, setRecomputing] = useState(false)
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedId, setSelectedId] = useState(() => saved?.selectedId ?? null)
   const [focusId, setFocusId] = useState(null)
   const [dialog, setDialog] = useState(null)
   const [infoOpen, setInfoOpen] = useState(false)
@@ -84,7 +57,11 @@ export function GanttPage({ ctx }) {
   const scrollRef = useRef({ top: saved?.scrollTop ?? 0, left: saved?.scrollLeft ?? 0 })
   const scrollTimer = useRef(null)
   const restored = useRef(false)
-  const viewRef = useRef({ level, filter, collapsed })
+  // The whole persisted view lives in one ref so the debounced scroll write and
+  // every state-driven write persist the same complete record.
+  const viewRef = useRef({
+    level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+  })
   const writePageStateNow = useCallback(() => {
     const view = viewRef.current
     const { top, left } = scrollRef.current
@@ -94,12 +71,23 @@ export function GanttPage({ ctx }) {
       collapsed: [...view.collapsed],
       scrollTop: top,
       scrollLeft: left,
+      scale: view.scale,
+      anchor: view.anchor,
+      selectedId: view.selectedId,
+      panelTaskId: view.panelTaskId,
+      panelTab: view.panelTab,
+      workMode: view.workMode,
     })
   }, [])
   useEffect(() => {
-    viewRef.current = { level, filter, collapsed }
+    viewRef.current = {
+      level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    }
     writePageStateNow()
-  }, [level, filter, collapsed, writePageStateNow])
+  }, [
+    level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    writePageStateNow,
+  ])
   // A hide or an entry swap never waits for a debounce timer, so the latest
   // offsets are flushed synchronously instead of being lost.
   useEffect(() => {
@@ -117,11 +105,12 @@ export function GanttPage({ ctx }) {
     }
   }, [writePageStateNow])
   useEffect(() => {
-    if (data && !initialized.current) {
-      initialized.current = true
-      setAnchor(data.today || todayIso())
-    }
-  }, [data])
+    if (!data || initialized.current) return
+    initialized.current = true
+    // A saved anchor is the window the user left; only a first visit starts on
+    // the task day. Restoring a saved view is a pure view update.
+    if (!saved?.anchor) setAnchor(data.today || todayIso())
+  }, [data, saved])
   useEffect(() => {
     if (!toast) return undefined
     const timer = setTimeout(() => setToast(null), 2800)
@@ -325,7 +314,6 @@ export function GanttPage({ ctx }) {
   }, [])
   const toggleWorkMode = useCallback(() => {
     const next = !workMode
-    writeWorkMode(next)
     setWorkMode(next)
     if (!next) setPanelTaskId(null)
   }, [workMode])
@@ -488,6 +476,8 @@ export function GanttPage({ ctx }) {
               ctx,
               taskId: panelId,
               scope: { sessionId: activeSessionId(ctx) ?? '' },
+              tab: panelTab,
+              onTabChange: setPanelTab,
               onClose: () => setPanelTaskId(null),
             }),
           ),

@@ -193,7 +193,7 @@ export function readPageState() {
  * swallowed: the page still works, it just will not remember. Fields this
  * version added are optional in the argument so a caller can still pass only the
  * view it owns; reading fills whatever is omitted from the defaults.
- * @param {Partial<PageState>} state
+ * @param {PageState} state
  * @returns {void}
  */
 export function writePageState(state) {
