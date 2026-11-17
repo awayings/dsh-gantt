@@ -338,7 +338,12 @@ carries the round-closing discipline, the task-id forms, and the commit
 convention (end the subject with the task's point number, template
 `<type>(<scope>): <imperative subject> (<point number>)`).
 [worker-flow.md](worker-flow.md) is the human-facing companion: install, client
-setup, and smoke tests.
+setup, and smoke tests. The guide is served live, but the client copies of the
+playbook (`~/.claude/skills/gantt-worker/SKILL.md`, the `gantt` block in
+`~/.codex/AGENTS.md`) are pushed by the installers and do not refresh
+themselves: after editing this guide, `MCP_INSTRUCTIONS`, a tool schema, or
+[deploy/worker/](../deploy/worker), re-run both clients with one command —
+`bash k3s-lab/dsh/sync-workers.sh` ([worker-flow.md](worker-flow.md#keeping-the-client-copies-in-sync)).
 
 ### `report_completion`
 

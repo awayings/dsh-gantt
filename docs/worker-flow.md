@@ -49,6 +49,8 @@ The two client scripts live outside this repository
 from the host that holds the token file, not on the client. Every remote step
 goes through the safety-gated SSH wrapper in [remote-exec.md](remote-exec.md).
 Both are idempotent; `--check` verifies, `--no-model` skips the model call.
+`k3s-lab/dsh/sync-workers.sh` runs both and verifies the result — see
+[Keeping the client copies in sync](#keeping-the-client-copies-in-sync).
 
 ## Codex on macOS
 
@@ -92,6 +94,45 @@ writes [SKILL.md](../deploy/worker/SKILL.md) to
 `~/.claude/skills/gantt-worker/SKILL.md` with the worker name
 `claude-code-http` substituted for `<gantt-agent-name>` (override with
 `GANTT_AGENT_NAME`).
+
+## Keeping the client copies in sync
+
+The worker contract has three carriers: `get_worker_guide` (authoritative, read
+at runtime), `~/.claude/skills/gantt-worker/SKILL.md`, and the `gantt` block in
+`~/.codex/AGENTS.md`. The last two are copies of
+[deploy/worker/](../deploy/worker) pushed by the installers. No client re-reads
+the templates, so a change to the guide, to a tool name or argument, or to a
+template leaves both clients speaking the old dialect until someone re-runs the
+installers. Treat that as part of the change, not as follow-up work:
+
+| Changed | Re-sync clients |
+| --- | --- |
+| `WORKER_GUIDE` / `MCP_INSTRUCTIONS` in [mcp.js](../src/host/mcp.js) | yes |
+| tool names, arguments, or result fields | yes |
+| [deploy/worker/](../deploy/worker) templates | yes |
+| token rotation or `MCP_URL` | yes |
+| UI, store, or route code only | no |
+
+One command re-syncs both deployments from the host that holds the token:
+
+```sh
+bash k3s-lab/dsh/sync-workers.sh            # drift check -> both installers -> verify
+bash k3s-lab/dsh/sync-workers.sh --check    # report drift, write nothing
+bash k3s-lab/dsh/sync-workers.sh --parallel # both at once
+```
+
+It hashes each template as rendered (worker name substituted) against the copy
+already on the client, reporting `current`, `STALE`, or `missing`; runs both
+installers, each of which finishes with one real model call through the MCP
+server; then hashes the installed copies again, so a stale or half-written file
+fails the run instead of passing silently — the installers themselves only
+check that the file exists. The trailing model call is probabilistic (a client
+was seen dropping a required `register_agent` argument), so a failed installer
+is retried once by default (`SYNC_RETRIES=0` disables that). Exit code 0 means
+both sides pass and both copies byte-match the current templates; record the
+resulting hashes in the task summary. The guide stays authoritative at runtime;
+the copies are what a model actually reads before it calls `get_worker_guide` —
+and what it falls back on when its client truncates `initialize` instructions.
 
 ## The worker loop
 
