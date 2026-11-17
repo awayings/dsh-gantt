@@ -207,7 +207,12 @@ Both clients call the same five tools (`register_agent`, `list_agents`,
   `tasks.db`; the `-wal` file carries recent commits.
 - **Upgrade**: `git pull` in the checkout, `pnpm run build` if client sources
   changed, `sudo systemctl restart gantt-mcp`; restart `dsh web` when host code
-  changed (new routes or tables only take effect after a restart).
+  changed (new routes or tables only take effect after a restart). The plugin
+  and the service share one database, so upgrade both in the same step.
+- **Schema contract**: the database records its schema in `PRAGMA user_version`.
+  A build refuses a file written by a newer build ("schema v9 is newer than this
+  build supports (v8)") instead of writing to it; a migration is applied once
+  even when `dsh web` and `gantt-mcp` start together after an upgrade.
 - **Logs**: the service logs the bind line and request errors to the journal
   (`journalctl -u gantt-mcp`); the JSON-RPC payloads themselves are not logged.
 
@@ -221,6 +226,7 @@ Both clients call the same five tools (`register_agent`, `list_agents`,
 | Mac: `connection refused` | service bound to `127.0.0.1` | bind `0.0.0.0`/the LAN address and restart |
 | Mac: timeout | firewall or wrong IP | open `8765/tcp`, verify `hostname -I` |
 | `SQLITE_BUSY` | long write transaction elsewhere | retry; keep external transactions short |
+| `schema vN is newer than this build supports` | the database was upgraded by a newer release | install the matching release for the plugin and the service |
 | tools missing in a client | protocol mismatch or old client | require an MCP client that speaks `2025-06-18` |
 
 ## 9. Out of scope

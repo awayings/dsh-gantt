@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { expect } from 'vitest'
 import { GanttError, GanttStore } from '../../src/host/store.js'
 
@@ -126,4 +127,16 @@ export function insertDailyReport(store, report) {
 /** Assert that a stored timestamp is a canonical ISO-8601 UTC string. */
 export function expectIsoTimestamp(value) {
   expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+}
+
+/** Rewind a current-version database to the v7 shape: no agents table and none
+ * of the v8 task columns, while still claiming v7. */
+export function downgradeToV7(file) {
+  const db = new DatabaseSync(file)
+  db.exec('DROP TABLE agents')
+  db.exec('ALTER TABLE tasks DROP COLUMN operator_id')
+  db.exec('ALTER TABLE tasks DROP COLUMN completed_by_id')
+  db.exec('ALTER TABLE tasks DROP COLUMN report')
+  db.exec('PRAGMA user_version = 7')
+  db.close()
 }

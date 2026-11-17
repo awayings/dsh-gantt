@@ -7,7 +7,9 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { GanttStore, SCHEMA_VERSION } from '../../src/host/store.js'
 
 const CLI = path.resolve(import.meta.dirname, '../../bin/gantt-mcp.js')
 const TOKEN = 'e2e-mcp-token'
@@ -150,6 +152,18 @@ describe('gantt-mcp CLI over HTTP', () => {
     })
     expect(malformed.status).toBe(400)
     expect((await malformed.json()).error.code).toBe(-32700)
+  })
+
+  it('refuses a database written by a newer build', async () => {
+    const seed = new GanttStore(dbPath())
+    seed.close()
+    const newer = new DatabaseSync(dbPath())
+    newer.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`)
+    newer.close()
+
+    const cli = startCli(['--db', dbPath()])
+    expect(await cli.closed).toBe(1)
+    expect(cli.errors.join('\n')).toContain(`schema v${SCHEMA_VERSION + 1} is newer than this build supports`)
   })
 
   it('refuses a network bind without a bearer token', async () => {

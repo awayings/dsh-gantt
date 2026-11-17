@@ -1,8 +1,7 @@
-import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GanttStore, SCHEMA_VERSION } from '../../src/host/store.js'
-import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
+import { downgradeToV7, makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
 let dir
 let store
@@ -17,17 +16,6 @@ afterEach(() => {
 /** Columns of one table, in declaration order. */
 function columns(db, table) {
   return /** @type {{ name: string }[]} */ (db.prepare(`PRAGMA table_info(${table})`).all()).map(row => row.name)
-}
-
-/** Rewind a v8 database to the v7 shape: no agent table and no agent columns. */
-function downgradeToV7(file) {
-  const db = new DatabaseSync(file)
-  db.exec('DROP TABLE agents')
-  db.exec('ALTER TABLE tasks DROP COLUMN operator_id')
-  db.exec('ALTER TABLE tasks DROP COLUMN completed_by_id')
-  db.exec('ALTER TABLE tasks DROP COLUMN report')
-  db.exec('PRAGMA user_version = 7')
-  db.close()
 }
 
 describe('schema v8', () => {

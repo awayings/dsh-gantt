@@ -93,12 +93,78 @@ export function resolveDatabasePath() {
 }
 
 /**
+ * Read the schema version recorded by the last migration.
+ * @param {DatabaseSync} db
+ * @returns {number}
+ */
+function readSchemaVersion(db) {
+  return /** @type {{ user_version: number }} */ (db.prepare('PRAGMA user_version').get()).user_version
+}
+
+/** How long {@link enableWal} keeps retrying while another process holds the write lock. */
+const WAL_LOCK_WAIT_MS = 5000
+/** Poll interval for {@link enableWal}. */
+const WAL_LOCK_POLL_MS = 25
+/** Milliseconds a writer waits for another process's lock before reporting SQLITE_BUSY. */
+const BUSY_TIMEOUT_MS = 5000
+
+/**
+ * Block the current thread for `ms`; there is no timer API that runs while a
+ * synchronous SQLite call owns the thread.
+ * @param {number} ms
+ * @returns {void}
+ */
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/**
+ * Switch the database to WAL. Two processes opening a fresh file at the same
+ * instant both need the exclusive lock the journal-mode switch takes, and
+ * SQLite does not run the busy handler for that pragma, so the wait is driven
+ * here: the switch is retried until the winner commits.
+ * @param {DatabaseSync} db
+ * @param {number} waitMs
+ * @returns {void}
+ */
+function enableWal(db, waitMs) {
+  db.exec('PRAGMA busy_timeout = 0')
+  const deadline = Date.now() + waitMs
+  try {
+    for (;;) {
+      try {
+        db.exec('PRAGMA journal_mode = WAL')
+        return
+      } catch (error) {
+        if (Date.now() >= deadline) throw error
+        sleep(WAL_LOCK_POLL_MS)
+      }
+    }
+  } finally {
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
+  }
+}
+
+/**
+ * Names of the task columns the current schema expects but the table lacks.
+ * @param {DatabaseSync} db
+ * @returns {string[]}
+ */
+function missingTaskColumns(db) {
+  const columns = new Set(/** @type {{ name: string }[]} */ (db.prepare('PRAGMA table_info(tasks)').all()).map(row => row.name))
+  return Object.keys(TASK_EXTRA_COLUMNS).filter(name => !columns.has(name))
+}
+
+/**
  * Open (creating if needed) the SQLite database, set the pragmas the store
- * relies on, and create the schema.
+ * relies on, and create the schema. Refuses a file written by a newer build:
+ * the plugin and gantt-mcp must agree on the schema they share.
  * @param {string} file
+ * @param {number} [lockWaitMs] how long to retry the WAL switch while another
+ *   process holds the write lock on a file both are opening for the first time
  * @returns {DatabaseSync}
  */
-export function openDatabase(file) {
+export function openDatabase(file, lockWaitMs = WAL_LOCK_WAIT_MS) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true })
   const db = new DatabaseSync(file)
   if (file !== ':memory:') {
@@ -108,12 +174,24 @@ export function openDatabase(file) {
       // best effort; the database may live on a filesystem without POSIX modes
     }
   }
-  db.exec('PRAGMA journal_mode = WAL')
   // The Web UI and an MCP CLI process can hold this file at the same time; WAL
   // lets readers proceed and the timeout lets a writer wait out a short lock
-  // instead of failing with SQLITE_BUSY.
-  db.exec('PRAGMA busy_timeout = 5000')
+  // instead of failing with SQLITE_BUSY. The timeout is set before the journal
+  // mode change and the schema creation, which both need a write lock, so two
+  // processes starting on a fresh file serialize instead of failing.
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
+  try {
+    enableWal(db, lockWaitMs)
+  } catch (error) {
+    db.close()
+    throw error
+  }
   db.exec('PRAGMA foreign_keys = ON')
+  const version = readSchemaVersion(db)
+  if (version > SCHEMA_VERSION) {
+    db.close()
+    throw new Error(`refusing to open ${file}: schema v${version} is newer than this build supports (v${SCHEMA_VERSION}); run the same release for the plugin and gantt-mcp`)
+  }
   db.exec(CREATE_SCHEMA)
   return db
 }
@@ -126,18 +204,21 @@ export function openDatabase(file) {
  * @returns {void}
  */
 export function migrateDatabase(db, transaction, syncTrackerTree) {
-  const version = /** @type {{ user_version: number }} */ (db.prepare('PRAGMA user_version').get()).user_version
-  const columns = new Set(/** @type {{ name: string }[]} */ (db.prepare('PRAGMA table_info(tasks)').all()).map(row => row.name))
-  const missing = Object.keys(TASK_EXTRA_COLUMNS).filter(name => !columns.has(name))
+  // A database that is already current takes no write lock: the Web UI and
+  // gantt-mcp open this file independently on every start.
+  if (readSchemaVersion(db) === SCHEMA_VERSION && missingTaskColumns(db).length === 0) return
   // SQLite cannot widen a CHECK constraint in place, and dropping the parent
   // table with foreign keys on would cascade-delete the focus/trajectory rows
   // that reference it. The v7 rebuild therefore runs with checks disabled and
   // recreates the same ids, so the invariant holds again once they are back on.
-  const rebuildTasks = version < 7
-  if (rebuildTasks) db.exec('PRAGMA foreign_keys = OFF')
+  db.exec('PRAGMA foreign_keys = OFF')
   try {
     transaction(() => {
-      for (const name of missing) db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${TASK_EXTRA_COLUMNS[name]}`)
+      // BEGIN IMMEDIATE serializes concurrent first starts after an upgrade;
+      // the version is read again inside the lock, so a migration another
+      // process already committed is not applied a second time.
+      const version = readSchemaVersion(db)
+      for (const name of missingTaskColumns(db)) db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${TASK_EXTRA_COLUMNS[name]}`)
       db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_ref ON tasks(kind, ref) WHERE ref <> ''")
       if (version < 3) {
         const tracks = /** @type {SnapshotTrack[]} */ (db.prepare('SELECT id, name, lane, state, blocker, sort_order AS sortOrder FROM tracks ORDER BY sort_order, id').all())
@@ -220,6 +301,6 @@ export function migrateDatabase(db, transaction, syncTrackerTree) {
       if (version < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   } finally {
-    if (rebuildTasks) db.exec('PRAGMA foreign_keys = ON')
+    db.exec('PRAGMA foreign_keys = ON')
   }
 }
