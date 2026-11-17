@@ -59,7 +59,7 @@ script because the DSH client loader fetches a single artifact per package.
 | `src/host/daily/` | host | Daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | host | Five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
 | `src/host/prompt.js` | host | Static task-protocol section and dynamic focus trajectory context (optional `systemPrompt`) |
-| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), active-page restore across client reloads (`panel-session.js`), dialogs, and stylesheet modules (ESM) |
+| `src/client/` | client | Plugin entry, the Gantt/Today pages, the right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation (`work-nav.js`), live session activity (`session-status.js`), the cross-window conversation handoff (`session-window.js`), active-page restore across client reloads (`panel-session.js`), page-state restore across visits (`page-state.js`), dialogs, and stylesheet modules (ESM) |
 | `src/shared/` | both | Status vocabularies imported by the host and bundled into the client |
 | `lib/client.js` | artifact | Build output: one classic script registered through `window.__ModuleLoader__.load` (gitignored) |
 
@@ -94,6 +94,24 @@ unloads or the page hides, and the next apply re-selects it once the keyed
 entries are registered again. The marker is short-lived (15 s) and only a
 `gantt`/`today` selection is restored; when the host exposes no usable layout
 service the plugin simply keeps the conversation.
+
+### Gantt page state across visits
+
+`src/client/page-state.js` remembers the Gantt page's own view state in
+`localStorage` under the key `gantt.pageState`, as a versioned record
+`{ v: 1, level, filter, collapsed, scrollTop, scrollLeft }`. On the next visit
+(a page remount, or a browser reload that reopens the page) it restores the tree
+depth — the collapsed rows (their task ids) and the depth selector (all nodes,
+two levels, or one level) — the filter view (All / Unfinished / Active / Frontier
+/ Next / Today / Done), and the task pane's scroll position: the vertical and
+horizontal offsets of the `.gantt-main` pane. The record is written when the
+depth, the filter, or a collapse changes and on scroll (debounced), and flushed
+on `pagehide` and unmount.
+
+The timeline scale (week or month) and the window anchor are deliberately not
+persisted: the timeline still opens on today's window. The state belongs to the
+browser origin, not to a conversation. Absent, malformed, version-mismatched, or
+blocked storage simply yields the defaults and never breaks the page.
 
 ## Quality gate commands
 
@@ -212,7 +230,7 @@ Recorded decisions:
 | `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the page-state restore (versioned `localStorage` record of depth, filter, and pane scroll; debounced write and pagehide flush; absent, malformed, version-mismatched, or blocked storage falling back to the defaults), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
@@ -246,7 +264,10 @@ the endpoint count to 28. The description round adds
 `tests/client/workbench.spec.js`, `tests/host/routes-work.spec.js`, and
 `tests/e2e/work.spec.js`: the Unfinished status filter, the work route's
 `task.description`, and the fixed-height scrollable markdown preview in the
-workbench task view.
+workbench task view. The page-state round adds
+`tests/client/page-state.spec.js` and
+`tests/client/page-state-restore.spec.js`: the record's validation and fallbacks
+plus the page wiring that reapplies it on mount.
 Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.

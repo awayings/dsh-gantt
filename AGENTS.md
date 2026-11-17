@@ -16,7 +16,8 @@ by a local SQLite database and an authenticated JSON API.
   `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
   right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation,
-  active-page restore across client reloads, dialogs, styles) bundled by
+  active-page restore across client reloads, page-state restore across visits,
+  dialogs, styles) bundled by
   `scripts/build-client.mjs` (rolldown) into gitignored `lib/client.js` — one
   classic script registered through `window.__ModuleLoader__.load`, React from
   the factory `require`. DSH derives the artifact revision from

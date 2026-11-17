@@ -168,6 +168,13 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
    supported set; a host without a usable layout service keeps the conversation,
    and a stale marker (older than 15 s) is dropped instead of restoring an old
    page.
+13. **Gantt page state is client-only `localStorage`.** `src/client/page-state.js`
+    keeps the page's own view state (tree depth, filter view, collapsed rows,
+    and task-pane scroll) in `localStorage` under `gantt.pageState`; it uses no
+    shell service, so no harness face has to be verified for it. The record is
+    per browser origin, not per conversation, and a missing, blocked, malformed,
+    or version-mismatched record falls back to the page defaults instead of
+    failing the page.
 
 ## 3 · Rules
 

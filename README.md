@@ -311,7 +311,7 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/mcp.js`, `bin/gantt-mcp.js` | external-agent MCP server and its CLI (stdio or optional HTTP) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
-| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), dialogs, styles |
+| `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), page-state restore (`page-state`), dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |
 
