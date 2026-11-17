@@ -1,6 +1,10 @@
 // Minimal hand-written MCP (Model Context Protocol) server logic. It speaks
 // JSON-RPC 2.0 over newline-delimited stdio or a single POST body, exposes the
-// five external-agent tools, and never depends on a protocol SDK.
+// external-agent tools (the same read/write surface the in-process assistant
+// tools have), and never depends on a protocol SDK.
+
+import { GanttError } from './errors.js'
+import { resolveTaskId } from './tools.js'
 
 /** The MCP revision this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18'
@@ -22,22 +26,86 @@ export function assertHttpBinding(host, token) {
   throw new Error(`refusing to serve ${host === '' ? 'all interfaces' : host} without a bearer token; set GANTT_MCP_TOKEN or --token`)
 }
 
+/**
+ * The usage contract an MCP client receives in the `initialize` result. Kept
+ * short because clients may truncate it; the long form lives in
+ * {@link WORKER_GUIDE} behind `get_worker_guide`.
+ */
+export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: conversations and turns gain time and relation dimensions in a Gantt tree. This server is pull-only — nothing is dispatched to you.
+
+Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Then: list_ready_tasks (tag=ready) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
+
+Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. Call get_worker_guide for the full playbook.`
+
+/** The full worker playbook served by `get_worker_guide`. */
+export const WORKER_GUIDE = `# Working a shared Gantt task tree
+
+The store is a shared context memory: every task carries its ancestor chain, its
+detail, and the session/turn trajectory of the work behind it. You are a worker
+pulling from it; nothing is ever pushed to you.
+
+## Loop
+
+1. register_agent once per machine: name is the upsert key, so the same name
+   always returns the same agent id. Pass agentName on every later call.
+2. list_ready_tasks {tag: "ready"} — leaves whose dependencies are met. Use
+   tag "next" for the first executable pick per track, "todo" for every pending
+   leaf. Pick one task (a human may also hand you the point number).
+3. get_task_context {taskId} — always before writing. The chain, the detail, and
+   the completion report are the context a decomposition needs; a title alone is
+   never enough.
+4. Work. When the task turns out to be too large, decompose_task {parentId,
+   children:[{title, doneWhen, ...}]} — one to one hundred children, max four
+   levels, and every child is verifiable only if doneWhen says how to prove it.
+   Children inherit the parent's date range unless you pass planDate or dates.
+5. update_task to move status/progress while you work — do not sit on a task
+   without writing it. status "blocked" needs the condition in summary.
+6. report_completion {taskId, report, status?} when the task is done: report is
+   the evidence (what was produced, where it was verified). It writes the
+   completer, the report, the status, and one complete event.
+7. track_task {taskId, summary} when a round wrote no task tree: it records the
+   round against the task, so the trajectory still knows you were there.
+
+## Rules
+
+- Every round ends with exactly one write (create/decompose/update/report) or
+  one track. A round that ends silently loses its place in the memory.
+- Only decomposing needs the full chain; updating a status does not. Read
+  anyway when the task looks ambiguous.
+- taskId accepts the internal UUID, the point number (1.8.1), or a ref — use
+  whatever the human or get_task_context gave you. Never invent one.
+- Your own session id goes in session when you have one (Codex session, Claude
+  Code session id); the trajectory then shows that context next to the write.
+- A task that blocks a human decision is status "blocked" with the concrete
+  condition in summary, not a silent stop.
+- Cancelling (status "cancelled") drops the task from the parent rollup; do it
+  only when the task is genuinely obsolete.
+
+## Failure modes
+
+- The client shows no tools although the server is registered: the token header
+  is missing (HTTP 401) or the client renders an empty tool list while tools
+  still work. Verify by calling get_worker_guide.
+- "task ... was not found": the id is stale or belongs to another store; re-read
+  list_ready_tasks instead of guessing.
+- "agent ... was not found": register_agent first, or pass the exact name.`
+
 /** @typedef {import('./store.js').GanttStore} GanttStore */
 /** @typedef {{ name: string, description: string, inputSchema: Record<string, unknown> }} McpTool */
 /** @typedef {{ jsonrpc: '2.0', id: unknown, result: unknown }} McpResultResponse */
 /** @typedef {{ jsonrpc: '2.0', id: unknown, error: { code: number, message: string } }} McpErrorResponse */
 /** @typedef {McpResultResponse | McpErrorResponse} McpResponse */
 
-/** The five tools an external coding tool can call. */
+/** The tool schemas an external coding tool can call. */
 export const MCP_TOOLS = /** @type {McpTool[]} */ ([
   {
     name: 'register_agent',
-    description: 'Register or update this coding tool as an operator. Re-registering the same name updates the existing agent; pass the returned id to update by id.',
+    description: 'Register or update this coding tool as an operator. Re-registering the same name updates that agent and keeps its id; pass the returned name (or id) to later calls.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        name: { type: 'string', description: 'Unique agent name, 1-100 characters.' },
+        name: { type: 'string', description: 'Unique agent name, 1-100 characters; this is your stable identity.' },
         type: { type: 'string', enum: ['human', 'ai-agent'], description: 'Operator kind.' },
         role: { type: 'string', description: 'Optional role, such as implementer or reviewer.' },
         description: { type: 'string', description: 'Optional one-line description.' },
@@ -76,14 +144,107 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
   },
   {
     name: 'get_task_context',
-    description: 'Read one task\'s stable markdown context: fields, ancestor chain, detail, completion report, and recent trajectory.',
+    description: 'Read one task\'s stable markdown context: fields, ancestor chain, detail, completion report, and recent trajectory. Read it before decomposing or updating the task.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        taskId: { type: 'string', description: 'Internal task id.' },
+        taskId: { type: 'string', description: 'Internal task id, point number (1.8.1), or ref.' },
       },
       required: ['taskId'],
+    },
+  },
+  {
+    name: 'create_task',
+    description: 'Create one task in the shared tree, either as a child of parentId or as the next sibling of afterTaskId. Pass exactly one of them.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        title: { type: 'string', description: 'Task title, 1-200 characters.' },
+        parentId: { type: 'string', description: 'Parent task: internal id, point number, or ref. Creates a child.' },
+        afterTaskId: { type: 'string', description: 'Reference task: internal id, point number, or ref. Creates the next sibling.' },
+        doneWhen: { type: 'string', description: 'Verifiable completion standard: how do we prove it is done?' },
+        description: { type: 'string', description: 'Optional detail (plain text or markdown, max 4000 characters).' },
+        status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: 'Defaults to todo.' },
+        startDate: { type: 'string', description: 'Optional YYYY-MM-DD; defaults to today.' },
+        endDate: { type: 'string', description: 'Optional YYYY-MM-DD; defaults to the start date plus three days.' },
+        agentName: { type: 'string', description: 'Your registered agent name, recorded as the operator.' },
+        session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'decompose_task',
+    description: 'Split one task into 1-100 child tasks in the shared tree (max four levels deep). Every child needs a verifiable doneWhen. Read get_task_context first: a decomposition needs the ancestor chain.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        parentId: { type: 'string', description: 'Parent task: internal id, point number, or ref.' },
+        children: {
+          type: 'array',
+          description: 'The child tasks (1-100).',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string', description: 'Child task title.' },
+              doneWhen: { type: 'string', description: 'Verifiable completion standard: how do we prove it is done?' },
+              description: { type: 'string', description: 'Optional detail (plain text or markdown, max 4000 characters).' },
+              estimate: { type: 'string', description: 'Optional estimate, such as 30min.' },
+              category: { type: 'string', description: 'Optional category.' },
+              landing: { type: 'string', description: 'Optional landing point.' },
+              inspiration: { type: 'string', description: 'Optional source of inspiration.' },
+              status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: 'Defaults to todo.' },
+            },
+            required: ['title', 'doneWhen'],
+          },
+        },
+        planDate: { type: 'string', description: 'Optional YYYY-MM-DD, used only as the default child date range.' },
+        summary: { type: 'string', description: 'Optional note recorded in the task trajectory.' },
+        agentName: { type: 'string', description: 'Your registered agent name, recorded on the parent trajectory.' },
+        session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },
+      },
+      required: ['parentId', 'children'],
+    },
+  },
+  {
+    name: 'update_task',
+    description: 'Update one task\'s status, progress, title, description, doneWhen, or dates. Marking it done records the completion in the trajectory; use summary for the evidence.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        taskId: { type: 'string', description: 'Internal task id, point number (1.8.1), or ref.' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        doneWhen: { type: 'string' },
+        status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] },
+        progress: { type: 'integer', minimum: 0, maximum: 100 },
+        startDate: { type: 'string', description: 'YYYY-MM-DD.' },
+        endDate: { type: 'string', description: 'YYYY-MM-DD.' },
+        summary: { type: 'string', description: 'What changed, or the completion evidence; written to the trajectory.' },
+        agentName: { type: 'string', description: 'Your registered agent name, recorded as the operator.' },
+        session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },
+      },
+      required: ['taskId'],
+    },
+  },
+  {
+    name: 'track_task',
+    description: 'Record this worker round against a task without writing the task tree: use it when a round only read, investigated, or produced evidence elsewhere.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        taskId: { type: 'string', description: 'Internal task id, point number (1.8.1), or ref.' },
+        summary: { type: 'string', description: 'What this round did (write it in the trajectory).' },
+        agentName: { type: 'string', description: 'Your registered agent name, recorded on the trajectory.' },
+        session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },
+      },
+      required: ['taskId', 'summary'],
     },
   },
   {
@@ -93,13 +254,24 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
       type: 'object',
       additionalProperties: false,
       properties: {
-        taskId: { type: 'string', description: 'Internal task id.' },
+        taskId: { type: 'string', description: 'Internal task id, point number (1.8.1), or ref.' },
         agentId: { type: 'string', description: 'Registered agent id reporting the completion.' },
+        agentName: { type: 'string', description: 'Registered agent name; an alternative to agentId.' },
         report: { type: 'string', description: 'What was produced and where it was verified; 1-4000 characters.' },
         status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: 'Defaults to done.' },
         progress: { type: 'integer', minimum: 0, maximum: 100 },
+        session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },
       },
-      required: ['taskId', 'agentId', 'report'],
+      required: ['taskId', 'report'],
+    },
+  },
+  {
+    name: 'get_worker_guide',
+    description: 'Read the full worker playbook: the pull loop, when to decompose, the provenance rules, and the round-closing discipline.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
     },
   },
 ])
@@ -136,6 +308,81 @@ function toolSuccess(id, value) {
 }
 
 /**
+ * Resolve the calling worker: an explicit `agentId`, an `agentName`, or null
+ * when the call is anonymous. A name that was never registered is an error, so
+ * a typo cannot silently write unattributed tasks.
+ * @param {GanttStore} store
+ * @param {Record<string, any>} args
+ * @returns {import('./store.js').AgentRow | null}
+ */
+function resolveAgent(store, args) {
+  if (typeof args.agentId === 'string' && args.agentId.trim() !== '') return store.requireAgent(args.agentId.trim())
+  if (typeof args.agentName !== 'string' || args.agentName.trim() === '') return null
+  const name = args.agentName.trim()
+  const found = store.listAgents({ q: name, limit: 100 }).find(agent => agent.name === name)
+  if (found === undefined) throw new GanttError(`agent ${name} was not found; call register_agent first`, 404)
+  return found
+}
+
+/**
+ * The context key one write is recorded under. A worker that knows its own
+ * session id passes it; otherwise its stable name stands in for the context, so
+ * the trajectory never shows an anonymous "manual" write for an agent.
+ * @param {Record<string, any>} args
+ * @param {import('./store.js').AgentRow | null} agent
+ * @returns {string}
+ */
+function sessionKey(args, agent) {
+  if (typeof args.session === 'string' && args.session.trim() !== '') return args.session.trim()
+  return agent === null ? 'mcp:manual' : `agent:${agent.name}`
+}
+
+/**
+ * Provenance for one remote write.
+ * @param {Record<string, any>} args
+ * @param {import('./store.js').AgentRow | null} agent
+ * @param {unknown} summary
+ * @returns {{ sessionId: string, turn: null, summary: string }}
+ */
+function originOf(args, agent, summary) {
+  return { sessionId: sessionKey(args, agent), turn: null, summary: typeof summary === 'string' ? summary : '' }
+}
+
+/**
+ * Create one task either as a child (`parentId`) or as the next sibling
+ * (`afterTaskId`). Exactly one reference is required.
+ * @param {GanttStore} store
+ * @param {Record<string, any>} args
+ * @param {import('./store.js').AgentRow | null} agent
+ * @returns {Record<string, unknown>}
+ */
+function createTask(store, args, agent) {
+  const hasParent = typeof args.parentId === 'string' && args.parentId.trim() !== ''
+  const hasAfter = typeof args.afterTaskId === 'string' && args.afterTaskId.trim() !== ''
+  if (hasParent === hasAfter) throw new GanttError('exactly one of parentId or afterTaskId is required')
+  const origin = originOf(args, agent, undefined)
+  const fields = {
+    title: args.title,
+    doneWhen: args.doneWhen,
+    description: args.description,
+    status: args.status,
+    startDate: args.startDate,
+    endDate: args.endDate,
+    operatorId: agent === null ? undefined : agent.id,
+  }
+  if (hasAfter) {
+    const reference = resolveTaskId(store, String(args.afterTaskId))
+    return { ok: true, task: store.createSibling(reference, fields, origin) }
+  }
+  const parent = resolveTaskId(store, String(args.parentId))
+  const task = /** @type {import('./tree.js').TaskNode} */ (store.create({ parentId: parent, ...fields }))
+  // createSibling records its own origin event; a child insert does not, so the
+  // trajectory would lose the write without this explicit event.
+  store.recordOrigin(task.id, 'create', origin, `created under ${parent}`)
+  return { ok: true, task }
+}
+
+/**
  * Run one tool. Store validation failures (GanttError) and unexpected errors
  * are converted to `isError` content by the caller; this function only maps
  * the tool name to the store call.
@@ -166,19 +413,62 @@ function callTool(store, name, args) {
     return { ok: true, ...store.readyTasks({ tag: args.tag, limit: args.limit }) }
   }
   if (name === 'get_task_context') {
-    return { ok: true, ...store.taskContext(args.taskId) }
+    return { ok: true, ...store.taskContext(resolveTaskId(store, args.taskId)) }
+  }
+  if (name === 'create_task') {
+    return createTask(store, args, resolveAgent(store, args))
+  }
+  if (name === 'decompose_task') {
+    const agent = resolveAgent(store, args)
+    const parentId = resolveTaskId(store, args.parentId)
+    const children = Array.isArray(args.children) ? args.children : []
+    const result = store.decompose(parentId, children, args.planDate, originOf(args, agent, args.summary))
+    return { ok: true, parent: result.parent, children: result.children }
+  }
+  if (name === 'update_task') {
+    const agent = resolveAgent(store, args)
+    const taskId = resolveTaskId(store, args.taskId)
+    /** @type {Record<string, unknown>} */
+    const patch = {}
+    for (const field of ['title', 'description', 'doneWhen', 'status', 'progress', 'startDate', 'endDate']) {
+      if (args[field] !== undefined) patch[field] = args[field]
+    }
+    if (Object.keys(patch).length === 0) throw new GanttError('nothing to update')
+    // Claim an unowned task; never steal one that already names an operator.
+    if (agent !== null && store.requireRow(taskId).operatorId === '') patch.operatorId = agent.id
+    return { ok: true, task: store.update(taskId, patch, originOf(args, agent, args.summary)) }
+  }
+  if (name === 'track_task') {
+    const agent = resolveAgent(store, args)
+    const summary = typeof args.summary === 'string' ? args.summary.trim() : ''
+    if (summary === '') throw new GanttError('summary is required')
+    return {
+      ok: true,
+      event: store.recordTrack({
+        taskId: resolveTaskId(store, args.taskId),
+        sessionId: sessionKey(args, agent),
+        turn: null,
+        detail: summary,
+      }),
+    }
   }
   if (name === 'report_completion') {
+    const agent = resolveAgent(store, args)
+    if (agent === null) throw new GanttError('agentId or agentName is required')
     return {
       ok: true,
       ...store.reportCompletion({
-        taskId: args.taskId,
-        agentId: args.agentId,
+        taskId: resolveTaskId(store, args.taskId),
+        agentId: agent.id,
         report: args.report,
         status: args.status,
         progress: args.progress,
+        session: sessionKey(args, agent),
       }),
     }
+  }
+  if (name === 'get_worker_guide') {
+    return { ok: true, markdown: WORKER_GUIDE }
   }
   throw new Error(`unknown tool: ${name}`)
 }
@@ -210,7 +500,7 @@ function handleToolCall(store, id, params) {
  * @param {{ store: GanttStore, version?: string }} options
  * @returns {{ handle: (message: unknown) => McpResponse | null }}
  */
-export function createMcpServer({ store, version = '1.5.0' }) {
+export function createMcpServer({ store, version = '1.6.0' }) {
   return {
     handle(message) {
       if (!isRecord(message)) return errorResponse(null, -32600, 'invalid request')
@@ -225,6 +515,7 @@ export function createMcpServer({ store, version = '1.5.0' }) {
           protocolVersion,
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: 'dsh-gantt', version },
+          instructions: MCP_INSTRUCTIONS,
         })
       }
       if (method === 'notifications/initialized') return null

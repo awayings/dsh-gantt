@@ -60,8 +60,9 @@ import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MAT
 /** Filters accepted by {@link GanttStore.trajectory}.
  * @typedef {{ taskId?: unknown, sessionId?: unknown, limit?: unknown }} TrajectoryQuery */
 /** One external completion report: the task, the reporting agent, and the write-back.
- * @typedef {{ taskId?: unknown, agentId?: unknown, status?: unknown, progress?: unknown,
- * report?: unknown }} ReportCompletionInput */
+ * `session` is the worker's own context key, recorded on the complete event.
+ * @typedef {{ taskId?: unknown, agentId?: unknown, session?: unknown, status?: unknown,
+ * progress?: unknown, report?: unknown }} ReportCompletionInput */
 /** The ready-list query: which vocabulary and how many rows.
  * @typedef {{ tag?: unknown, limit?: unknown }} ReadyTasksInput */
 /** A compact task row returned by the ready list. @typedef {{ id: string, number: string,
@@ -839,6 +840,7 @@ export class GanttStore {
     if (report === '') throw new GanttError('report is required')
     const status = input.status === undefined ? 'done' : normalizeStatus(input.status)
     const progress = input.progress === undefined ? defaultProgress(status, task.progress) : normalizeProgress(input.progress)
+    const sessionId = input.session === undefined || input.session === null ? '' : textValue(input.session)
     const now = new Date().toISOString()
     const event = this.transaction(() => {
       this.db.prepare(
@@ -848,7 +850,7 @@ export class GanttStore {
       this.recomputeAncestors(task.parentId)
       const chars = [...report]
       const summary = chars.length > MAX_EVENT_REPORT ? `${chars.slice(0, MAX_EVENT_REPORT).join('')}…` : report
-      return this.recordEvent({ taskId: task.id, action: 'complete', detail: summary })
+      return this.recordEvent({ taskId: task.id, sessionId, action: 'complete', detail: summary })
     })
     return { task: this.getNode(task.id), event }
   }

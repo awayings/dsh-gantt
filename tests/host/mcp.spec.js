@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { assertHttpBinding, createMcpServer, MCP_PROTOCOL_VERSION, MCP_TOOLS } from '../../src/host/mcp.js'
+import {
+  assertHttpBinding, createMcpServer, MCP_INSTRUCTIONS, MCP_PROTOCOL_VERSION, MCP_TOOLS, WORKER_GUIDE,
+} from '../../src/host/mcp.js'
 import { GanttStore } from '../../src/host/store.js'
 
 let store
@@ -27,17 +29,22 @@ function toolJson(response) {
 }
 
 describe('MCP metadata', () => {
-  it('publishes the protocol version and five tool schemas', () => {
+  it('publishes the protocol version and every tool schema', () => {
     expect(MCP_PROTOCOL_VERSION).toBe('2025-06-18')
     expect(MCP_TOOLS.map(tool => tool.name)).toEqual([
-      'register_agent', 'list_agents', 'list_ready_tasks', 'get_task_context', 'report_completion',
+      'register_agent', 'list_agents', 'list_ready_tasks', 'get_task_context', 'create_task',
+      'decompose_task', 'update_task', 'track_task', 'report_completion', 'get_worker_guide',
     ])
+    expect(new Set(MCP_TOOLS.map(tool => tool.name)).size).toBe(MCP_TOOLS.length)
     for (const tool of MCP_TOOLS) {
       expect(tool.description.length).toBeGreaterThan(0)
       expect(tool.inputSchema.type).toBe('object')
     }
     expect(MCP_TOOLS[0].inputSchema.required).toEqual(['name', 'type'])
-    expect(MCP_TOOLS[4].inputSchema.required).toEqual(['taskId', 'agentId', 'report'])
+    expect(MCP_TOOLS[8].inputSchema.required).toEqual(['taskId', 'report'])
+    expect(MCP_INSTRUCTIONS).toMatch(/register_agent/)
+    expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
+    expect(WORKER_GUIDE).toMatch(/## Loop/)
   })
 })
 
@@ -78,7 +85,8 @@ describe('JSON-RPC envelope', () => {
       result: {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'dsh-gantt', version: '1.5.0' },
+        serverInfo: { name: 'dsh-gantt', version: '1.6.0' },
+        instructions: MCP_INSTRUCTIONS,
       },
     })
     expect(rpc({ jsonrpc: '2.0', id: 2, method: 'initialize', params: null }).result.protocolVersion)
@@ -217,6 +225,144 @@ describe('tools/call', () => {
     })
     expect(validation.result.isError).toBe(true)
     expect(validation.result.content[0].text).toBe('name is required')
+  })
+})
+
+
+describe('write tools', () => {
+  /** Register one worker through the protocol and return its row. */
+  function registerWorker(name = 'worker') {
+    return toolJson(rpc({
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'register_agent', arguments: { name, type: 'ai-agent' } },
+    })).agent
+  }
+
+  /** Call one tool with explicit arguments. */
+  function call(name, args) {
+    return rpc({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name, arguments: args } })
+  }
+
+  it('creates a child task with the agent as operator and a session-keyed event', () => {
+    const agent = registerWorker()
+    const parent = store.create({ title: 'Parent' })
+    const created = call('create_task', {
+      title: 'Child', parentId: parent.id, doneWhen: 'tests pass', agentName: agent.name, session: 'run-1',
+    })
+    expect(created.result.isError).toBeUndefined()
+    const task = toolJson(created).task
+    expect(task).toMatchObject({ parentId: parent.id, title: 'Child', doneWhen: 'tests pass', operatorId: agent.id })
+    expect(store.trajectory({ taskId: task.id })[0]).toMatchObject({ action: 'create', sessionId: 'run-1' })
+  })
+
+  it('creates the next sibling through afterTaskId and keeps the order', () => {
+    const agent = registerWorker()
+    const first = store.create({ title: 'First' })
+    const second = store.create({ title: 'Second' })
+    const created = toolJson(call('create_task', {
+      title: 'Middle', afterTaskId: first.number, agentName: agent.name,
+    })).task
+    expect(created.parentId).toBe(first.parentId)
+    expect(store.getRow(created.id).sortOrder).toBe(first.sortOrder + 1)
+    expect(store.getRow(second.id).sortOrder).toBe(second.sortOrder + 1)
+    const referenceEvents = store.trajectory({ taskId: first.id })
+    expect(referenceEvents[0]).toMatchObject({ action: 'track', sessionId: `agent:${agent.name}` })
+  })
+
+  it('requires exactly one reference and writes anonymous rounds as mcp:manual', () => {
+    const parent = store.create({ title: 'Parent' })
+    const message = 'exactly one of parentId or afterTaskId is required'
+    for (const args of [{ title: 'Nowhere' }, { title: 'Both', parentId: parent.id, afterTaskId: parent.id }]) {
+      expect(call('create_task', args).result).toEqual({ content: [{ type: 'text', text: message }], isError: true })
+    }
+    const anonymous = toolJson(call('create_task', { title: 'Anonymous', parentId: parent.number })).task
+    expect(anonymous).toMatchObject({ parentId: parent.id, operatorId: '' })
+    expect(store.trajectory({ taskId: anonymous.id })[0]).toMatchObject({ action: 'create', sessionId: 'mcp:manual' })
+  })
+
+  it('decomposes a task and records the parent trajectory', () => {
+    const agent = registerWorker()
+    const parent = store.create({ title: 'Parent' })
+    const result = toolJson(call('decompose_task', {
+      parentId: parent.number,
+      children: [{ title: 'A', doneWhen: 'a done' }, { title: 'B', doneWhen: 'b done', estimate: '30min' }],
+      summary: 'split it',
+      agentName: agent.name,
+    }))
+    expect(result.children.map(child => child.title)).toEqual(['A', 'B'])
+    expect(result.children[0]).toMatchObject({ parentId: parent.id, doneWhen: 'a done' })
+    expect(store.trajectory({ taskId: parent.id })[0]).toMatchObject({ action: 'decompose', detail: 'split it' })
+    expect(call('decompose_task', { parentId: parent.id, children: 'nope' }).result).toEqual({
+      content: [{ type: 'text', text: 'children must be a non-empty array' }], isError: true,
+    })
+  })
+
+  it('updates a task, claims an unowned task, and never steals another operator', () => {
+    const agent = registerWorker('worker')
+    const other = registerWorker('other')
+    const task = store.create({ title: 'Task' })
+    const updated = toolJson(call('update_task', {
+      taskId: task.number, status: 'in_progress', progress: 40, summary: 'started', agentName: agent.name,
+    }))
+    expect(updated.task).toMatchObject({ status: 'in_progress', progress: 40, operatorId: agent.id })
+    expect(store.trajectory({ taskId: task.id })[0]).toMatchObject({ action: 'update', detail: 'started' })
+
+    const again = toolJson(call('update_task', { taskId: task.id, progress: 60, agentName: other.name }))
+    expect(again.task).toMatchObject({ progress: 60, operatorId: agent.id })
+
+    expect(call('update_task', { taskId: task.id }).result).toEqual({
+      content: [{ type: 'text', text: 'nothing to update' }], isError: true,
+    })
+    expect(call('update_task', { taskId: 'missing', status: 'done' }).result.isError).toBe(true)
+  })
+
+  it('tracks a round without writing the tree and validates the summary', () => {
+    const agent = registerWorker()
+    const task = store.create({ title: 'Task' })
+    const event = toolJson(call('track_task', { taskId: task.id, summary: 'looked around', agentName: agent.name })).event
+    expect(event).toMatchObject({ action: 'track', sessionId: `agent:${agent.name}`, detail: 'looked around' })
+    for (const summary of [' ', 7]) {
+      expect(call('track_task', { taskId: task.id, summary }).result).toEqual({
+        content: [{ type: 'text', text: 'summary is required' }], isError: true,
+      })
+    }
+    expect(call('track_task', { taskId: 'missing', summary: 'x' }).result.isError).toBe(true)
+  })
+
+  it('reports a completion by agent name and by agent id', () => {
+    const agent = registerWorker()
+    const task = store.create({ title: 'Task' })
+    const byName = toolJson(call('report_completion', {
+      taskId: task.number, agentName: agent.name, report: 'done and verified', session: 'run-9',
+    }))
+    expect(byName.task).toMatchObject({ status: 'done', completedById: agent.id })
+    expect(byName.event).toMatchObject({ action: 'complete', sessionId: 'run-9' })
+
+    const task2 = store.create({ title: 'Task 2' })
+    const byId = toolJson(call('report_completion', {
+      taskId: task2.id, agentId: agent.id, report: 'done again', status: 'in_progress', progress: 10,
+    }))
+    expect(byId.task).toMatchObject({ status: 'in_progress', progress: 10 })
+    expect(byId.event).toMatchObject({ sessionId: `agent:${agent.name}` })
+  })
+
+  it('refuses an unknown agent name and an anonymous completion', () => {
+    const task = store.create({ title: 'Task' })
+    expect(call('report_completion', { taskId: task.id, report: 'x' }).result).toEqual({
+      content: [{ type: 'text', text: 'agentId or agentName is required' }], isError: true,
+    })
+    expect(call('report_completion', { taskId: task.id, agentName: 'ghost', report: 'x' }).result).toEqual({
+      content: [{ type: 'text', text: 'agent ghost was not found; call register_agent first' }], isError: true,
+    })
+  })
+
+  it('serves the worker guide and resolves a task by point number', () => {
+    const guide = toolJson(call('get_worker_guide', {}))
+    expect(guide.markdown).toBe(WORKER_GUIDE)
+
+    const task = store.create({ title: 'Numbered' })
+    const context = toolJson(call('get_task_context', { taskId: '1' }))
+    expect(context.taskId).toBe(task.id)
+    expect(context.markdown).toContain('Numbered')
   })
 })
 

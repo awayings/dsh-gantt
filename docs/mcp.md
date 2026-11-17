@@ -2,14 +2,18 @@
 
 `@local/dsh-gantt` ships a small [Model Context Protocol](https://modelcontextprotocol.io/)
 server so an external coding tool — Claude Code, Codex, or any JSON-RPC client
-— can register itself as an operator, pull task context by task id, list the
-tasks that are ready to work on, and report a completion back into the same
-SQLite store the Web UI uses.
+— can join the same task tree the Web UI shows: register itself as an operator,
+pull ready work and task context, create and decompose tasks, update them,
+record a round against a task, and report a completion back into the same SQLite
+store.
 
 The server has no runtime dependency and no protocol SDK: it is a hand-written
 JSON-RPC 2.0 implementation over newline-delimited stdio (the default) or an
-optional HTTP transport. There is no MCP `resources`/`prompts` surface yet; the
-five tools below are the contract.
+optional HTTP transport. There is no MCP `resources`/`prompts` surface; the ten
+tools below are the contract. The worker-side workflow that uses them — pull
+loop, when to decompose, how a round is closed — is in
+[worker-flow.md](worker-flow.md) and is also served by the `get_worker_guide`
+tool.
 
 ## Run it
 
@@ -142,7 +146,25 @@ as text; they never crash the server.
 | `list_agents` | List operators with optional filters |
 | `list_ready_tasks` | Pull ready / next / todo work |
 | `get_task_context` | Read one task's stable markdown context |
+| `create_task` | Create a child task, or the next sibling of a task |
+| `decompose_task` | Split one task into 1–100 child tasks |
+| `update_task` | Update status, progress, title, description, doneWhen, or dates |
+| `track_task` | Record a round against a task without writing the tree |
 | `report_completion` | Write the operator, completer, report, status, and progress back |
+| `get_worker_guide` | Read the full worker playbook |
+
+All ten tools return `{ "ok": true, … }` on success and `isError` content on a
+validation failure. `taskId` / `parentId` / `afterTaskId` accept three forms:
+the internal UUID, the rendered point number (`1.8.1`), or an external ref.
+`agentId` / `agentName` resolve the same registered operator, so a worker never
+has to remember the UUID: `name` is the upsert key, and `agentName` is enough on
+every write. Every write records provenance in the `task_events` trajectory
+under the worker's `session` when it passes one, else `agent:<name>`, so a
+remote worker is never indistinguishable from a manual API write. Two rules
+follow from that: an unregistered `agentName` is an error (`agent <name> was not
+found; call register_agent first`), and a call that passes neither `agentId` nor
+`agentName` writes anonymously under the `mcp:manual` context key — register
+first.
 
 ### `register_agent`
 
@@ -230,7 +252,7 @@ Rows are grouped by track in rendered tree order, then in document order:
 
 | Parameter | Required | Notes |
 | --- | --- | --- |
-| `taskId` | yes | Internal task id |
+| `taskId` | yes | Internal id, point number, or ref |
 
 Returns:
 
@@ -244,20 +266,92 @@ estimate/landing/inspiration/dependency, the link list, `## 任务链路`,
 `## 当前任务`, `## 汇报结果` when a report exists, and `## 任务轨迹` with the
 newest recorded events. Unknown ids are `isError` text `task … was not found`.
 
+### `create_task`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `title` | yes | 1–200 characters |
+| `parentId` | one of | Parent task; creates a child |
+| `afterTaskId` | one of | Reference task; creates the next sibling |
+| `doneWhen` | no | Verifiable completion standard |
+| `description` | no | At most 4000 characters |
+| `status` | no | Status vocabulary; default `todo` |
+| `startDate` / `endDate` | no | `YYYY-MM-DD`; default today and start + 3 days |
+| `agentName` | no | Registered agent recorded as `operatorId` when the task has none |
+| `session` | no | The worker's own conversation/run id, recorded in the trajectory |
+
+Exactly one of `parentId` / `afterTaskId` is required. A child insert records a
+`create` event; a sibling insert also records a `track` event on the reference
+task, exactly like the in-process `gantt_create_task` tool. Returns
+`{ "ok": true, "task": { … } }`.
+
+### `decompose_task`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `parentId` | yes | Task being split; internal id, point number, or ref |
+| `children` | yes | 1–100 child objects |
+| `planDate` | no | `YYYY-MM-DD`; only the default child date range |
+| `summary` | no | Recorded on the parent's `decompose` event |
+| `agentName` / `session` | no | As on `create_task` |
+
+Each child needs `title` and a verifiable `doneWhen`; `description`,
+`estimate`, `category`, `landing`, `inspiration`, and `status` are optional.
+The tree is capped at four levels, so a task at depth 4 cannot be decomposed.
+Returns `{ "ok": true, "parent": { … }, "children": [ … ] }`. Read
+`get_task_context` first: a decomposition needs the ancestor chain and the
+background the parent carries, which a title alone does not provide.
+
+### `update_task`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `taskId` | yes | Internal id, point number, or ref |
+| `title`, `description`, `doneWhen` | no | Any one is enough to write |
+| `status` | no | Status vocabulary |
+| `progress` | no | 0–100 |
+| `startDate` / `endDate` | no | `YYYY-MM-DD` |
+| `summary` | no | What changed, or the completion evidence; recorded in the trajectory |
+| `agentName` / `session` | no | As on `create_task` |
+
+A write with none of the mutable fields is rejected with `nothing to update`.
+`operator_id` is claimed only when the task has no operator; an existing
+operator is never overwritten. Returns `{ "ok": true, "task": { … } }`.
+
+### `track_task`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `taskId` | yes | Internal id, point number, or ref |
+| `summary` | yes | What this round did |
+| `agentName` / `session` | no | As on `create_task` |
+
+Use it when a round only read, investigated, or produced evidence elsewhere: it
+appends one `track` event and touches nothing else. Returns
+`{ "ok": true, "event": { … } }`.
+
+### `get_worker_guide`
+
+No parameters. Returns `{ "ok": true, "markdown": "# Working a shared Gantt task tree…" }`
+— the server's authoritative playbook, readable without a local skill file.
+[worker-flow.md](worker-flow.md) is the human-facing companion: install, client
+setup, and smoke tests.
+
 ### `report_completion`
 
 | Parameter | Required | Notes |
 | --- | --- | --- |
-| `taskId` | yes | Internal task id |
-| `agentId` | yes | A registered agent id |
+| `taskId` | yes | Internal id, point number, or ref |
+| `agentId` or `agentName` | yes | One registered operator, by id or by unique name |
 | `report` | yes | Non-empty, at most 4000 characters |
 | `status` | no | Status vocabulary; default `done` |
 | `progress` | no | 0–100; default follows `defaultProgress` for the status |
+| `session` | no | The worker's own conversation/run id, recorded on the `complete` event |
 
 The write happens in one transaction: `operator_id` is set only when it was
 empty, `completed_by_id` and `report` are overwritten, status/progress are
 applied, ancestor rollups are recomputed, and one `complete` event with the
-report as its detail is appended. Returns:
+report as its detail is appended under the worker's session key. Returns:
 
 ```json
 {
@@ -286,11 +380,13 @@ report as its detail is appended. Returns:
 ## Protocol details
 
 - `initialize` echoes `params.protocolVersion` when it is a string, otherwise
-  answers `2025-06-18`; it advertises `capabilities.tools.listChanged: false`
-  and `serverInfo: { name: "dsh-gantt", version: "1.5.0" }`.
+  answers `2025-06-18`; it advertises `capabilities.tools.listChanged: false`,
+  `serverInfo: { name: "dsh-gantt", version: "1.6.0" }`, and a short
+  `instructions` string with the worker contract (clients may truncate it; the
+  full playbook is `get_worker_guide`).
 - `notifications/initialized` and every other message without an `id` are
   ignored.
-- `ping` returns `{}`; `tools/list` returns the five tool schemas verbatim.
+- `ping` returns `{}`; `tools/list` returns the ten tool schemas verbatim.
 - Unknown methods are JSON-RPC error `-32601`; a non-object message or a
   missing/blank `method` is `-32600` with `id: null` when the request has no
   usable id.
@@ -317,7 +413,10 @@ DSH session cookie. See [api.md](api.md) for the HTTP shapes and
 - **No tools in the coding tool** — check that the command points at the real
   `bin/gantt-mcp.js` and that Node is the version DSH runs (see
   [compatibility.md](compatibility.md)). Send a manual `ping`/`initialize` line
-  to confirm the process is alive.
+  to confirm the process is alive. Over HTTP, a missing `Authorization` header is
+  `401` on every call, which most clients render as an empty tool list; Codex
+  additionally shows `Tools: (none)` in `/mcp` for working servers, so call
+  `get_worker_guide` to tell the two apart.
 - **`-32700` on every line** — the client is sending batched or
   `Content-Length`-framed JSON. Send one newline-delimited object per line.
 - **The schema is old** — reopen the database with the new build; `--db` is
