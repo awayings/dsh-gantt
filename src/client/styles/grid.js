@@ -314,6 +314,61 @@ export const CSS_GRID = `
     text-overflow: ellipsis;
     pointer-events: none;
   }
+  /* A leaf bar drags: the body moves it by whole weeks, the two edge zones
+     resize it. Summary bars stay roll-up only and keep the plain pointer. */
+  .gantt-bar[data-editable="true"] { cursor: grab; touch-action: pan-y; }
+  .gantt-bar[data-dragging="true"] {
+    cursor: grabbing;
+    overflow: visible;
+    z-index: 6;
+    box-shadow: 0 4px 12px color-mix(in srgb, #000 18%, transparent);
+  }
+  .gantt-bar-handle {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 9px;
+    z-index: 2;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .gantt-bar-handle[data-edge="start"] { left: -3px; }
+  .gantt-bar-handle[data-edge="end"] { right: -3px; }
+  .gantt-bar-handle::after {
+    content: "";
+    position: absolute;
+    top: 30%;
+    bottom: 30%;
+    width: 2px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--st, var(--gantt-accent)) 55%, transparent);
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .gantt-bar-handle[data-edge="start"]::after { left: 3px; }
+  .gantt-bar-handle[data-edge="end"]::after { right: 3px; }
+  .gantt-bar:hover .gantt-bar-handle::after,
+  .gantt-bar:focus-visible .gantt-bar-handle::after,
+  .gantt-bar[data-dragging="true"] .gantt-bar-handle::after { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .gantt-bar-handle::after { transition: none; }
+  }
+  .gantt-bar[data-dragging="true"]::after {
+    content: attr(data-range);
+    position: absolute;
+    left: 0;
+    top: -22px;
+    z-index: 3;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--gantt-line-strong);
+    background: var(--gantt-surface);
+    color: var(--gantt-text);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px color-mix(in srgb, #000 16%, transparent);
+  }
   /* Work mode: the header toggle reads as pressed, and the row keeps an
      explicit edit affordance because a row click now opens the conversation. */
   .gantt-actions .gantt-btn[data-action="work-mode"][data-active="true"] {

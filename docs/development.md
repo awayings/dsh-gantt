@@ -131,6 +131,34 @@ v2 record. The state belongs to the browser origin, not to a conversation.
 Absent, malformed, unknown-version, or blocked storage yields the defaults and
 never breaks the page.
 
+## Dragging task bars
+
+Leaf bars on the Gantt page are also a date editor: press one and move to open a
+gesture that previews locally and writes exactly once on release with
+`POST api/gantt/task/update { id, startDate, endDate }` (`notice.datesUpdated`).
+Summary bars never drag — their dates roll up from their children.
+
+The task system plans in whole ISO weeks, so every gesture snaps:
+
+- the bar body moves by whole weeks and keeps the task's whole-week span
+  (`move`);
+- the left edge moves the start in whole weeks, lands it on a Monday, and snaps
+  the end to its own Sunday (`start`);
+- the right edge moves the end in whole weeks, lands it on a Sunday, and snaps
+  the start to its own Monday (`end`);
+- both edge gestures clamp to a minimum span of one week, and a clamp that
+  lands on the current range skips the write entirely.
+
+A range that is not week-aligned (for example the imported `07-01` starts)
+normalizes to whole weeks on its first drag. The date maths lives in
+`src/client/bar-drag.js` and is unit-tested directly; `rows.js` turns pointer
+travel into `dragWeeks`/`dragRange` with window-level listeners, and
+`pages/gantt.js` holds the preview state and the single commit. A pointer
+travel shorter than half a week stays a click and still opens the edit dialog;
+the click that ends a real drag is swallowed. New tasks created from the dialog
+start on the creation day (the tree payload's `today`), not on the parent's
+range.
+
 ## Quality gate commands
 
 | Command | What it runs | What it enforces |
@@ -702,6 +730,13 @@ Open the page in the connected Web GUI and check:
       `inspiration`, and links chips with the full link in a tooltip.
 - [ ] A running (`持续`) node's bar ends at today, and the depth zoom switches
       between all nodes, two levels, and one level.
+- [ ] Dragging a leaf bar moves it by whole weeks (Monday start, Sunday end);
+      dragging either edge resizes it by whole weeks with a one-week minimum;
+      the preview label shows the target range, one release writes the new
+      dates, a plain click still opens the editor, and summary bars do not
+      drag.
+- [ ] A new task created under a parent whose range began earlier starts on
+      today, not on the parent's start date.
 - [ ] The perspective switch offers 全部 / 进行中 / 前沿 / 该动 / 今日 /
       已完成: 前沿 keeps one path per track to its newest pending leaf, 该动
       keeps each track's first executable leaf, 今日 keeps the paths of the

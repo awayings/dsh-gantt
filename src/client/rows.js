@@ -1,8 +1,13 @@
+import { useEffect, useRef } from 'react'
+import { dragMode, dragRange, dragWeeks } from './bar-drag.js'
 import { DAY_MS, STATUS_COLOR } from './constants.js'
 import { formatMonth, formatMonthYear, formatWeekday, formatYear, isoToDay } from './dates.js'
 import { StatusPill } from './status.js'
 import { rowNumber } from './view.js'
 import { h } from './dom.js'
+
+/** Pointer travel before a press on a bar turns into a date drag. */
+const DRAG_THRESHOLD = 4
 
 function barRange(task, timeline) {
   const start = Math.max(isoToDay(task.startDate), timeline.startMs)
@@ -35,24 +40,98 @@ function MetaChips({ task, t }) {
   if (chips.length === 0) return null
   return h('div', { className: 'gantt-task-meta' }, chips)
 }
-function TaskBar({ task, timeline, onSelect }) {
-  const range = barRange(task, timeline)
+function TaskBar({ task, timeline, onSelect, drag, onDragPreview, onDragCommit, t }) {
+  const gesture = useRef(null)
+  const detach = useRef(null)
+  const suppressClick = useRef(false)
+  useEffect(() => () => {
+    if (detach.current !== null) detach.current()
+  }, [])
+  const editable = !task.hasChildren
+  const previewStart = drag === null ? task.startDate : drag.startDate
+  const previewEnd = drag === null ? task.endDate : drag.endDate
+  const range = barRange({ ...task, startDate: previewStart, endDate: previewEnd }, timeline)
   if (range === null) return null
   const overdue = task.status !== 'done' && task.status !== 'cancelled' && task.endDate < timeline.today
+  // The whole bar moves; the two edge zones resize. Window-level listeners keep
+  // the gesture alive when the pointer leaves the selected row.
+  const beginDrag = (event) => {
+    if (!editable || event.button > 0 || gesture.current !== null) return
+    suppressClick.current = false
+    const mode = dragMode(event.target)
+    const active = { mode, startX: event.clientX, startDate: task.startDate, endDate: task.endDate, latest: null }
+    gesture.current = active
+    const finish = () => {
+      if (detach.current !== null) {
+        detach.current()
+        detach.current = null
+      }
+      gesture.current = null
+    }
+    const onMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - active.startX
+      if (active.latest === null && Math.abs(deltaX) < DRAG_THRESHOLD) return
+      const weeks = dragWeeks(deltaX, timeline.pxPerDay)
+      if (weeks === 0) {
+        if (active.latest !== null) {
+          active.latest = null
+          onDragPreview(task, null)
+        }
+        return
+      }
+      moveEvent.preventDefault()
+      active.latest = dragRange({ mode, startDate: active.startDate, endDate: active.endDate, weeks })
+      onDragPreview(task, { mode, ...active.latest })
+    }
+    const onUp = () => {
+      finish()
+      if (active.latest === null) {
+        onDragPreview(task, null)
+        return
+      }
+      suppressClick.current = true
+      onDragCommit(task, active.latest)
+    }
+    const onCancel = () => {
+      finish()
+      onDragPreview(task, null)
+    }
+    const remove = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+    }
+    detach.current = remove
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+  }
   return h('button', {
     type: 'button',
     className: 'gantt-bar',
     'data-status': task.status,
     'data-summary': task.hasChildren ? 'true' : undefined,
     'data-overdue': overdue ? 'true' : undefined,
+    'data-editable': editable ? 'true' : undefined,
+    'data-dragging': drag === null ? undefined : 'true',
+    'data-range': drag === null ? undefined : `${drag.startDate} → ${drag.endDate}`,
     style: {
       left: `${range.left}px`,
       width: `${range.width}px`,
       '--st': STATUS_COLOR[task.status] || STATUS_COLOR.todo,
     },
-    title: `${rowNumber(task)} ${task.title}\n${task.startDate} → ${task.endDate} · ${task.progress}%`,
+    title: [
+      `${rowNumber(task)} ${task.title}`,
+      `${previewStart} → ${previewEnd} · ${task.progress}%`,
+      editable ? t('bar.dragHint') : null,
+    ].filter(Boolean).join('\n'),
+    onPointerDown: beginDrag,
     onClick: (event) => {
       event.stopPropagation()
+      if (suppressClick.current) {
+        suppressClick.current = false
+        return
+      }
       onSelect(task)
     },
   },
@@ -60,8 +139,15 @@ function TaskBar({ task, timeline, onSelect }) {
   !task.hasChildren && range.width > 58
     ? h('span', { className: 'gantt-bar-label' }, task.title)
     : null,
+  editable
+    ? h('span', { className: 'gantt-bar-handle', 'data-edge': 'start', 'aria-hidden': 'true' })
+    : null,
+  editable
+    ? h('span', { className: 'gantt-bar-handle', 'data-edge': 'end', 'aria-hidden': 'true' })
+    : null,
   )
 }
+
 
 /** One task row: tree cell, metadata chips and the timeline track. */
 export function GanttRow({
@@ -80,6 +166,9 @@ export function GanttRow({
   work = false,
   onEdit,
   activity = null,
+  drag = null,
+  onDragPreview,
+  onDragCommit,
 }) {
   const hasChildren = task.hasChildren
   const number = rowNumber(task)
@@ -184,7 +273,7 @@ export function GanttRow({
     h(MetaChips, { task, t }),
   ),
   h('div', { className: 'gantt-track', style: { width: `${timeline.totalWidth}px` } },
-    h(TaskBar, { task, timeline, onSelect }),
+    h(TaskBar, { task, timeline, onSelect, drag, onDragPreview, onDragCommit, t }),
   ),
   )
 }

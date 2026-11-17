@@ -307,6 +307,13 @@ export function mouseEvent(element, type) {
   })
 }
 
+/** Dispatch a pointer event with coordinates inside act() (jsdom has no PointerEvent). */
+export function pointerEvent(element, type, fields = {}) {
+  act(() => {
+    element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, ...fields }))
+  })
+}
+
 /** The open dialog element (role=dialog) and its helper getters. */
 export function dialog(container) {
   return q(container, '.gantt-dialog[role="dialog"]')

@@ -44,6 +44,9 @@ export function GanttPage({ ctx }) {
   const [recomputing, setRecomputing] = useState(false)
   const [selectedId, setSelectedId] = useState(() => saved?.selectedId ?? null)
   const [focusId, setFocusId] = useState(null)
+  // Set while a pointer gesture is dragging a task bar: the preview dates and
+  // the gesture mode, keyed by task so only that row repaints the moved bar.
+  const [barDrag, setBarDrag] = useState(null)
   const [dialog, setDialog] = useState(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [toast, setToast] = useState(null)
@@ -236,6 +239,30 @@ export function GanttPage({ ctx }) {
     refresh()
     setToast({ text: message, kind: 'ok' })
   }, [refresh])
+  // A bar gesture previews locally and only writes once the pointer is released,
+  // so a slow round trip never moves the bar twice.
+  const previewBarDrag = useCallback((task, preview) => {
+    setBarDrag(preview === null ? null : {
+      taskId: task.id,
+      mode: preview.mode,
+      startDate: preview.startDate,
+      endDate: preview.endDate,
+    })
+  }, [])
+  const commitBarDrag = useCallback(async (task, range) => {
+    setBarDrag(null)
+    // A clamp can land the bar back on its current range; that is not a write.
+    if (range.startDate === task.startDate && range.endDate === task.endDate) return
+    try {
+      await requestJson('api/gantt/task/update', {
+        method: 'POST',
+        body: JSON.stringify({ id: task.id, startDate: range.startDate, endDate: range.endDate }),
+      })
+      refreshWithToast(t('notice.datesUpdated'))
+    } catch (failure) {
+      refreshWithToast(failure instanceof Error ? failure.message : String(failure), true)
+    }
+  }, [refreshWithToast, t])
   const cycleStatus = useCallback(async (task) => {
     const base = task.status === 'blocked' || task.status === 'cancelled' ? 'todo' : task.status
     const next = base === 'todo' ? 'in_progress' : base === 'in_progress' ? 'done' : 'todo'
@@ -368,6 +395,7 @@ export function GanttPage({ ctx }) {
       mode: 'create',
       parentTask: dialog.parentId ? byId.get(dialog.parentId) : null,
       parentOptions: options,
+      today,
       t,
       onClose: () => setDialog(null),
       onSaved: handleSaved,
@@ -465,6 +493,9 @@ export function GanttPage({ ctx }) {
               onCycleStatus: cycleStatus,
               onDecompose: openDecompose,
               onSchedule: openSchedule,
+              drag: barDrag !== null && barDrag.taskId === task.id ? barDrag : null,
+              onDragPreview: previewBarDrag,
+              onDragCommit: commitBarDrag,
             })),
           ),
           ),
