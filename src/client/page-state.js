@@ -190,9 +190,7 @@ export function readPageState() {
 
 /**
  * Persist the current page state for the next visit. Storage failures are
- * swallowed: the page still works, it just will not remember. Fields this
- * version added are optional in the argument so a caller can still pass only the
- * view it owns; reading fills whatever is omitted from the defaults.
+ * swallowed: the page still works, it just will not remember.
  * @param {PageState} state
  * @returns {void}
  */
