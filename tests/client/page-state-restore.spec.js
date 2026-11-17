@@ -230,7 +230,7 @@ describe('restoring a saved view', () => {
     expect(paneOf(view).scrollTop).toBe(0)
   })
 
-  it('starts from the defaults for a version 1 record', async () => {
+  it('carries a version 1 record into the new record', async () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 1,
       level: 2,
@@ -242,19 +242,19 @@ describe('restoring a saved view', () => {
 
     const { view } = await renderPage()
 
-    expect(q(view.container, '[data-level="99"]').getAttribute('data-active')).toBe('true')
-    expect(q(view.container, '[data-filter="all"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-level="2"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-filter="done"]').getAttribute('data-active')).toBe('true')
     expect(buttonByText(view.container, 'Week').getAttribute('data-active')).toBe('true')
-    expect(qa(view.container, '.gantt-row')).toHaveLength(6)
-    expect(text(view.container, '.gantt-window-label')).toBe('Nov 9, 2026 – Dec 6, 2026')
-    expect(paneOf(view).scrollTop).toBe(0)
+    expect(q(view.container, '.gantt-row[data-task-id="p1"] .gantt-chevron').getAttribute('aria-expanded')).toBe('false')
+    expect(paneOf(view).scrollTop).toBe(200)
+    expect(paneOf(view).scrollLeft).toBe(30)
     expect(stored()).toMatchObject({
       v: PAGE_STATE_VERSION,
-      level: 99,
-      filter: 'all',
-      collapsed: [],
-      scrollTop: 0,
-      scrollLeft: 0,
+      level: 2,
+      filter: 'done',
+      collapsed: ['p1'],
+      scrollTop: 200,
+      scrollLeft: 30,
       scale: 'week',
       anchor: '2026-11-18',
       selectedId: null,

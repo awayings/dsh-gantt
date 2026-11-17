@@ -124,11 +124,12 @@ it writes no focus through the API. The timeline still answers previous/next
 and **Today** after the window is restored.
 
 A v1 record — the previous shape with only depth, filter, collapse, and scroll —
-reads as no record, so every view field falls back to its default once. The old
-standalone `gantt.workMode` key is read once into the new record and removed on
-the next write. The state belongs to the browser origin, not to a conversation.
-Absent, malformed, version-mismatched, or blocked storage yields the defaults
-and never breaks the page.
+carries those four fields into the new shape; the fields version 2 added start
+at their defaults. The old standalone `gantt.workMode` key is read once into the
+new record and removed on the next write, which stores the migrated view as a
+v2 record. The state belongs to the browser origin, not to a conversation.
+Absent, malformed, unknown-version, or blocked storage yields the defaults and
+never breaks the page.
 
 ## Quality gate commands
 
@@ -247,7 +248,7 @@ Recorded decisions:
 | `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the page-state restore (versioned `localStorage` record of depth, filter, collapse, both pane scroll offsets, timeline scale and window anchor, highlighted task, panel task and sub-tab, and work mode; debounced scroll write and pagehide flush; v1 records read as absent; one-time work-mode key migration; absent, malformed, version-mismatched, or blocked storage falling back to the defaults), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the page-state restore (versioned `localStorage` record of depth, filter, collapse, both pane scroll offsets, timeline scale and window anchor, highlighted task, panel task and sub-tab, and work mode; debounced scroll write and pagehide flush; v1 records migrating their view fields; one-time work-mode key migration; absent, malformed, unknown-version, or blocked storage falling back to the defaults), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
 | `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
@@ -284,10 +285,11 @@ the endpoint count to 28. The description round adds
 workbench task view. The page-state round adds
 `tests/client/page-state.spec.js` and
 `tests/client/page-state-restore.spec.js`: the v2 record's validation and
-fallbacks (a v1 record reads as absent and the standalone work-mode key migrates
-once), and the page wiring that reapplies depth, filter, collapse, both pane
-scroll offsets, the timeline scale and window anchor, the highlighted task, the
-in-page work panel with its sub-tab, and the work-mode switch on mount.
+fallbacks (a v1 record carries its view fields forward and the standalone
+work-mode key migrates once), and the page wiring that reapplies depth, filter,
+collapse, both pane scroll offsets, the timeline scale and window anchor, the
+highlighted task, the in-page work panel with its sub-tab, and the work-mode
+switch on mount.
 Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
@@ -726,9 +728,9 @@ Open the page in the connected Web GUI and check:
 - [ ] In work mode, a reload reopens the right-side work panel on the same task
       at the same sub-tab (任务 / 技能 / 编队); a task that no longer exists
       leaves the panel closed.
-- [ ] A record left by v1 falls back to the default view once, and a standalone
-      `gantt.workMode` key migrates into the record and is removed on the next
-      write.
+- [ ] A record left by v1 keeps its depth, filter, folded rows and scroll
+      offsets in the new record, and a standalone `gantt.workMode` key migrates
+      into the record and is removed on the next write.
 - [ ] The **工作台** panel (also available as a right-rail tab) shows the task
       chip and three sub-pages: 任务 (the dedicated conversation's title/state
       plus open/create/new-window and the task trajectory including `track`),

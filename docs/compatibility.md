@@ -175,11 +175,11 @@ GUI checklist is in `docs/development.md` and had not been run at that date.
     the in-page work panel's task and sub-tab, and the work-mode switch. It uses
     no shell service, so no harness face has to be verified for it. The record
     is per browser origin, not per conversation. A v1 record (depth, filter,
-    collapse, and scroll only) reads as no record, so the view fields fall back
-    to the defaults once; the old standalone `gantt.workMode` key is read once
-    into the new record and removed on the next write. A missing, blocked,
-    malformed, or version-mismatched record falls back to the page defaults
-    instead of failing the page.
+    collapse, and scroll only) keeps those four fields and seeds the fields
+    added in version 2 from their defaults; the old standalone `gantt.workMode`
+    key is read once into the new record and removed on the next write. A
+    missing, blocked, malformed, or unknown-version record falls back to the
+    page defaults instead of failing the page.
 
 ## 3 · Rules
 

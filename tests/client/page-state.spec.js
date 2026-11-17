@@ -356,10 +356,10 @@ describe('readPageState', () => {
   })
 
   it('ignores records written by another schema version', () => {
-    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 1 })))
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 3 })))
     expect(readPageState()).toBeNull()
 
-    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 3 })))
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 0 })))
     expect(readPageState()).toBeNull()
   })
 
@@ -368,7 +368,7 @@ describe('readPageState', () => {
     expect(readPageState()).toEqual(defaults({ workMode: true }))
   })
 
-  it('migrates only work mode, not the version 1 view fields', () => {
+  it('carries a version 1 record forward with the defaults for the new fields', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 1,
       level: 1,
@@ -377,8 +377,50 @@ describe('readPageState', () => {
       scrollTop: 400,
       scrollLeft: 30,
     }))
+    expect(readPageState()).toEqual(defaults({
+      level: 1,
+      filter: 'done',
+      collapsed: ['1.1', '2.1'],
+      scrollTop: 400,
+      scrollLeft: 30,
+    }))
+  })
+
+  it('normalizes the fields of the version 1 record it carries forward', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
+      v: 1,
+      level: 7,
+      filter: 'bogus',
+      collapsed: [null, '1.1', '1.1'],
+      scrollTop: -4,
+      scrollLeft: 2.6,
+    }))
+    expect(readPageState()).toEqual(defaults({ collapsed: ['1.1'], scrollLeft: 3 }))
+  })
+
+  it('treats an empty version 1 record as the default view', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({ v: 1 }))
+    expect(readPageState()).toEqual(defaults())
+  })
+
+  it('migrates the version 1 view and the standalone work-mode switch', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
+      v: 1,
+      level: 2,
+      filter: 'unfinished',
+      collapsed: ['1.1'],
+      scrollTop: 120,
+      scrollLeft: 6,
+    }))
     localStorage.setItem(LEGACY_WORK_MODE_KEY, '1')
-    expect(readPageState()).toEqual(defaults({ workMode: true }))
+    expect(readPageState()).toEqual(defaults({
+      level: 2,
+      filter: 'unfinished',
+      collapsed: ['1.1'],
+      scrollTop: 120,
+      scrollLeft: 6,
+      workMode: true,
+    }))
   })
 
   it('prefers a version-2 record over the standalone switch', () => {

@@ -104,6 +104,45 @@ function sanitizeAnchor(value) {
 }
 
 /**
+ * The view a record starts from when it carries no usable value; also the view
+ * a migrated version 1 record starts from.
+ * @param {boolean} [workMode]
+ * @returns {PageState}
+ */
+function defaultPageState(workMode = false) {
+  return {
+    level: DEFAULT_LEVEL,
+    filter: DEFAULT_FILTER,
+    collapsed: [],
+    scrollTop: 0,
+    scrollLeft: 0,
+    scale: DEFAULT_SCALE,
+    anchor: null,
+    selectedId: null,
+    panelTaskId: null,
+    panelTab: DEFAULT_PANEL_TAB,
+    workMode,
+  }
+}
+
+/**
+ * The depth, filter, folded ids and scroll offsets of a stored value, normalized.
+ * Both record versions store these fields under the same names, so the two
+ * readers share this normalization.
+ * @param {any} raw
+ * @returns {Pick<PageState, 'level' | 'filter' | 'collapsed' | 'scrollTop' | 'scrollLeft'>}
+ */
+function normalizeView(raw) {
+  return {
+    level: LEVELS.includes(raw.level) ? raw.level : DEFAULT_LEVEL,
+    filter: FILTERS.includes(raw.filter) ? raw.filter : DEFAULT_FILTER,
+    collapsed: sanitizeCollapsed(raw.collapsed),
+    scrollTop: sanitizeScroll(raw.scrollTop),
+    scrollLeft: sanitizeScroll(raw.scrollLeft),
+  }
+}
+
+/**
  * The collapsed task ids that can still be trusted: non-empty short strings,
  * deduplicated in first-seen order and capped so a corrupted record cannot make
  * the page fold thousands of branches at once.
@@ -135,11 +174,7 @@ export function sanitizePageState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
   if (raw.v !== PAGE_STATE_VERSION) return null
   return {
-    level: LEVELS.includes(raw.level) ? raw.level : DEFAULT_LEVEL,
-    filter: FILTERS.includes(raw.filter) ? raw.filter : DEFAULT_FILTER,
-    collapsed: sanitizeCollapsed(raw.collapsed),
-    scrollTop: sanitizeScroll(raw.scrollTop),
-    scrollLeft: sanitizeScroll(raw.scrollLeft),
+    ...normalizeView(raw),
     scale: SCALES.includes(raw.scale) ? raw.scale : DEFAULT_SCALE,
     anchor: sanitizeAnchor(raw.anchor),
     selectedId: sanitizeId(raw.selectedId),
@@ -150,38 +185,44 @@ export function sanitizePageState(raw) {
 }
 
 /**
+ * The standalone work-mode switch an older client wrote, or false when storage
+ * is absent or refuses the read. Called inside `readPageState`'s guard.
+ * @returns {boolean}
+ */
+function readLegacyWorkMode() {
+  return globalThis.localStorage.getItem(LEGACY_WORK_MODE_KEY) === '1'
+}
+
+/**
+ * Carry a version 1 record forward: it stores the same depth, filter, folded
+ * ids and scroll offsets, so those transfer; the fields version 2 added start
+ * from their defaults.
+ * @param {any} raw a parsed version 1 record
+ * @returns {PageState}
+ */
+function migrateVersion1(raw) {
+  return { ...defaultPageState(), ...normalizeView(raw) }
+}
+
+/**
  * The page state left by a previous visit, or null when there is no usable one
- * (first visit, storage disabled, or a corrupted/older record).
+ * (first visit, storage disabled, or a corrupted/unknown-version record).
  * @returns {PageState | null}
  */
 export function readPageState() {
   try {
     const raw = globalThis.localStorage.getItem(PAGE_STATE_KEY)
     if (typeof raw === 'string') {
-      const state = sanitizePageState(JSON.parse(raw))
+      const parsed = JSON.parse(raw)
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.v === 1) {
+        return { ...migrateVersion1(parsed), workMode: readLegacyWorkMode() }
+      }
+      const state = sanitizePageState(parsed)
       if (state !== null) return state
     }
-    // Work mode was its own switch before version 2, so it is the one thing
-    // carried across an upgrade. The version 1 view fields are deliberately
-    // dropped: they described a page shape this version no longer has, and
-    // restoring a half-understood layout is worse than starting from the
-    // defaults once.
-    if (globalThis.localStorage.getItem(LEGACY_WORK_MODE_KEY) === '1') {
-      return {
-        level: DEFAULT_LEVEL,
-        filter: DEFAULT_FILTER,
-        collapsed: [],
-        scrollTop: 0,
-        scrollLeft: 0,
-        scale: DEFAULT_SCALE,
-        anchor: null,
-        selectedId: null,
-        panelTaskId: null,
-        panelTab: DEFAULT_PANEL_TAB,
-        workMode: true,
-      }
-    }
-    return null
+    // Work mode was its own switch before version 2; an install with no usable
+    // record still keeps the switch it had.
+    return readLegacyWorkMode() ? defaultPageState(true) : null
   } catch {
     // Missing or refusing storage, and malformed JSON, all read as "no state".
     return null
