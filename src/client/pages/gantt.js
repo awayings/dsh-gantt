@@ -41,6 +41,7 @@ export function GanttPage({ ctx }) {
   const [collapsed, setCollapsed] = useState(() => new Set(saved?.collapsed ?? []))
   const [level, setLevel] = useState(() => saved?.level ?? 99)
   const [filter, setFilter] = useState(() => saved?.filter ?? 'all')
+  const [tagFilter, setTagFilter] = useState(() => new Set(saved?.tagFilter ?? []))
   const [recomputing, setRecomputing] = useState(false)
   const [selectedId, setSelectedId] = useState(() => saved?.selectedId ?? null)
   const [focusId, setFocusId] = useState(null)
@@ -63,7 +64,7 @@ export function GanttPage({ ctx }) {
   // The whole persisted view lives in one ref so the debounced scroll write and
   // every state-driven write persist the same complete record.
   const viewRef = useRef({
-    level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
   })
   const writePageStateNow = useCallback(() => {
     const view = viewRef.current
@@ -71,6 +72,7 @@ export function GanttPage({ ctx }) {
     writePageState({
       level: view.level,
       filter: view.filter,
+      tagFilter: [...view.tagFilter],
       collapsed: [...view.collapsed],
       scrollTop: top,
       scrollLeft: left,
@@ -84,11 +86,11 @@ export function GanttPage({ ctx }) {
   }, [])
   useEffect(() => {
     viewRef.current = {
-      level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+      level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
     }
     writePageStateNow()
   }, [
-    level, filter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
     writePageStateNow,
   ])
   // A hide or an entry swap never waits for a debounce timer, so the latest
@@ -146,6 +148,18 @@ export function GanttPage({ ctx }) {
   const dailyBrief = data?.dailyBrief ?? null
   const allTasks = useMemo(() => flattenTree(tasks), [tasks])
   const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
+  // Label statistics drive both the tag filter row and the dialog suggestions;
+  // tree order keeps them stable between renders and refreshes.
+  const tagStats = useMemo(() => {
+    const counts = new Map()
+    for (const task of allTasks) {
+      for (const tag of Array.isArray(task.tags) ? task.tags : []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
+    }
+    return [...counts.entries()]
+  }, [allTasks])
+  const allTags = useMemo(() => tagStats.map(([tag]) => tag), [tagStats])
   const options = useMemo(() => taskOptions(tasks), [tasks])
   const frontierIds = useMemo(() => {
     const ids = new Set()
@@ -187,10 +201,27 @@ export function GanttPage({ ctx }) {
     if (filter === 'done') return doneIds
     return null
   }, [filter, unfinishedIds, frontierIds, nextIds, todayIds, doneIds, activityByTask])
-  const filterCount = filterIds === null ? 0 : [...filterIds].filter(id => byId.has(id)).length
+  // The tag filter is one more perspective over the same tree: selecting any
+  // tag keeps the tasks that carry one of them (OR), and the status
+  // perspective narrows that set further (AND).
+  const tagIds = useMemo(() => {
+    if (tagFilter.size === 0) return null
+    const ids = new Set()
+    for (const task of allTasks) {
+      const chosen = Array.isArray(task.tags) && task.tags.some(tag => tagFilter.has(tag))
+      if (chosen) ids.add(task.id)
+    }
+    return ids
+  }, [allTasks, tagFilter])
+  const effectiveIds = useMemo(() => {
+    if (filterIds === null) return tagIds
+    if (tagIds === null) return filterIds
+    return new Set([...filterIds].filter(id => tagIds.has(id)))
+  }, [filterIds, tagIds])
+  const filterCount = effectiveIds === null ? 0 : [...effectiveIds].filter(id => byId.has(id)).length
   const filteredTasks = useMemo(
-    () => (filterIds === null ? tasks : filterTree(tasks, filterIds)),
-    [tasks, filterIds],
+    () => (effectiveIds === null ? tasks : filterTree(tasks, effectiveIds)),
+    [tasks, effectiveIds],
   )
   const visibleTaskCount = useMemo(() => flattenTree(filteredTasks).length, [filteredTasks])
   const rows = useMemo(() => visibleRows(filteredTasks, collapsed), [filteredTasks, collapsed])
@@ -324,6 +355,15 @@ export function GanttPage({ ctx }) {
     setFilter(next)
     setCollapsed(next === 'all' ? collapseForLevel(tasks, level) : new Set())
   }, [tasks, level])
+  const toggleTag = useCallback((tag) => {
+    setTagFilter((current) => {
+      const next = new Set(current)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }, [])
+  const clearTags = useCallback(() => setTagFilter(new Set()), [])
   const openCreate = useCallback((parentTask) => {
     setDialog({ type: 'create', parentId: parentTask?.id ?? null })
   }, [])
@@ -395,6 +435,7 @@ export function GanttPage({ ctx }) {
       mode: 'create',
       parentTask: dialog.parentId ? byId.get(dialog.parentId) : null,
       parentOptions: options,
+      allTags,
       today,
       t,
       onClose: () => setDialog(null),
@@ -406,6 +447,7 @@ export function GanttPage({ ctx }) {
       mode: 'edit',
       task: dialogTask,
       parentOptions: parentChoices,
+      allTags,
       t,
       onClose: () => setDialog(null),
       onSaved: handleSaved,
@@ -464,8 +506,8 @@ export function GanttPage({ ctx }) {
     )
     : filteredTasks.length === 0
       ? h('div', { className: 'gantt-filter-empty' },
-        h('div', { className: 'gantt-empty-title' }, t(`filter.empty.${filter}`)),
-        h('p', { className: 'gantt-hint' }, t(`filter.hint.${filter}`)),
+        h('div', { className: 'gantt-empty-title' }, tagFilter.size > 0 ? t('filter.empty.tag') : t(`filter.empty.${filter}`)),
+        h('p', { className: 'gantt-hint' }, tagFilter.size > 0 ? t('filter.hint.tag') : t(`filter.hint.${filter}`)),
       )
       : h('div', { className: 'gantt-body', 'data-panel': panelId === null ? undefined : 'work' },
         h('div', { className: 'gantt-main', ref: paneRef, onScroll: handlePaneScroll },
@@ -648,6 +690,30 @@ export function GanttPage({ ctx }) {
           disabled: recomputing,
           onClick: recomputeBrief,
         }, recomputing ? '…' : t('filter.recompute')),
+      )
+      : null,
+    tagStats.length > 0
+      ? h('section', { className: 'gantt-filter gantt-tag-filter' },
+        h('span', { className: 'gantt-filter-label' }, t('filter.tagLabel')),
+        h('div', { className: 'gantt-tag-options', role: 'group', 'aria-label': t('filter.tagLabel') },
+          tagStats.map(([tag, count]) => h('button', {
+            key: tag,
+            className: 'gantt-tag-option',
+            type: 'button',
+            'data-tag': tag,
+            'data-active': tagFilter.has(tag) ? 'true' : undefined,
+            'aria-pressed': tagFilter.has(tag) ? 'true' : 'false',
+            onClick: () => toggleTag(tag),
+          }, `${tag} (${count})`)),
+        ),
+        tagFilter.size > 0
+          ? h('button', {
+            className: 'gantt-btn gantt-tag-clear',
+            type: 'button',
+            'data-action': 'clear-tags',
+            onClick: clearTags,
+          }, t('filter.tagsClear'))
+          : null,
       )
       : null,
     content,

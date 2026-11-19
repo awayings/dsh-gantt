@@ -36,6 +36,13 @@ function MetaChips({ task, t }) {
     for (const link of Array.isArray(task.links) ? task.links : []) {
       push(`link:${link.ref}`, link.label || link.ref, `${t('field.links')}: ${link.type}:${link.ref}`)
     }
+    for (const tag of Array.isArray(task.tags) ? task.tags : []) {
+      chips.push(h('span', {
+        key: `tag:${tag}`,
+        className: 'gantt-row-chip gantt-row-tag',
+        title: `${t('field.tags')}: ${tag}`,
+      }, `#${tag}`))
+    }
   }
   if (chips.length === 0) return null
   return h('div', { className: 'gantt-task-meta' }, chips)

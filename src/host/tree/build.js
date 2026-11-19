@@ -31,6 +31,7 @@ import { todayIso } from '../clock.js'
  * @property {string} category
  * @property {string} inspiration
  * @property {TaskLink[]} links
+ * @property {string[]} tags
  * @property {string} source
  * @property {string} operatorId
  * @property {string} completedById

@@ -24,7 +24,7 @@ export const treeRoute = {
 export const createTaskRoute = {
   method: 'POST',
   path: '/api/gantt/tasks',
-  description: 'Create a task. Body: { title, parentId?, kind?, ref?, startDate?, endDate?, status?, progress?, description?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }.',
+  description: 'Create a task. Body: { title, parentId?, kind?, ref?, startDate?, endDate?, status?, progress?, description?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links?, tags? }.',
   fetch: async (request, { store }) => {
     const body = await readBody(request)
     const task = store.create(/** @type {TaskInput} */ (body))
@@ -36,7 +36,7 @@ export const createTaskRoute = {
 export const updateTaskRoute = {
   method: 'POST',
   path: '/api/gantt/task/update',
-  description: 'Update task fields. Body: { id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }.',
+  description: 'Update task fields. Body: { id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links?, tags? }. tags: string[] replaces the list, null clears it.',
   fetch: async (request, { store }) => {
     const body = await readBody(request)
     const id = requiredId(body)

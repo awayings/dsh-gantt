@@ -244,10 +244,10 @@ delete a tarball you may want to roll back to.
 
 ## 5. Schema contract
 
-The database records its schema in `PRAGMA user_version` (currently **v8**).
+The database records its schema in `PRAGMA user_version` (currently **v9**).
 
 - A build refuses a file written by a newer build instead of writing to it:
-  `refusing to open …: schema v9 is newer than this build supports (v8); run the
+  `refusing to open …: schema v10 is newer than this build supports (v9); run the
   same release for the plugin and gantt-mcp`.
 - Migrations are idempotent and serialized, so the plugin and the sidecar can
   start together after an upgrade without double-migrating.

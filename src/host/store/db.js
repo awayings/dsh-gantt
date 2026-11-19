@@ -8,10 +8,10 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
-/** Columns added by schema v3, v4, and v8; the migration appends whichever is missing. @type {Record<string, string>} */
-const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'", operator_id: "TEXT NOT NULL DEFAULT ''", completed_by_id: "TEXT NOT NULL DEFAULT ''", report: "TEXT NOT NULL DEFAULT ''" }
+/** Columns added by schema v3, v4, v8, and v9; the migration appends whichever is missing. @type {Record<string, string>} */
+const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", tags: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'", operator_id: "TEXT NOT NULL DEFAULT ''", completed_by_id: "TEXT NOT NULL DEFAULT ''", report: "TEXT NOT NULL DEFAULT ''" }
 
 const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tasks (
@@ -37,6 +37,7 @@ const CREATE_SCHEMA = `
     category TEXT NOT NULL DEFAULT '',
     inspiration TEXT NOT NULL DEFAULT '',
     links TEXT NOT NULL DEFAULT '[]',
+    tags TEXT NOT NULL DEFAULT '[]',
     source TEXT NOT NULL DEFAULT 'manual',
     operator_id TEXT NOT NULL DEFAULT '',
     completed_by_id TEXT NOT NULL DEFAULT '',
@@ -275,6 +276,7 @@ export function migrateDatabase(db, transaction, syncTrackerTree) {
             category TEXT NOT NULL DEFAULT '',
             inspiration TEXT NOT NULL DEFAULT '',
             links TEXT NOT NULL DEFAULT '[]',
+            tags TEXT NOT NULL DEFAULT '[]',
             source TEXT NOT NULL DEFAULT 'manual',
             operator_id TEXT NOT NULL DEFAULT '',
             completed_by_id TEXT NOT NULL DEFAULT '',
@@ -283,13 +285,13 @@ export function migrateDatabase(db, transaction, syncTrackerTree) {
           INSERT INTO tasks_v7 (
             id, parent_id, title, description, status, progress, start_date, end_date,
             sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
-            landing, estimate, category, inspiration, links, source, operator_id,
+            landing, estimate, category, inspiration, links, tags, source, operator_id,
             completed_by_id, report
           )
             SELECT
             id, parent_id, title, description, status, progress, start_date, end_date,
             sort_order, created_at, updated_at, kind, ref, state, lane, dep, done_when,
-            landing, estimate, category, inspiration, links, source, operator_id,
+            landing, estimate, category, inspiration, links, tags, source, operator_id,
             completed_by_id, report
             FROM tasks;
           DROP TABLE tasks;

@@ -21,7 +21,6 @@ function columns(db, table) {
 describe('schema v8', () => {
   it('adds the operator, completer, and report columns and the agents table', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(8)
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db, 'tasks')).toEqual(expect.arrayContaining(['operator_id', 'completed_by_id', 'report']))
     expect(columns(store.db, 'agents')).toEqual([
@@ -57,7 +56,7 @@ describe('schema v8', () => {
     downgradeToV7(file)
 
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db, 'tasks')).toEqual(expect.arrayContaining(['operator_id', 'completed_by_id', 'report']))
     expect(columns(store.db, 'agents')).toHaveLength(9)
     expect(store.count()).toBe(2)

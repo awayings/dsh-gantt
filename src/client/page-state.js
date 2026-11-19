@@ -5,8 +5,8 @@
 // full browser reload). DSH keeps no per-page view state, so without this module
 // the page comes back at the default tree depth, status filter and scroll offset
 // every time. `panel-session.js` restores which page was on screen; this module
-// restores its view: depth, filter, folded tasks, scroll offsets, timeline
-// window, highlighted task, work panel and work mode.
+// restores its view: depth, status filter, tag filter, folded tasks, scroll
+// offsets, timeline window, highlighted task, work panel and work mode.
 //
 // The record lives in localStorage because it must survive a full browser
 // reload and a tab restore, not only a bundle swap. Storage is shared with the
@@ -18,7 +18,7 @@
 export const PAGE_STATE_KEY = 'gantt.pageState'
 
 /** Schema version of the stored record; bump it when the shape changes. */
-export const PAGE_STATE_VERSION = 2
+export const PAGE_STATE_VERSION = 3
 
 /** localStorage key an older client used for the standalone work-mode switch. */
 export const LEGACY_WORK_MODE_KEY = 'gantt.workMode'
@@ -51,6 +51,12 @@ const MAX_ID_LENGTH = 200
 /** The largest scroll offset a stored record may restore. */
 const MAX_SCROLL = 10_000_000
 
+/** The most tag filters a stored record may restore. */
+const MAX_TAGS = 20
+
+/** The longest tag filter a stored record may carry, trimmed. */
+const MAX_TAG_LENGTH = 40
+
 /** The exact shape of a timeline anchor day. */
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -59,6 +65,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
  * @typedef {object} PageState
  * @property {number} level tree depth, one of LEVELS
  * @property {string} filter status filter, one of FILTERS
+ * @property {string[]} tagFilter tags the view is filtered to; empty means any
  * @property {string[]} collapsed ids of the tasks whose children are folded
  * @property {number} scrollTop vertical scroll offset in pixels
  * @property {number} scrollLeft horizontal scroll offset in pixels
@@ -113,6 +120,7 @@ function defaultPageState(workMode = false) {
   return {
     level: DEFAULT_LEVEL,
     filter: DEFAULT_FILTER,
+    tagFilter: [],
     collapsed: [],
     scrollTop: 0,
     scrollLeft: 0,
@@ -126,8 +134,25 @@ function defaultPageState(workMode = false) {
 }
 
 /**
+ * The timeline window, highlighted task, work panel and work mode of a stored
+ * value, normalized. Every record version stores them under the same names.
+ * @param {any} raw
+ * @returns {Pick<PageState, 'scale' | 'anchor' | 'selectedId' | 'panelTaskId' | 'panelTab' | 'workMode'>}
+ */
+function normalizeExtras(raw) {
+  return {
+    scale: SCALES.includes(raw.scale) ? raw.scale : DEFAULT_SCALE,
+    anchor: sanitizeAnchor(raw.anchor),
+    selectedId: sanitizeId(raw.selectedId),
+    panelTaskId: sanitizeId(raw.panelTaskId),
+    panelTab: PANEL_TABS.includes(raw.panelTab) ? raw.panelTab : DEFAULT_PANEL_TAB,
+    workMode: raw.workMode === true,
+  }
+}
+
+/**
  * The depth, filter, folded ids and scroll offsets of a stored value, normalized.
- * Both record versions store these fields under the same names, so the two
+ * Every record version stores these fields under the same names, so the
  * readers share this normalization.
  * @param {any} raw
  * @returns {Pick<PageState, 'level' | 'filter' | 'collapsed' | 'scrollTop' | 'scrollLeft'>}
@@ -165,6 +190,30 @@ function sanitizeCollapsed(value) {
 }
 
 /**
+ * The tag filters that can still be trusted: non-empty strings, trimmed, at
+ * most 40 characters each, deduplicated in first-seen order and capped so a
+ * corrupted record cannot ask for more tags than the server allows.
+ * @param {any} value
+ * @returns {string[]}
+ */
+function sanitizeTagFilter(value) {
+  if (!Array.isArray(value)) return []
+  /** @type {string[]} */
+  const tags = []
+  const seen = new Set()
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const tag = item.trim()
+    if (tag.length === 0 || tag.length > MAX_TAG_LENGTH) continue
+    if (seen.has(tag)) continue
+    seen.add(tag)
+    tags.push(tag)
+    if (tags.length === MAX_TAGS) break
+  }
+  return tags
+}
+
+/**
  * Normalize an untrusted stored value into a page state, or null when it is not
  * a record this version wrote.
  * @param {any} raw
@@ -175,12 +224,8 @@ export function sanitizePageState(raw) {
   if (raw.v !== PAGE_STATE_VERSION) return null
   return {
     ...normalizeView(raw),
-    scale: SCALES.includes(raw.scale) ? raw.scale : DEFAULT_SCALE,
-    anchor: sanitizeAnchor(raw.anchor),
-    selectedId: sanitizeId(raw.selectedId),
-    panelTaskId: sanitizeId(raw.panelTaskId),
-    panelTab: PANEL_TABS.includes(raw.panelTab) ? raw.panelTab : DEFAULT_PANEL_TAB,
-    workMode: raw.workMode === true,
+    tagFilter: sanitizeTagFilter(raw.tagFilter),
+    ...normalizeExtras(raw),
   }
 }
 
@@ -195,13 +240,23 @@ function readLegacyWorkMode() {
 
 /**
  * Carry a version 1 record forward: it stores the same depth, filter, folded
- * ids and scroll offsets, so those transfer; the fields version 2 added start
- * from their defaults.
+ * ids and scroll offsets, so those transfer; the fields later versions added
+ * start from their defaults.
  * @param {any} raw a parsed version 1 record
  * @returns {PageState}
  */
 function migrateVersion1(raw) {
   return { ...defaultPageState(), ...normalizeView(raw) }
+}
+
+/**
+ * Carry a version 2 record forward: it stores the same view fields under the
+ * same names, so those transfer; the tag filter version 3 added starts empty.
+ * @param {any} raw a parsed version 2 record
+ * @returns {PageState}
+ */
+function migrateVersion2(raw) {
+  return { ...defaultPageState(), ...normalizeView(raw), ...normalizeExtras(raw) }
 }
 
 /**
@@ -216,6 +271,9 @@ export function readPageState() {
       const parsed = JSON.parse(raw)
       if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.v === 1) {
         return { ...migrateVersion1(parsed), workMode: readLegacyWorkMode() }
+      }
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.v === 2) {
+        return migrateVersion2(parsed)
       }
       const state = sanitizePageState(parsed)
       if (state !== null) return state
@@ -241,6 +299,7 @@ export function writePageState(state) {
       v: PAGE_STATE_VERSION,
       level: state.level,
       filter: state.filter,
+      tagFilter: state.tagFilter,
       collapsed: state.collapsed,
       scrollTop: state.scrollTop,
       scrollLeft: state.scrollLeft,

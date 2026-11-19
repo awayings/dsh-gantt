@@ -90,15 +90,16 @@ describe('split with tracker metadata', () => {
   it('passes metadata and links to the created children', () => {
     const parent = store.create({ title: 'Parent', startDate: '2024-01-01', endDate: '2024-01-31' })
     const result = store.split(parent.id, [
-      { title: 'Child', ...extras, links: [{ type: 'note', ref: 'n1' }] },
+      { title: 'Child', ...extras, tags: ['split', 'child'], links: [{ type: 'note', ref: 'n1' }] },
     ])
-    expect(result.children[0]).toMatchObject({ ...extras, links: [{ type: 'note', ref: 'n1' }], kind: 'task' })
+    expect(result.children[0]).toMatchObject({ ...extras, tags: ['split', 'child'], links: [{ type: 'note', ref: 'n1' }], kind: 'task' })
   })
 
   it('validates child metadata and links before writing', () => {
     const parent = store.create({ title: 'Parent' })
     expectGanttError(() => store.split(parent.id, [{ title: 'c', lane: 7 }]), 'lane must be a string')
     expectGanttError(() => store.split(parent.id, [{ title: 'c', links: 'nope' }]), 'links must be an array')
+    expectGanttError(() => store.split(parent.id, [{ title: 'c', tags: 'nope' }]), 'tags must be an array')
     expect(store.count()).toBe(1)
   })
 })

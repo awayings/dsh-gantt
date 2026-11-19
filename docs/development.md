@@ -277,11 +277,11 @@ Recorded decisions:
 
 | Directory | Project | Covers |
 | --- | --- | --- |
-| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v8 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, and the `agents` table) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
+| `tests/store/` | `host` (Node) | `src/host/store/`, `src/host/tree/`, `src/host/clock.js`, and `src/host/daily/`: task-day dates and next 08:00 (default zone, override, invalid fallback), schema migrations through v9 (the widened `todo`/`in_progress`/`blocked`/`done`/`cancelled` status CHECK, the task write-back columns, the `agents` table, and the `tags` label column) and the additive `focus`/`task_events`/`work_sessions` tables, conversation focus persistence/cascade, task-event trajectory (`track` included), work-session binding and recovery, immediate-sibling creation, tracker materialization and state preservation, stale-row handling, dates, numbering, rollups, validation, CRUD, split, seed, delete, decompose and schedule transactions, links, plan upserts and integrity, daily-brief windows/budgets/fairness/persistence/lookup rules |
 | `tests/host/` | `host` (Node) | `src/host/routes/`, the entry, `src/host/tools.js`, and `src/host/tree/chain.js`: all twenty-eight routes, body parsing, status codes, error mapping, store lifecycle, `tree` + `brief` + `dailyBrief`, the brief read/recompute routes, the focus read/set/clear routes, the trajectory read route, the agent list/register, task-context, ready-list, and completion-report routes, the work read/bind/skills/team routes (including absent services and service rejection), `decompose`/`schedule`/`context`, the day/plan routes, five assistant tool definitions/reference resolution/execution (round tracking and sibling creation included), per-session context, automatic tool provenance, static/dynamic prompt context registration, and registration no-op without a tools or systemPrompt service |
 | `tests/tracker/` | `host` (Node) | `tracker.js`: markdown parsers (schedule board, tree, daily card), slot derivation, import counts, hostile/truncated input |
-| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the page-state restore (versioned `localStorage` record of depth, filter, collapse, both pane scroll offsets, timeline scale and window anchor, highlighted task, panel task and sub-tab, and work mode; debounced scroll write and pagehide flush; v1 records migrating their view fields; one-time work-mode key migration; absent, malformed, unknown-version, or blocked storage falling back to the defaults), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
-| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 8, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
+| `tests/client/` | `client` (jsdom) | `src/client/` modules: rendering the unified tree (track/node metadata, links and tag chips), the perspective views (frontier / next / today path pruning) and the brief recompute action, decompose/schedule/context dialogs, the right-rail conversation tab (focus, clear, refresh, paused while hidden, five recent trajectory entries with session titles and open-conversation links, loading/error/empty), the Gantt page work mode (persisted toggle, a row click focuses the task and opens the in-page workbench panel without navigating, ui-session main-binding fallback, close button, edit affordance, failure toast), the Active view filter and waiting-task activity badges, the Unfinished status filter (done and cancelled excluded), the tag filter row (multi-select OR, ancestor paths kept, persisted selection) and the tag editor in the create/edit dialog, the workbench (pinned task view with conversation, markdown description preview and trajectory, execute/decompose entries that queue a prompt through the session scope and open a new window, skills and agent-team states, live status states), the restricted markdown renderer (headings, lists, fenced code, inline formatting, safe-link downgrade, inert raw HTML) and the reusable `Markdown` preview component, the cross-window handoff (selection seed, `window.name` carrier, clearing of the shared fallback by the consuming window, catalog-aware resume), the active-page restore (unload/pagehide capture, deferred selection, stale/unknown/malformed markers, a missing layout service), the page-state restore (versioned `localStorage` record of depth, status filter, tag filter, collapse, both pane scroll offsets, timeline scale and window anchor, highlighted task, panel task and sub-tab, and work mode; debounced scroll write and pagehide flush; v1 and v2 records migrating their view fields; one-time work-mode key migration; absent, malformed, unknown-version, or blocked storage falling back to the defaults), the session-activity hook, tree/time-axis behavior, Today page with the 该动 section, locale strings, error and empty states |
+| `tests/e2e/` | `e2e` (jsdom + node:http) | The real seams end to end: module-loader artifact contract, relative `fetch`, HTTP status/headers, route handlers, tracker import through a fixture directory (six roots and the imported nodes in `/tree`), decompose → a new block in `/day`, the daily-brief read/recompute routes and tree/day wiring, a focus HTTP round trip, a trajectory read after an assistant-tool write, a committed v2-schema fixture (`tests/helpers/v2.js`, no skipped tests) upgrading to schema 9, a tag round trip through the API and the tag filter pruning the rendered tree, a work-session bind that survives reopening the database, and a SQLite file that survives a restart |
 | `tests/helpers/` | — | Shared fixtures and a fake host context for the `host` project |
 
 New in the native-conversation round: `tests/store/focus.spec.js`,
@@ -321,7 +321,10 @@ fallbacks (a v1 record carries its view fields forward and the standalone
 work-mode key migrates once), and the page wiring that reapplies depth, filter,
 collapse, both pane scroll offsets, the timeline scale and window anchor, the
 highlighted task, the in-page work panel with its sub-tab, and the work-mode
-switch on mount.
+switch on mount. The tags round adds `tests/store/schema-v9.spec.js` and
+`tests/e2e/tags.spec.js`, and extends the store, host-route, client dialog/page,
+and page-state suites with tag validation, manual editing, row chips, the OR tag
+filter, and the v3 page-state record.
 Earlier daily-brief / clock tests (`tests/store/clock.spec.js`, `tests/store/daily-brief.spec.js`,
 `tests/store/schema-v4.spec.js`, `tests/host/routes-brief.spec.js`,
 `tests/e2e/brief.spec.js`) remain.
@@ -385,7 +388,7 @@ The stored columns and their API field mapping are documented under
 [the task object](api.md#task-object); `GET /api/gantt/meta` reports the
 resolved path, schema version, and row count at runtime.
 
-### Schema version 8: one working tree plus reports, trajectory, work sessions, and agents
+### Schema version 9: one working tree plus reports, trajectory, work sessions, agents, and tags
 
 The tree data lives in `tasks`, one row per node, with `kind` marking the layer:
 
@@ -423,7 +426,11 @@ re-enables them afterwards). Schema version 8 adds the task write-back columns
 and the `agents` table (`id` primary key, unique `name`, `type` CHECK
 `human`/`ai-agent`, `role`, `description`, `details`, `endpoint`, timestamps);
 the table is created by `CREATE_SCHEMA` and the columns are appended by the
-migration, so both a fresh and an upgraded database are idempotent. The
+migration, so both a fresh and an upgraded database are idempotent. Schema
+version 9 adds the task `tags` column (`TEXT NOT NULL DEFAULT '[]'`; a JSON
+array of at most 20 trimmed labels of at most 40 characters each, de-duplicated
+in order). It is appended by the migration like the earlier columns, and the v7
+status rebuild copies it too, so a fresh and an upgraded database agree. The
 rationale is in
 [personal-task-system.md](personal-task-system.md), the layering table in
 [compatibility.md](compatibility.md#4--data-model-layering-and-migration).
@@ -432,10 +439,10 @@ The host also starts an in-process scheduler: a `setTimeout` to the next 08:00
 in the task-day zone recomputes today's report with `source: 'auto'`; the timer
 is unref'ed and disposed with the plugin, so it only runs while `dsh web` is up.
 
-#### Migrate a v2–v7 database
+#### Migrate a v2–v8 database
 
 The host runs the append-only migration when it opens a database whose
-`PRAGMA user_version` is below 8. A v2 database additionally gets the twelve
+`PRAGMA user_version` is below 9. A v2 database additionally gets the twelve
 `tasks` columns, the `(kind, ref)` index, and the one-time backfill of
 `tracks`/`nodes` into `tasks`; a v3 database keeps `tasks` untouched and gains
 `daily_briefs`; a v4 database keeps the tree and reports and gains only
@@ -445,14 +452,15 @@ database is rebuilt in place to widen the `tasks.status` CHECK with `cancelled`,
 preserving every id and the `focus`/`task_events`/`work_sessions` rows that
 reference it (the rebuild runs with foreign keys disabled and they are
 re-enabled afterwards); a v7 database gains the three write-back columns and the
-`agents` table without touching existing task rows. No event backfill runs.
+`agents` table without touching existing task rows; a v8 database gains only
+the `tags` column. No event backfill runs.
 
 1. Stop `dsh web`, then copy the database aside:
    `cp "$DSH_HOME/gantt/tasks.db" /tmp/tasks.v3.db` (also copy `-wal`/`-shm` if
    present, or run `sqlite3 tasks.db 'PRAGMA wal_checkpoint(TRUNCATE)'` first).
 2. Start the new build / restart `dsh web`. No separate migration command
    exists; opening the store performs it.
-3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `8` and `taskCount`
+3. Verify with `GET /api/gantt/meta`: `schemaVersion` is `9` and `taskCount`
    is unchanged on a v3/v4 upgrade. `GET /api/gantt/tree` still has the same
    tree and now carries `dailyBrief`; `GET /api/gantt/brief` computes and caches
    today's report; `GET /api/gantt/trajectory` returns an empty `events` array
@@ -673,7 +681,7 @@ curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:3080/api/gantt/work/team?sessionI
 Expected: every `today` field is the task-day date (`Asia/Shanghai` unless
 `DSH_GANTT_TZ` says otherwise), not necessarily the host's UTC date. `meta`
 returns `{ok:true, dbPath:"$DSH_HOME/gantt/tasks.db", engine:"node:sqlite",
-schemaVersion:8, kinds:[…], linkTypes:[…], endpoints:[…28 routes…]}`; `seed`
+schemaVersion:9, kinds:[…], linkTypes:[…], endpoints:[…28 routes…]}`; `seed`
 on an empty database inserts 13 demo tasks and returns
 `seeded:true, taskCount:13` plus the snapshot; `tree` returns the
 track roots with their imported children, a `brief` whose `lanes` has one entry
@@ -731,7 +739,11 @@ Open the page in the connected Web GUI and check:
       weekend/month groups in both **Week** and **Month** scales.
 - [ ] Imported track rows show the lane chip and the raw tracker state chip;
       node rows show `state`, `doneWhen`, `landing`, `estimate`, `category`,
-      `inspiration`, and links chips with the full link in a tooltip.
+      `inspiration`, links chips with the full link in a tooltip, and `#tag`
+      chips for manually maintained labels.
+- [ ] **New task** and edit open the tag editor: Enter or **Add** appends a
+      label, × removes one, the input suggests labels already used in the tree,
+      and Save persists the list (the list survives a reload).
 - [ ] A running (`持续`) node's bar ends at today, and the depth zoom switches
       between all nodes, two levels, and one level.
 - [ ] Dragging a leaf bar moves it by whole timeline cells (days on the weekly
@@ -748,6 +760,10 @@ Open the page in the connected Web GUI and check:
       pruned view shows its kept count, a mode-specific empty hint, and hides
       unrelated and completed siblings. Switching clears the manual collapse;
       switching back to 全部 restores the depth-level collapse.
+- [ ] A tag row under the perspective switch lists each used tag with its
+      task count; selecting one or more labels (OR) keeps the tasks that carry
+      one plus their ancestor paths, shows the kept count, offers **Clear tags**,
+      and the selection survives a reload (page-state v3).
 - [ ] **重算前沿和该动** sits on the right of the switch; it POSTs
       `api/gantt/brief/compute` for the current task-day, refreshes the tree,
       and reports success or failure in a toast.

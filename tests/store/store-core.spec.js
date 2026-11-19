@@ -174,6 +174,7 @@ describe('row access', () => {
       category: '',
       inspiration: '',
       links: [],
+      tags: [],
       source: 'manual',
       operatorId: '',
       completedById: '',

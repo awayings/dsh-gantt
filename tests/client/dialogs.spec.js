@@ -134,6 +134,7 @@ describe('create dialog', () => {
       endDate: '2026-11-14',
       status: 'todo',
       progress: 0,
+      tags: [],
     })
     expect(text(view.container, '.gantt-toast')).toBe('Task created')
     expect(dialog(view.container)).toBeNull()
@@ -191,6 +192,7 @@ describe('create dialog', () => {
       endDate: '2026-11-25',
       status: 'in_progress',
       progress: 25,
+      tags: [],
     })
   })
 
@@ -277,6 +279,7 @@ describe('edit dialog', () => {
       endDate: '2026-11-13',
       status: 'in_progress',
       progress: 25,
+      tags: ['docs', 'urgent'],
     })
     expect(text(view.container, '.gantt-toast')).toBe('Task saved')
     expect(dialog(view.container)).toBeNull()
@@ -305,6 +308,7 @@ describe('edit dialog', () => {
       title: 'Release 2.1',
       description: '',
       parentId: null,
+      tags: [],
     })
   })
 
@@ -377,6 +381,105 @@ describe('edit dialog', () => {
     expect(dialog(view.container)).toBeNull()
     expect(row(view.container, '1.1 Write spec')).toBeNull()
     expect(q(view.container, '.gantt-row[data-selected="true"]')).toBeNull()
+  })
+})
+
+describe('task tags', () => {
+  it('adds tags by Enter and button, ignoring empty and duplicate input, and posts them', async () => {
+    const { calls, view } = await renderPage({})
+    const fields = openCreate(view)
+    setField(fields.title, 'Tagged task')
+
+    setField(fields.tags, '  docs  ')
+    keydown(fields.tags, 'Enter')
+    expect(fields.tagChips()).toEqual(['#docs'])
+    expect(fields.tags.value).toBe('')
+
+    setField(fields.tags, 'docs')
+    click(fields.addTag)
+    expect(fields.tagChips()).toEqual(['#docs'])
+    expect(fields.tags.value).toBe('docs')
+
+    setField(fields.tags, '   ')
+    click(fields.addTag)
+    expect(fields.tagChips()).toEqual(['#docs'])
+
+    setField(fields.tags, 'release')
+    keydown(fields.tags, 'a')
+    expect(fields.tagChips()).toEqual(['#docs'])
+    click(fields.addTag)
+    expect(fields.tagChips()).toEqual(['#docs', '#release'])
+    expect(fields.tags.value).toBe('')
+
+    click(fields.submit)
+    await flush()
+
+    expect(requestBody(calls.find(call => call.path === TASKS)).tags).toEqual(['docs', 'release'])
+  })
+
+  it('caps the editor at 20 tags and removes a chip', async () => {
+    const { view } = await renderPage({})
+    const fields = openCreate(view)
+
+    for (let index = 0; index < 20; index += 1) {
+      setField(fields.tags, `tag-${index}`)
+      click(fields.addTag)
+    }
+    expect(fields.tagChips()).toHaveLength(20)
+
+    setField(fields.tags, 'tag-21')
+    click(fields.addTag)
+    expect(fields.tagChips()).toHaveLength(20)
+    expect(fields.tagChips()).not.toContain('#tag-21')
+
+    click(fields.tagRemove('tag-0'))
+    expect(fields.tagChips()).toHaveLength(19)
+    expect(fields.tagChips()).not.toContain('#tag-0')
+  })
+
+  it('suggests every tag already in the tree through a datalist', async () => {
+    const { view } = await renderPage({})
+    const fields = openCreate(view)
+
+    expect(fields.tags.getAttribute('maxLength')).toBe('40')
+    expect(fields.tags.getAttribute('list')).toBe('gantt-tag-suggestions')
+    expect(fields.tags.getAttribute('placeholder')).toBe('Type a tag and press Enter')
+    expect(qa(view.container, '#gantt-tag-suggestions option').map(option => option.value))
+      .toEqual(['docs', 'urgent'])
+    expect(qa(view.container, '.gantt-dialog .gantt-hint').map(hint => hint.textContent))
+      .toContain('Up to 20 tags; press Enter or Add to append one.')
+  })
+
+  it('prefills the tags of the edited task and posts the edited list', async () => {
+    const { calls, view } = await renderPage({})
+    const fields = openEditor(view, '1.1 Write spec')
+
+    expect(fields.tagChips()).toEqual(['#docs', '#urgent'])
+
+    click(fields.tagRemove('docs'))
+    setField(fields.tags, 'release')
+    click(fields.addTag)
+    expect(fields.tagChips()).toEqual(['#urgent', '#release'])
+
+    click(fields.submit)
+    await flush()
+
+    expect(requestBody(calls.find(call => call.path === UPDATE)).tags).toEqual(['urgent', 'release'])
+  })
+
+  it('creates and edits without tags by posting an empty list', async () => {
+    const { calls, view } = await renderPage({})
+    const createFields = openCreate(view)
+    expect(createFields.tagChips()).toEqual([])
+    setField(createFields.title, 'No tags')
+    click(createFields.submit)
+    await flush()
+    expect(requestBody(calls.find(call => call.path === TASKS)).tags).toEqual([])
+
+    const editFields = openEditor(view, '2.1 Announce')
+    click(editFields.submit)
+    await flush()
+    expect(requestBody(calls.find(call => call.path === UPDATE)).tags).toEqual([])
   })
 })
 

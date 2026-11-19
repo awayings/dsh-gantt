@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { SCHEMA_VERSION } from '../../src/host/store.js'
 import { startServer } from './server.js'
 import { V2_BLOCK_ID, writeV2Database } from '../helpers/v2.js'
 
@@ -47,9 +48,9 @@ describe('v2 database over HTTP', () => {
     expect(flat.find(node => node.ref === 'track:2')?.status).toBe('blocked')
   })
 
-  it('reports schema v8, the preserved plan day, and a context export', async () => {
+  it('reports the schema version, the preserved plan day, and a context export', async () => {
     const meta = await fetch(`${server.origin}/api/gantt/meta`).then(response => response.json())
-    expect(meta.schemaVersion).toBe(8)
+    expect(meta.schemaVersion).toBe(SCHEMA_VERSION)
     expect(meta.taskCount).toBe(6)
     const day = await fetch(`${server.origin}/api/gantt/day?date=2026-11-15`).then(response => response.json())
     expect(day.blocks.map(block => block.id)).toEqual([V2_BLOCK_ID])

@@ -329,3 +329,48 @@ describe('delete', () => {
     expectGanttError(() => store.delete('ghost'), 'task ghost was not found', 404)
   })
 })
+
+describe('tags', () => {
+  it('stores trimmed, deduplicated tags on create and defaults to an empty array', () => {
+    const task = store.create({ title: 'Tagged', tags: ['  alpha ', 'beta', 'alpha', ' beta '] })
+    expect(task.tags).toEqual(['alpha', 'beta'])
+    expect(store.getRow(task.id).tags).toEqual(['alpha', 'beta'])
+    expect(store.create({ title: 'Default' }).tags).toEqual([])
+  })
+
+  it('replaces, clears, and preserves tags on update', () => {
+    const task = store.create({ title: 'Task', tags: ['alpha'] })
+    expect(store.update(task.id, { tags: ['beta', 'gamma'] }).tags).toEqual(['beta', 'gamma'])
+    expect(store.update(task.id, { title: 'Renamed' }).tags).toEqual(['beta', 'gamma'])
+    expect(store.update(task.id, { tags: [] }).tags).toEqual([])
+    store.update(task.id, { tags: ['kept'] })
+    expect(store.update(task.id, { tags: null }).tags).toEqual([])
+  })
+
+  it('rejects every malformed tags input without writing', () => {
+    const task = store.create({ title: 'Task', tags: ['keep'] })
+    const notArray = 'tags must be an array'
+    expectGanttError(() => store.create({ title: 'T', tags: 'alpha' }), notArray)
+    expectGanttError(() => store.create({ title: 'T', tags: ['a'.repeat(41)] }), 'tags[0] must be at most 40 characters')
+    expectGanttError(() => store.create({ title: 'T', tags: ['ok', 7] }), 'tags[1] must be a string')
+    expectGanttError(() => store.create({ title: 'T', tags: ['   '] }), 'tags[0] must not be empty')
+    expectGanttError(
+      () => store.create({ title: 'T', tags: Array.from({ length: 21 }, (_, index) => `t${index}`) }),
+      'tags must have at most 20 entries',
+    )
+    expectGanttError(() => store.update(task.id, { tags: 'alpha' }), notArray)
+    expect(store.getRow(task.id).tags).toEqual(['keep'])
+    expect(store.create({ title: 'T', tags: Array.from({ length: 20 }, (_, index) => `t${index}`) }).tags).toHaveLength(20)
+    expect(store.create({ title: 'T', tags: ['a'.repeat(40)] }).tags).toEqual(['a'.repeat(40)])
+  })
+
+  it('exposes tags on tree nodes, the snapshot, and single nodes', () => {
+    const root = store.create({ title: 'Root', tags: ['home'] })
+    store.create({ title: 'Child', parentId: root.id, tags: ['work', ' deep '] })
+    const tree = store.tree()
+    expect(tree[0].tags).toEqual(['home'])
+    expect(tree[0].children[0].tags).toEqual(['work', 'deep'])
+    expect(store.snapshot().tasks[0].tags).toEqual(['home'])
+    expect(store.getNode(root.id).tags).toEqual(['home'])
+  })
+})

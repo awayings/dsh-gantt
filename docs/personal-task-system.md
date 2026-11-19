@@ -130,18 +130,34 @@ v3 tree adds the tracker's addressing and execution metadata to the same row:
 | `source` | `tracker` | `tracker` \| `manual` | yes |
 | `description` | `…` | Node: the `done_when` cell; track: the blocker | yes |
 | `links` | `[{ "type": "memory", … }]` | Plugin-side links, see [Links](#links) | no |
+| `tags` | `["投资", "复盘"]` | Manual labels, see [Tags](#tags) | no |
 | `landing` | `invest/strategy-ledger.md` | Repo-relative landing point | no |
 | `estimate` | `2h` | Estimated effort | no |
 | `category` | `A 主攻片` | Slot class | no |
 | `inspiration` | `#21` | Idea-store id | no |
 
-`landing`, `estimate`, `category`, and `inspiration` are plugin-side extensions:
-the tracker's node table has no such columns (they appear on time-grid blocks,
-not tree nodes), so imported nodes start empty and the fields are filled by the
-user or by a decomposition. `links` is likewise never imported.
+`landing`, `estimate`, `category`, `inspiration`, and `tags` are plugin-side
+extensions: the tracker's node table has no such columns (they appear on
+time-grid blocks, not tree nodes), so imported nodes start empty and the fields
+are filled by the user or by a decomposition. `links` is likewise never
+imported, and `tags` are only ever maintained by hand.
 
 The full JSON shape and the writable subset are in
 [api.md](api.md#task-object).
+
+#### Tags
+
+`tags` is a free-form label list for the human working the tree: at most 20
+labels, each a trimmed string of 1–40 characters, with duplicates dropped in
+order. The API accepts it on create/update/split/decompose; the task dialog is
+the manual maintenance surface (type a label, press Enter or **Add**; × removes
+it; the input suggests labels already used in the tree). The Gantt page renders
+each label as a `#tag` chip on the row and offers a tag row under the
+perspective switch: selecting one or more labels keeps tasks carrying any of
+them plus their ancestor path, so a label reads as a cross-cutting view over the
+same tree (the status perspective narrows the same set further). The selection
+is part of the page state (`gantt.pageState`, record v3), so it survives a
+reload. Tags never roll up to parents and never affect status or progress.
 
 ### State vocabulary and the status mapping
 
@@ -645,7 +661,7 @@ in play, derived integrity warnings, block stats, and the daily 该动 report as
   `tracks[].ref` is `track:<n>`, `nodes[].id` is the node task id, and
   `nodes[].trackId` is the parent track's task id. The snapshot fields the page
   rendered before remain on nodes, plus `ref`, `state`, `kind`, `landing`,
-  `estimate`, `category`, `inspiration`, and `links`.
+  `estimate`, `category`, `inspiration`, `links`, and `tags`.
 - Integrity warnings are advisory, computed at read time, and never stored:
 
 | Code | Rule it encodes | Source |
@@ -685,8 +701,10 @@ semantics that make the tree readable:
   and advances on the next import (this data rule replaces the tracker's hatch);
 - the lane and raw tracker state are chips on the track row, and node rows carry
   the metadata chips for state, `doneWhen`, landing point, estimate, category,
-  inspiration, and links (the tracker colours a lane; the plugin keeps the lane
-  as data and a chip);
+  inspiration, links, and tags (the tracker colours a lane; the plugin keeps the
+  lane as data and a chip);
+- a tag row under the perspective switch: tags are manual labels, and selecting
+  any of them keeps the tasks that carry one plus their ancestor path;
 - a depth zoom (all nodes, two levels, one level) that mirrors the tracker
   page's depth-limited views.
 

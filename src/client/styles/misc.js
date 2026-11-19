@@ -37,6 +37,27 @@ export const CSS_MISC = `
   .gantt-filter-label { font-size: 11px; color: var(--gantt-muted); }
   .gantt-filter-count { font-size: 11px; color: var(--gantt-muted); font-variant-numeric: tabular-nums; }
   .gantt-filter-recompute { margin-left: auto; }
+  .gantt-tag-options { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
+  .gantt-tag-option {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid var(--gantt-line);
+    background: transparent;
+    color: var(--gantt-muted);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .gantt-tag-option:hover { color: var(--gantt-text); border-color: var(--gantt-line-strong); }
+  .gantt-tag-option[data-active="true"] {
+    color: var(--gantt-accent);
+    border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--gantt-accent) 14%, transparent);
+    font-weight: 600;
+  }
+  .gantt-tag-clear { margin-left: auto; height: 26px; }
   .gantt-filter-empty {
     flex: 1;
     display: flex;

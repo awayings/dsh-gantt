@@ -17,12 +17,14 @@ const MAX_TITLE = 200
 const MAX_DESCRIPTION = 4000
 const MAX_REPORT = 4000
 const MAX_AGENT_REF = 100
+const MAX_TAGS = 20
+const MAX_TAG_LENGTH = 40
 
-const TASK_COLUMNS = 'id, parent_id AS parentId, title, description, status, progress, start_date AS startDate, end_date AS endDate, sort_order AS sortOrder, created_at AS createdAt, updated_at AS updatedAt, kind, ref, state, lane, dep, done_when AS doneWhen, landing, estimate, category, inspiration, links, source, operator_id AS operatorId, completed_by_id AS completedById, report'
+const TASK_COLUMNS = 'id, parent_id AS parentId, title, description, status, progress, start_date AS startDate, end_date AS endDate, sort_order AS sortOrder, created_at AS createdAt, updated_at AS updatedAt, kind, ref, state, lane, dep, done_when AS doneWhen, landing, estimate, category, inspiration, links, tags, source, operator_id AS operatorId, completed_by_id AS completedById, report'
 export const TASK_SELECT = `SELECT ${TASK_COLUMNS} FROM tasks`
-export const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description, status, progress, start_date, end_date, sort_order, kind, ref, state, lane, dep, done_when, landing, estimate, category, inspiration, links, source, operator_id, completed_by_id, report, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-export const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, source = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
-export const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
+export const INSERT_TASK = 'INSERT INTO tasks (id, parent_id, title, description, status, progress, start_date, end_date, sort_order, kind, ref, state, lane, dep, done_when, landing, estimate, category, inspiration, links, tags, source, operator_id, completed_by_id, report, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+export const UPDATE_TASK = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, kind = ?, ref = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, tags = ?, source = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
+export const UPDATE_MATERIALIZED = 'UPDATE tasks SET parent_id = ?, title = ?, description = ?, status = ?, progress = ?, start_date = ?, end_date = ?, sort_order = ?, state = ?, lane = ?, dep = ?, done_when = ?, landing = ?, estimate = ?, category = ?, inspiration = ?, links = ?, tags = ?, operator_id = ?, completed_by_id = ?, report = ?, updated_at = ? WHERE id = ?'
 
 /** Recorded trajectory actions; the closed vocabulary of `task_events.action`. */
 export const EVENT_ACTIONS = /** @type {const} */ (['create', 'update', 'complete', 'decompose', 'track'])
@@ -46,26 +48,26 @@ export const SEED_TASKS = [
 /** @typedef {{ title?: unknown, description?: unknown, startDate?: unknown, endDate?: unknown,
  * status?: unknown, progress?: unknown, lane?: unknown, dep?: unknown, doneWhen?: unknown,
  * landing?: unknown, estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown,
- * plan?: PlanDraftInput }} DecomposeChildInput */
+ * tags?: unknown, plan?: PlanDraftInput }} DecomposeChildInput */
 /** @typedef {{ parentId: string | null, title: string, description: string, status: TaskStatus,
  * progress: number, startDate: string, endDate: string, sortOrder: number, kind: TaskKind, ref: string,
  * state: string, lane: string, dep: string, doneWhen: string, landing: string, estimate: string,
- * category: string, inspiration: string, links: TaskLink[], source: string, operatorId: string,
- * completedById: string, report: string }} TaskInsert */
+ * category: string, inspiration: string, links: TaskLink[], tags: string[], source: string,
+ * operatorId: string, completedById: string, report: string }} TaskInsert */
 /** Task fields accepted by create(). @typedef {{ title?: unknown, description?: unknown,
  * parentId?: unknown, status?: unknown, progress?: unknown, startDate?: unknown, endDate?: unknown,
  * kind?: unknown, ref?: unknown, lane?: unknown, dep?: unknown, doneWhen?: unknown, landing?: unknown,
- * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, operatorId?: unknown,
- * completedById?: unknown, report?: unknown }} TaskInput */
+ * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, tags?: unknown,
+ * operatorId?: unknown, completedById?: unknown, report?: unknown }} TaskInput */
 /** Task fields accepted by update(); kind and ref are ignored. @typedef {{ title?: unknown,
  * description?: unknown, parentId?: unknown, status?: unknown, progress?: unknown, startDate?: unknown,
  * endDate?: unknown, lane?: unknown, dep?: unknown, doneWhen?: unknown, landing?: unknown,
- * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, operatorId?: unknown,
- * completedById?: unknown, report?: unknown }} TaskPatch */
+ * estimate?: unknown, category?: unknown, inspiration?: unknown, links?: unknown, tags?: unknown,
+ * operatorId?: unknown, completedById?: unknown, report?: unknown }} TaskPatch */
 /** One child task accepted by split(). @typedef {{ title: unknown, description?: unknown,
  * status?: unknown, progress?: unknown, startDate?: unknown, endDate?: unknown, lane?: unknown,
  * dep?: unknown, doneWhen?: unknown, landing?: unknown, estimate?: unknown, category?: unknown,
- * inspiration?: unknown, links?: unknown }} SplitChild */
+ * inspiration?: unknown, links?: unknown, tags?: unknown }} SplitChild */
 
 /** @param {unknown} value @param {string} field @returns {string} */
 export function assertDate(value, field) {
@@ -180,6 +182,43 @@ export function normalizeExtras(source, prefix = '') {
   for (const field of TEXT_FIELDS) extras[field] = source[field] === undefined ? '' : textField(source[field], `${prefix}${field}`)
   return extras
 }
+/** Validate a tags array: trimmed strings, at most 20 entries of at most 40
+ * characters each; duplicates are dropped keeping the first occurrence order.
+ * @param {unknown} value @returns {string[]} */
+export function normalizeTags(value) {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new GanttError('tags must be an array')
+  if (value.length > MAX_TAGS) throw new GanttError(`tags must have at most ${MAX_TAGS} entries`)
+  /** @type {string[]} */
+  const tags = []
+  /** @type {Set<string>} */
+  const seen = new Set()
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index]
+    if (typeof item !== 'string') throw new GanttError(`tags[${index}] must be a string`)
+    const tag = item.trim()
+    if (tag === '') throw new GanttError(`tags[${index}] must not be empty`)
+    if ([...tag].length > MAX_TAG_LENGTH) throw new GanttError(`tags[${index}] must be at most ${MAX_TAG_LENGTH} characters`)
+    if (seen.has(tag)) continue
+    seen.add(tag)
+    tags.push(tag)
+  }
+  return tags
+}
+
+/** Parse the stored JSON tags column, degrading corrupt or legacy values to `[]`.
+ * @param {unknown} raw @returns {string[]} */
+export function parseTagsJson(raw) {
+  if (typeof raw !== 'string' || raw === '') return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(tag => typeof tag === 'string')
+  } catch {
+    return []
+  }
+}
+
 /** @param {unknown} value @returns {TaskKind} */
 export function normalizeKind(value) {
   if (value === undefined) return 'task'

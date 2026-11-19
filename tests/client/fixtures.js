@@ -23,6 +23,7 @@ function task(fields) {
     category: '',
     inspiration: '',
     links: [],
+    tags: [],
     source: 'manual',
     workSessionId: null,
     operatorId: '',
@@ -61,6 +62,7 @@ export function makeTree() {
           operatorId: 'a1',
           completedById: 'a2',
           report: 'Spec written and reviewed.\nVerified with tests/client/dialogs.spec.js.',
+          tags: ['docs', 'urgent'],
           children: [],
         }),
         task({
@@ -394,6 +396,10 @@ export function makeFilterTree() {
     doneWhen: '实验可复现',
   })]
   tree[1].hasChildren = true
+  tree[0].children[0].tags = ['backend']
+  tree[0].children[1].tags = ['invest']
+  tree[0].children[1].children[0].tags = ['invest', 'urgent']
+  tree[1].children[0].tags = ['life']
   tree.push(task({
     id: 't3',
     number: '3',
@@ -492,6 +498,7 @@ export function mutationTask(overrides = {}) {
     parentId: 'p2',
     hasChildren: false,
     children: [],
+    tags: [],
     ...overrides,
   }
 }

@@ -13,7 +13,7 @@ import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
 import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
 import { startScheduler } from './scheduler.js'
-import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeAgentRef, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeReport, normalizeStatus, normalizeTitle, oneOf, statusFromProgress, textField, textValue } from './tasks.js'
+import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeAgentRef, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeReport, normalizeStatus, normalizeTags, normalizeTitle, oneOf, parseTagsJson, statusFromProgress, textField, textValue } from './tasks.js'
 
 /** @typedef {import('./agents.js').AgentFilter} AgentFilter */
 /** @typedef {import('./agents.js').AgentInput} AgentInput */
@@ -124,6 +124,7 @@ export class GanttStore {
     return rows.map(row => ({
       ...row,
       links: parseLinksJson(row.links),
+      tags: parseTagsJson(row.tags),
       workSessionId: workSessions.get(row.id) ?? null,
     }))
   }
@@ -265,8 +266,8 @@ export class GanttStore {
       id, fields.parentId, fields.title, fields.description, fields.status, fields.progress,
       fields.startDate, fields.endDate, fields.sortOrder, fields.kind, fields.ref, fields.state,
       fields.lane, fields.dep, fields.doneWhen, fields.landing, fields.estimate, fields.category,
-      fields.inspiration, JSON.stringify(fields.links), fields.source, fields.operatorId,
-      fields.completedById, fields.report, now, now,
+      fields.inspiration, JSON.stringify(fields.links), JSON.stringify(fields.tags), fields.source,
+      fields.operatorId, fields.completedById, fields.report, now, now,
     )
     return id
   }
@@ -303,7 +304,7 @@ export class GanttStore {
    * @param {TaskInput} input @returns {{ title: string, description: string, status: TaskStatus,
    * progress: number, startDate: string, endDate: string, lane: string, dep: string, doneWhen: string,
    * landing: string, estimate: string, category: string, inspiration: string, links: TaskLink[],
-   * operatorId: string, completedById: string, report: string }} */
+   * tags: string[], operatorId: string, completedById: string, report: string }} */
   normalizeCreateFields(input) {
     const title = normalizeTitle(input.title)
     const description = normalizeDescription(input.description)
@@ -321,6 +322,7 @@ export class GanttStore {
       endDate,
       ...normalizeExtras(input),
       links: this.normalizeLinks(input.links),
+      tags: normalizeTags(input.tags),
       operatorId: normalizeAgentRef(input.operatorId, 'operatorId'),
       completedById: normalizeAgentRef(input.completedById, 'completedById'),
       report: normalizeReport(input.report),
@@ -368,6 +370,7 @@ export class GanttStore {
     assertRange(next.startDate, next.endDate)
     for (const field of TEXT_FIELDS) if (patch[field] !== undefined) next[field] = textField(patch[field], field)
     if (patch.links !== undefined) next.links = this.normalizeLinks(patch.links)
+    if (patch.tags !== undefined) next.tags = normalizeTags(patch.tags)
     if (patch.operatorId !== undefined) next.operatorId = normalizeAgentRef(patch.operatorId, 'operatorId')
     if (patch.completedById !== undefined) next.completedById = normalizeAgentRef(patch.completedById, 'completedById')
     if (patch.report !== undefined) next.report = normalizeReport(patch.report)
@@ -394,8 +397,8 @@ export class GanttStore {
       this.db.prepare(UPDATE_TASK).run(
         next.parentId, next.title, next.description, next.status, next.progress, next.startDate, next.endDate,
         next.sortOrder, next.kind, next.ref, next.state, next.lane, next.dep, next.doneWhen, next.landing,
-        next.estimate, next.category, next.inspiration, JSON.stringify(next.links), next.source,
-        next.operatorId, next.completedById, next.report, now, id,
+        next.estimate, next.category, next.inspiration, JSON.stringify(next.links), JSON.stringify(next.tags),
+        next.source, next.operatorId, next.completedById, next.report, now, id,
       )
       this.recomputeAncestors(row.parentId)
       if (next.parentId !== row.parentId) this.recomputeAncestors(next.parentId)
@@ -423,7 +426,7 @@ export class GanttStore {
       const startDate = assertDate(child.startDate ?? parent.startDate, `children[${index}].startDate`)
       const endDate = assertDate(child.endDate ?? parent.endDate, `children[${index}].endDate`)
       assertRange(startDate, endDate)
-      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ref: '', ...normalizeExtras(child), links: this.normalizeLinks(child.links) }
+      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ref: '', ...normalizeExtras(child), links: this.normalizeLinks(child.links), tags: normalizeTags(child.tags) }
     })
     /** @type {string[]} */
     const created = []
@@ -464,7 +467,7 @@ export class GanttStore {
     const ids = []
     this.transaction(() => {
       for (const [parent, title, description, status, progress, startOffset, endOffset, sortOrder] of SEED_TASKS) {
-        ids.push(this.insertTask({ parentId: parent === null ? null : ids[parent], title, description, status, progress, startDate: addDays(today, startOffset), endDate: addDays(today, endOffset), sortOrder, kind: 'task', ref: '', state: '', lane: '', dep: '', doneWhen: '', landing: '', estimate: '', category: '', inspiration: '', links: [], source: 'manual', operatorId: '', completedById: '', report: '' }))
+        ids.push(this.insertTask({ parentId: parent === null ? null : ids[parent], title, description, status, progress, startDate: addDays(today, startOffset), endDate: addDays(today, endOffset), sortOrder, kind: 'task', ref: '', state: '', lane: '', dep: '', doneWhen: '', landing: '', estimate: '', category: '', inspiration: '', links: [], tags: [], source: 'manual', operatorId: '', completedById: '', report: '' }))
       }
     })
     return { seeded: true, taskCount: ids.length }
@@ -493,7 +496,7 @@ export class GanttStore {
       insert.run(id, draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
         draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
         draft.kind, draft.ref, draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing,
-        draft.estimate, draft.category, draft.inspiration, JSON.stringify(draft.links), draft.source,
+        draft.estimate, draft.category, draft.inspiration, JSON.stringify(draft.links), '[]', draft.source,
         '', '', '', now, now)
       idByRef.set(draft.ref, id)
     }
@@ -502,8 +505,8 @@ export class GanttStore {
       update.run(draft.parentRef === null ? null : /** @type {string} */ (idByRef.get(draft.parentRef)), draft.title,
         draft.description, draft.status, draft.progress, draft.startDate, draft.endDate, draft.sortOrder,
         draft.state, draft.lane, draft.dep, draft.doneWhen, draft.landing, draft.estimate, draft.category,
-        draft.inspiration, JSON.stringify(draft.links), previous.operatorId, previous.completedById,
-        previous.report, now, draft.id)
+        draft.inspiration, JSON.stringify(draft.links), JSON.stringify(previous.tags),
+        previous.operatorId, previous.completedById, previous.report, now, draft.id)
     }
     for (const id of deletes) remove.run(id)
     return { inserted: inserts.length, updated: updates.length, removed: deletes.length }
@@ -560,14 +563,14 @@ export class GanttStore {
       const startDate = assertDate(child.startDate ?? fallbackDate ?? parent.startDate, `children[${index}].startDate`)
       const endDate = assertDate(child.endDate ?? (fallbackDate === null ? parent.endDate : addDays(startDate, 3)), `children[${index}].endDate`)
       assertRange(startDate, endDate)
-      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ...normalizeExtras(child, `children[${index}].`), links: this.normalizeLinks(child.links), plan: child.plan === undefined ? null : normalizePlanDraft(child.plan, index) }
+      return { title: normalizeTitle(child.title), description: normalizeDescription(child.description), status, progress: child.progress === undefined ? defaultProgress(status) : normalizeProgress(child.progress), startDate, endDate, ...normalizeExtras(child, `children[${index}].`), links: this.normalizeLinks(child.links), tags: normalizeTags(child.tags), plan: child.plan === undefined ? null : normalizePlanDraft(child.plan, index) }
     })
     const result = this.transaction(() => {
       const base = this.nextSortOrder(id)
       /** @type {string[]} */
       const blockIds = []
       const childIds = normalized.map((child, index) => {
-        const childId = this.insertTask({ parentId: id, title: child.title, description: child.description, status: child.status, progress: child.progress, startDate: child.startDate, endDate: child.endDate, sortOrder: base + index, kind: 'task', ref: '', state: '', lane: child.lane, dep: child.dep, doneWhen: child.doneWhen, landing: child.landing, estimate: child.estimate, category: child.category, inspiration: child.inspiration, links: child.links, source: 'manual', operatorId: '', completedById: '', report: '' })
+        const childId = this.insertTask({ parentId: id, title: child.title, description: child.description, status: child.status, progress: child.progress, startDate: child.startDate, endDate: child.endDate, sortOrder: base + index, kind: 'task', ref: '', state: '', lane: child.lane, dep: child.dep, doneWhen: child.doneWhen, landing: child.landing, estimate: child.estimate, category: child.category, inspiration: child.inspiration, links: child.links, tags: child.tags, source: 'manual', operatorId: '', completedById: '', report: '' })
         if (child.plan !== null) {
           blockIds.push(this.writeTaskBlock(childId, {
             date: child.plan.date,

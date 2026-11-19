@@ -87,6 +87,20 @@ describe('replacePlan', () => {
     expect(store.dayPlan('2026-11-16').nodes.filter(node => node.ref === 'node:1.1')).toEqual([])
   })
 
+  it('preserves tags on re-imported tracker rows', () => {
+    const input = {
+      tracks: [{ id: '1', name: '投资系统' }],
+      nodes: [{ id: '1.1', trackId: '1', title: '节点' }],
+    }
+    store.replacePlan(input)
+    const node = store.tree()[0].children[0]
+    store.update(node.id, { tags: ['invest'] })
+    store.replacePlan(input)
+    const reimported = store.tree()[0].children[0]
+    expect(reimported.id).toBe(node.id)
+    expect(reimported.tags).toEqual(['invest'])
+  })
+
   it('replaces the previous tree instead of appending to it', () => {
     store.replacePlan({ tracks: [{ id: '1', name: '旧支线' }], days: [{ date: '2026-11-15' }] })
     store.replacePlan({ tracks: [{ id: '2', name: '新支线' }] })

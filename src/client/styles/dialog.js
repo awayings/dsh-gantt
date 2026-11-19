@@ -75,6 +75,37 @@ export const CSS_DIALOG = `
     color: var(--dsw-alias-state-error-primary);
     font-size: 12px;
   }
+  .gantt-tag-editor { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .gantt-tag-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+  .gantt-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 2px 3px 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--gantt-accent) 30%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--gantt-accent) 9%, transparent);
+    color: var(--gantt-accent);
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+  .gantt-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gantt-tag-remove {
+    width: 16px; height: 16px;
+    display: grid; place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .gantt-tag-remove:hover { background: color-mix(in srgb, var(--gantt-accent) 18%, transparent); }
+  .gantt-tag-add { display: flex; align-items: center; gap: 6px; }
+  .gantt-tag-add .gantt-input { flex: 1 1 auto; }
   .gantt-writeback {
     display: flex;
     flex-direction: column;

@@ -118,9 +118,9 @@ The CLI resolves the database exactly like the host plugin:
 3. `$DSH_HOME/gantt/tasks.db`, where `DSH_HOME` defaults to `~/.dsh`.
 
 Use a disposable file (`DSH_GANTT_DB=/tmp/gantt-mcp.db`) for experiments so the
-real `$DSH_HOME/gantt/tasks.db` is never touched. The schema is upgraded to v8
-on open, including the `agents` table and the task operator/completer/report
-columns.
+real `$DSH_HOME/gantt/tasks.db` is never touched. The schema is upgraded to v9
+on open, including the `agents` table, the task operator/completer/report
+columns, and the `tags` label column.
 
 ## Tools
 
@@ -428,5 +428,5 @@ DSH session cookie. See [api.md](api.md) for the HTTP shapes and
 - **`-32700` on every line** — the client is sending batched or
   `Content-Length`-framed JSON. Send one newline-delimited object per line.
 - **The schema is old** — reopen the database with the new build; `--db` is
-  upgraded to v8 on open. The real `$DSH_HOME/gantt/tasks.db` is never modified
+  upgraded to v9 on open. The real `$DSH_HOME/gantt/tasks.db` is never modified
   by the test suite.

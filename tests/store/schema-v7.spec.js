@@ -66,7 +66,7 @@ function downgradeToV6(file) {
 describe('schema v7', () => {
   it('creates the widened status vocabulary', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(8)
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(7)
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(() => store.create({ title: 'Dropped', status: 'cancelled' })).not.toThrow()
     expect(() => store.db.prepare(

@@ -137,6 +137,11 @@ export const CSS_GRID = `
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .gantt-row-tag {
+    color: var(--gantt-accent);
+    border-color: color-mix(in srgb, var(--gantt-accent) 30%, transparent);
+    background: color-mix(in srgb, var(--gantt-accent) 9%, transparent);
+  }
   .gantt-row-actions { display: flex; align-items: center; gap: 1px; flex: 0 0 auto; }
   .gantt-row-action {
     flex: 0 0 20px;

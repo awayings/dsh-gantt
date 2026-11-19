@@ -7,6 +7,15 @@ import { rowNumber } from '../view.js'
 import { Dialog, Field } from './primitives.js'
 import { h } from '../dom.js'
 
+/** The most tags one task may carry; the server enforces the same cap. */
+const MAX_TAGS = 20
+
+/** The longest tag the dialog accepts, matching the server. */
+const MAX_TAG_LENGTH = 40
+
+/** Id of the datalist that suggests every tag already in the tree. */
+const TAG_SUGGESTIONS_ID = 'gantt-tag-suggestions'
+
 /** One read-only row of the dialog's completion write-back block. */
 function writebackRow(field, label, value, multiline = false) {
   return h('div', { className: 'gantt-writeback-row', 'data-field': field },
@@ -16,7 +25,7 @@ function writebackRow(field, label, value, multiline = false) {
 }
 
 /** Create or edit task dialog. */
-export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, onClose, onSaved, onSplit }) {
+export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, today, t, onClose, onSaved, onSplit }) {
   const hasChildren = Boolean(task && task.hasChildren)
   // A new task starts on its creation day, even under a parent whose range began
   // earlier; only an edit reopens the task's own dates.
@@ -29,6 +38,10 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, on
   const [endDate, setEndDate] = useState(initialEnd)
   const [status, setStatus] = useState(task?.status ?? 'todo')
   const [progress, setProgress] = useState(task?.progress ?? 0)
+  // The dialog owns the tag list until Save; a create starts empty and an edit
+  // reopens the task's own tags.
+  const [tags, setTags] = useState(() => (Array.isArray(task?.tags) ? [...task.tags] : []))
+  const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -68,6 +81,7 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, on
             endDate,
             status,
             progress: Number(progress),
+            tags: [...tags],
           }),
         })
         onSaved(t('notice.created'), result.task.id)
@@ -77,6 +91,7 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, on
           title: cleanTitle,
           description,
           parentId: parent || null,
+          tags: [...tags],
         }
         if (!hasChildren) {
           body.startDate = startDate
@@ -127,6 +142,17 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, on
     if (value >= 100) setStatus('done')
     else if (value <= 0) setStatus('todo')
     else if (status === 'todo' || status === 'done') setStatus('in_progress')
+  }
+  // An empty, already added or over-the-cap tag is ignored; only a real append
+  // clears the input, so a rejected duplicate stays visible for editing.
+  const addTag = () => {
+    const tag = tagInput.trim()
+    if (tag.length === 0 || tags.includes(tag) || tags.length >= MAX_TAGS) return
+    setTags([...tags, tag])
+    setTagInput('')
+  }
+  const removeTag = (tag) => {
+    setTags(tags.filter(item => item !== tag))
   }
   const parentChoices = parentOptions
   return h(Dialog, {
@@ -246,6 +272,49 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, today, t, on
         disabled: hasChildren,
         onChange: event => changeProgress(event.target.value),
       }),
+    ),
+    h(Field, { label: t('field.tags'), full: true, hint: t('field.tagsHint') },
+      h('div', { className: 'gantt-tag-editor' },
+        tags.length === 0
+          ? null
+          : h('div', { className: 'gantt-tag-list' },
+            tags.map(tag => h('span', { key: tag, className: 'gantt-tag-chip' },
+              h('span', { className: 'gantt-tag-name' }, `#${tag}`),
+              h('button', {
+                className: 'gantt-tag-remove',
+                type: 'button',
+                title: `${t('dialog.removeTag')}: ${tag}`,
+                'aria-label': `${t('dialog.removeTag')}: ${tag}`,
+                onClick: () => removeTag(tag),
+              }, '×'),
+            )),
+          ),
+        h('div', { className: 'gantt-tag-add' },
+          h('input', {
+            className: 'gantt-input gantt-tag-input',
+            type: 'text',
+            value: tagInput,
+            maxLength: MAX_TAG_LENGTH,
+            list: TAG_SUGGESTIONS_ID,
+            placeholder: t('field.tagsPlaceholder'),
+            onChange: event => setTagInput(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key !== 'Enter') return
+              event.preventDefault()
+              addTag()
+            },
+          }),
+          h('button', {
+            className: 'gantt-btn',
+            type: 'button',
+            'data-action': 'add-tag',
+            onClick: addTag,
+          }, t('dialog.addTag')),
+        ),
+        h('datalist', { id: TAG_SUGGESTIONS_ID },
+          allTags.map(tag => h('option', { key: tag, value: tag })),
+        ),
+      ),
     ),
   ),
   writebackTask

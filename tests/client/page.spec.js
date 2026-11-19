@@ -341,6 +341,21 @@ describe('tree rendering', () => {
     expect(text(view.container, '.gantt-stat-progress')).toContain('Completion 45%')
   })
 
+  it('renders task tags as #chips in the metadata row and tolerates a malformed value', async () => {
+    const { view } = await renderPage({})
+    const chips = qa(row(view.container, '1.1 Write spec'), '.gantt-row-tag')
+
+    expect(chips.map(chip => chip.textContent)).toEqual(['#docs', '#urgent'])
+    expect(chips[0].className).toContain('gantt-row-chip')
+    expect(chips[0].getAttribute('title')).toBe('Tags: docs')
+    expect(qa(row(view.container, '1 Release 2.0'), '.gantt-row-tag')).toHaveLength(0)
+
+    const malformed = treePayload()
+    malformed.tasks[0].children[0].tags = 'docs'
+    const { view: broken } = await renderPage({ [TREE]: () => jsonResponse(malformed) })
+    expect(qa(broken.container, '.gantt-row-tag')).toHaveLength(0)
+  })
+
   it('never renders rows for tasks hidden by the window (bar range null)', async () => {
     const { view } = await renderPage({})
     expect(row(view.container, '3 Later')).not.toBeNull()
@@ -590,6 +605,10 @@ describe('task filter', () => {
     return qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))
   }
 
+  function tagButton(view, tag) {
+    return q(view.container, `.gantt-tag-filter [data-tag="${tag}"]`)
+  }
+
   it('offers the perspective views and starts on All', async () => {
     const { view } = await renderFiltered()
 
@@ -833,6 +852,108 @@ describe('task filter', () => {
     expect(text(view.container, '.gantt-toast')).toBe('Frontier and next recomputed')
     expect(button.disabled).toBe(false)
     expect(button.textContent).toBe('Recompute frontier and next')
+  })
+
+  it('renders a tag row with usage counts only when the tree has tags', async () => {
+    const { view } = await renderFiltered()
+
+    expect(qa(view.container, '.gantt-tag-filter [data-tag]').map(button => button.getAttribute('data-tag')))
+      .toEqual(['backend', 'invest', 'urgent', 'life'])
+    expect(qa(view.container, '.gantt-tag-filter [data-tag]').map(button => button.textContent))
+      .toEqual(['backend (1)', 'invest (2)', 'urgent (1)', 'life (1)'])
+    expect(tagButton(view, 'invest').getAttribute('data-active')).toBeNull()
+    expect(tagButton(view, 'invest').getAttribute('aria-pressed')).toBe('false')
+    expect(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBeNull()
+
+    const tasks = makeFilterTree()
+    const strip = (nodes) => {
+      for (const node of nodes) {
+        node.tags = []
+        strip(node.children ?? [])
+      }
+    }
+    strip(tasks)
+    const { view: plain } = await renderFiltered(filterTreePayload({ tasks }))
+    expect(q(plain.container, '.gantt-tag-filter')).toBeNull()
+  })
+
+  it('keeps matching tasks and their ancestors when a tag is picked', async () => {
+    const { view } = await renderFiltered()
+
+    click(tagButton(view, 'invest'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+    ])
+    expect(tagButton(view, 'invest').getAttribute('data-active')).toBe('true')
+    expect(tagButton(view, 'invest').getAttribute('aria-pressed')).toBe('true')
+    expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
+    expect(text(view.container, '.gantt-corner-sub')).toBe('3 tasks')
+
+    click(tagButton(view, 'invest'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+    expect(text(view.container, '.gantt-filter-count')).toBeNull()
+  })
+
+  it('combines several tags with OR and clears the whole selection', async () => {
+    const { view } = await renderFiltered()
+
+    click(tagButton(view, 'invest'))
+    click(tagButton(view, 'life'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+      '2 生活系统',
+      '2.1 生活实验',
+    ])
+    expect(text(view.container, '.gantt-filter-count')).toBe('3 paths')
+
+    click(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+    expect(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBeNull()
+    expect(tagButton(view, 'invest').getAttribute('data-active')).toBeNull()
+    expect(text(view.container, '.gantt-filter-count')).toBeNull()
+  })
+
+  it('narrows a status perspective with the selected tags and shows the tag empty state', async () => {
+    const { view } = await renderFiltered()
+
+    click(filterButton(view, 'frontier'))
+    click(tagButton(view, 'invest'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+    ])
+    expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
+
+    click(tagButton(view, 'invest'))
+    click(tagButton(view, 'life'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+    expect(q(view.container, '.gantt-body')).toBeNull()
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No task carries the selected tags.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Clear the tag filter, or pick another tag.')
+
+    click(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]'))
+    expect(rowLabels(view)).toEqual([
+      '1 投资系统',
+      '1.8 交易仓',
+      '1.8.4 读数收口',
+    ])
+  })
+
+  it('localizes the tag row and its clear action', async () => {
+    const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
+
+    expect(text(view.container, '.gantt-tag-filter .gantt-filter-label')).toBe('标签')
+    expect(tagButton(view, 'invest').textContent).toBe('invest (2)')
+    click(tagButton(view, 'invest'))
+    expect(text(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBe('清除标签')
+
+    const { view: english } = await renderFiltered()
+    expect(text(english.container, '.gantt-tag-filter .gantt-filter-label')).toBe('Tags')
   })
 
   it('reports a recompute failure in an error toast', async () => {

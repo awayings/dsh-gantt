@@ -55,6 +55,18 @@ describe('POST /api/gantt/tasks', () => {
     expect(missingParent.payload.error).toBe('task ghost was not found')
   })
 
+  it('round-trips tags through the tree and rejects malformed tags', async () => {
+    const { routes } = start()
+    const created = await invoke(routes, ROUTES.tasks, { title: 'Tagged', tags: ['alpha', ' beta '] })
+    expect(created.status).toBe(201)
+    expect(created.payload.task.tags).toEqual(['alpha', 'beta'])
+    const tree = await invoke(routes, ROUTES.tree)
+    expect(tree.payload.tasks[0].tags).toEqual(['alpha', 'beta'])
+    const invalid = await invoke(routes, ROUTES.tasks, { title: 'Bad', tags: 'alpha' })
+    expect(invalid.status).toBe(400)
+    expect(invalid.payload).toEqual({ ok: false, error: 'tags must be an array' })
+  })
+
   it('rejects malformed and non-object JSON bodies', async () => {
     const { routes } = start()
     const malformed = await invoke(routes, ROUTES.tasks, '{oops')
@@ -87,6 +99,25 @@ describe('POST /api/gantt/task/update', () => {
     expect(result.payload.task.startDate).toBe('2024-02-01')
     expect(result.payload.task.progress).toBe(100)
     expect(result.payload.task.status).toBe('done')
+  })
+
+  it('replaces and clears tags with 400 for malformed input', async () => {
+    const { routes } = start()
+    const task = await createTask(routes)
+    expect(task.tags).toEqual([])
+    const tagged = await invoke(routes, ROUTES.update, { id: task.id, tags: ['one', ' two '] })
+    expect(tagged.status).toBe(200)
+    expect(tagged.payload.task.tags).toEqual(['one', 'two'])
+    const kept = await invoke(routes, ROUTES.update, { id: task.id, title: 'Renamed' })
+    expect(kept.payload.task.tags).toEqual(['one', 'two'])
+    const cleared = await invoke(routes, ROUTES.update, { id: task.id, tags: null })
+    expect(cleared.payload.task.tags).toEqual([])
+    const tooMany = await invoke(routes, ROUTES.update, {
+      id: task.id,
+      tags: Array.from({ length: 21 }, (_, index) => `t${index}`),
+    })
+    expect(tooMany.status).toBe(400)
+    expect(tooMany.payload.error).toBe('tags must have at most 20 entries')
   })
 
   it('requires an id', async () => {

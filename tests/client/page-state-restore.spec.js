@@ -80,6 +80,7 @@ function seed(overrides = {}) {
     v: PAGE_STATE_VERSION,
     level: 99,
     filter: 'all',
+    tagFilter: [],
     collapsed: [],
     scrollTop: 0,
     scrollLeft: 0,
@@ -186,6 +187,24 @@ function workTab(view, name) {
 }
 
 describe('restoring a saved view', () => {
+  it('restores and persists the tag filter', async () => {
+    seed({ tagFilter: ['docs'] })
+
+    const { view } = await renderPage()
+
+    const tag = q(view.container, '.gantt-tag-filter [data-tag="docs"]')
+    expect(tag.getAttribute('data-active')).toBe('true')
+    expect(rowLabels(view.container)).toEqual([
+      '1 Release 2.0',
+      '1.1 Write spec',
+    ])
+    expect(stored()).toMatchObject({ tagFilter: ['docs'] })
+
+    click(tag)
+    expect(qa(view.container, '.gantt-row')).toHaveLength(6)
+    expect(stored()).toMatchObject({ tagFilter: [] })
+  })
+
   it('restores the saved depth, filter, folded task and pane offsets', async () => {
     seed({ level: 2, filter: 'unfinished', collapsed: ['p1'], scrollTop: 180, scrollLeft: 24 })
 

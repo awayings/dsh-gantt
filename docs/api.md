@@ -13,14 +13,14 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 8: one working tree in `tasks` (track roots, imported
+- The schema is version 9: one working tree in `tasks` (track roots, imported
   nodes, decomposed and manual tasks), the persisted daily brief report,
   per-conversation `focus` rows, the append-only `task_events` trajectory, the
-  `work_sessions` mapping from a task to its dedicated main conversation, and
-  the `agents` operator registry. The domain model is in
-  [personal-task-system.md](personal-task-system.md); the migration in
-  [compatibility.md](compatibility.md) and
-  [development.md](development.md#schema-version-8-one-working-tree-plus-reports-trajectory-work-sessions-and-agents).
+  `work_sessions` mapping from a task to its dedicated main conversation, the
+  `agents` operator registry, and each task's `tags` label array. The domain
+  model is in [personal-task-system.md](personal-task-system.md); the migration
+  in [compatibility.md](compatibility.md) and
+  [development.md](development.md#schema-version-9-one-working-tree-plus-reports-trajectory-work-sessions-agents-and-tags).
 
 Base URL: the origin printed by your own `dsh web` launch, for example
 `http://127.0.0.1:3080`.
@@ -43,10 +43,10 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 | `GET` | `/api/gantt/work/skills` | — | `200 { ok, available, skills }` |
 | `GET` | `/api/gantt/work/team` | `?sessionId=<id>` | `200 { ok, available, agents }` |
 | `GET` | `/api/gantt/meta` | — | `200` database path, statuses, kinds, link types, endpoint catalog |
-| `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `201` created task |
-| `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }` | `200` updated task |
+| `POST` | `/api/gantt/tasks` | `{ title, parentId?, startDate?, endDate?, status?, progress?, description?, kind?, ref?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links?, tags? }` | `201` created task |
+| `POST` | `/api/gantt/task/update` | `{ id, title?, description?, parentId?, startDate?, endDate?, status?, progress?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links?, tags? }` (`tags: null` clears) | `200` updated task |
 | `POST` | `/api/gantt/task/status` | `{ id, status, progress? }` | `200` updated task |
-| `POST` | `/api/gantt/task/split` | `{ id, children: [{ title, startDate?, endDate?, status?, progress?, description?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links? }] }` | `200` parent + created children |
+| `POST` | `/api/gantt/task/split` | `{ id, children: [{ title, startDate?, endDate?, status?, progress?, description?, lane?, dep?, doneWhen?, landing?, estimate?, category?, inspiration?, links?, tags? }] }` | `200` parent + created children |
 | `POST` | `/api/gantt/task/decompose` | `{ id, planDate?, children: [...] }` (see [Decompose](#decompose-a-node)) | `200` parent, children, created plan blocks |
 | `POST` | `/api/gantt/task/schedule` | `{ id, date, startTime?, endTime?, slot?, category?, landing?, estimate?, inspiration?, detail? }` | `200` task + plan block |
 | `POST` | `/api/gantt/task/delete` | `{ id }` | `200` deleted id + its former parent |
@@ -127,6 +127,11 @@ share the `agents` table. The plugin itself never calls a model.
   `note`; `ref` is 1–500 characters; `label` is optional and at most 120
   characters. A non-array value, an unknown type, or an over-long field is a
   `400`. `update` replaces the whole array.
+- **Tags** is an array of at most 20 labels. Each label is a trimmed string of
+  1–40 characters; duplicates are dropped keeping the first occurrence. Imported
+  rows start with `[]`; the UI edits tags in the task dialog and filters the
+  tree by any selected tag plus its ancestor path. `update` replaces the whole
+  array, and `null` clears it.
 - **Plan status** is one of `todo`, `in_progress`, `done`, `skipped` — the
   vocabulary of a *plan block* (a time slot on a day), not of a task.
 - **Plan slot** is one of `morning` (starts before `10:00`), `daytime` (starts
@@ -156,6 +161,7 @@ on read.
   "category": "",
   "inspiration": "",
   "links": [],
+  "tags": ["投资", "复盘"],
   "source": "tracker",
   "operatorId": "",
   "completedById": "",
@@ -191,6 +197,7 @@ on read.
 | `category` | string | slot class; writable |
 | `inspiration` | string | idea-store id; writable |
 | `links` | array | `{ type, ref, label? }`; writable, replaced as a whole |
+| `tags` | string[] | manual labels, at most 20 entries of 1–40 characters; writable, replaced as a whole |
 | `source` | string | `tracker` \| `manual`; read-only |
 | `operatorId` | string | agent id that first took the task; written by `report_completion`, empty when unclaimed |
 | `completedById` | string | agent id that most recently reported completion; empty when never reported |
@@ -780,7 +787,7 @@ curl -s http://127.0.0.1:3080/api/gantt/meta
   "statuses": ["todo", "in_progress", "blocked", "done", "cancelled"],
   "kinds": ["track", "node", "task"],
   "linkTypes": ["memory", "file", "url", "task", "note"],
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "taskCount": 54,
   "engine": "node:sqlite",
   "endpoints": [
@@ -844,6 +851,7 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/task/update \
 - `id` is required; every other field is optional. Unknown fields are ignored.
 - `ref` and `kind` are not writable here; a supplied `ref` is ignored.
 - `links`, when supplied, replaces the array as a whole.
+- `tags`, when supplied, replaces the label array as a whole; `null` clears it.
 - `parentId: null` (or `""`) moves the task to the root. Moving a task under one
   of its own descendants, or under itself, is rejected.
 - A move re-numbers both affected branches and appends the task after its new
@@ -900,7 +908,7 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/task/split \
 - Each child's `title` is required; dates default to the parent's date range;
   `status` defaults to `todo`; `progress` defaults from the status.
 - Children accept the metadata fields (`lane`, `dep`, `doneWhen`, `landing`,
-  `estimate`, `category`, `inspiration`, `links`) but not `kind`/`ref`.
+  `estimate`, `category`, `inspiration`, `links`, `tags`) but not `kind`/`ref`.
 - Children are appended after any existing children; the parent's range,
   progress, and status roll up from all of them, and ancestor rollups are
   recomputed.
@@ -962,7 +970,7 @@ Request fields:
 | `children[].endDate` | no | `startDate + 3 days`; without `planDate`, the parent's end |
 | `children[].status` | no | `todo` |
 | `children[].progress` | no | from the status |
-| `children[].doneWhen`, `landing`, `dep`, `estimate`, `category`, `inspiration`, `links` | no | empty / `[]` |
+| `children[].doneWhen`, `landing`, `dep`, `estimate`, `category`, `inspiration`, `links`, `tags` | no | empty / `[]` |
 | `children[].plan` | no | no block is created |
 | `children[].plan.date` | yes, when `plan` is given | — |
 | `children[].plan.startTime`, `endTime` | no | `''` |
@@ -1213,9 +1221,9 @@ block stats, and the daily 该动 report as `brief`.
   `nodes[].id` is the node task id. The node list is capped at 12 rows and
   sorted by start date. The shapes are backward compatible with the v2 bundle
   plus the fields shown above. Imported nodes carry `state`, `lane`, `dep`, and
-  `doneWhen`; `landing`, `estimate`, `category`, `inspiration`, and `links` are
-  plugin-side fields and are empty until annotated through an update or a
-  decomposition.
+  `doneWhen`; `landing`, `estimate`, `category`, `inspiration`, `links`, and
+  `tags` are plugin-side fields and are empty until annotated through an update
+  or a decomposition.
 - `brief` is the daily 该动 report for that date (the same object as the
   `GET /api/gantt/brief` response's `brief`); only today's report is persisted,
   so a past or future date returns a freshly computed report that is not stored.
@@ -1443,6 +1451,7 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | body is not a JSON object | `request body must be a JSON object` |
 | `400` | missing/invalid field | `title is required`, `status must be one of todo, in_progress, blocked, done, cancelled`, `endDate must not be before startDate` |
 | `400` | invalid links | `links must be an array`, `links[0].type must be one of memory, file, url, task, note` |
+| `400` | invalid tags | `tags must be an array`, `tags[0] must be a string`, `tags[0] must not be empty`, `tags must have at most 20 entries` |
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |
 | `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |

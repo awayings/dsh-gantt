@@ -154,8 +154,8 @@ DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 08:00 brief recompute; it defaults to `Asia/Shanghai` (this deployment's host
 process runs in UTC). An invalid IANA zone falls back to the default.
 
-The schema is created on first activation and upgraded in place; a v2–v7
-database is migrated to schema version 8 on open (the append-only migration,
+The schema is created on first activation and upgraded in place; a v2–v8
+database is migrated to schema version 9 on open (the append-only migration,
 the one-time tree backfill for v2, and the
 `daily_briefs`/`focus`/`task_events`/`work_sessions`/agent additions are in
 [docs/compatibility.md](docs/compatibility.md)). Dates are `YYYY-MM-DD` in the
@@ -166,7 +166,7 @@ Schema version 6 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
 manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
 `lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
-and the plugin's `links`; `(kind, ref)` is unique for imported rows. The
+and the plugin's `links` and `tags`; `(kind, ref)` is unique for imported rows. The
 `tracks`/`nodes` tables remain as import snapshots and idempotency keys, and
 `plan_blocks`/`day_plans` hold the time grid. The `daily_briefs` table stores
 one report per date: a deterministic, persisted snapshot of today's windows and

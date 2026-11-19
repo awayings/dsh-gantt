@@ -166,6 +166,17 @@ describe('decompose', () => {
     expect(store.count()).toBe(1)
   })
 
+  it('passes tags to the decomposed children and validates them', () => {
+    const parent = store.create({ title: 'Parent' })
+    const result = store.decompose(parent.id, [
+      { title: 'Tagged', tags: ['alpha', ' alpha '] },
+      { title: 'Plain' },
+    ])
+    expect(result.children[0].tags).toEqual(['alpha'])
+    expect(result.children[1].tags).toEqual([])
+    expectGanttError(() => store.decompose(parent.id, [{ title: 'c', tags: ['ok', 7] }]), 'tags[1] must be a string')
+  })
+
   it('rolls parent and ancestor rollups up after the children are created', () => {
     const parent = store.create({ title: 'Parent', startDate: '2024-01-01', endDate: '2024-01-31', status: 'in_progress', progress: 40, kind: 'track' })
     store.decompose(parent.id, [
