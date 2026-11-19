@@ -9,6 +9,7 @@ import { SplitDialog } from '../dialogs/split.js'
 import { TaskDialog } from '../dialogs/task.js'
 import { requestJson, useGanttData, useLocale } from '../hooks.js'
 import { GanttGlyph, InfoGlyph } from '../icons.js'
+import { PRESET_LABELS, presetLabel, tagLabel } from '../label-filter.js'
 import { readPageState, writePageState } from '../page-state.js'
 import { GanttRow, GridLines, TimelineHeader } from '../rows.js'
 import { CSS } from '../styles/index.js'
@@ -40,8 +41,8 @@ export function GanttPage({ ctx }) {
   const [anchor, setAnchor] = useState(() => saved?.anchor ?? todayIso())
   const [collapsed, setCollapsed] = useState(() => new Set(saved?.collapsed ?? []))
   const [level, setLevel] = useState(() => saved?.level ?? 99)
-  const [filter, setFilter] = useState(() => saved?.filter ?? 'all')
-  const [tagFilter, setTagFilter] = useState(() => new Set(saved?.tagFilter ?? []))
+  // The one filter selection: encoded preset and tag labels, emptied by "All".
+  const [labels, setLabels] = useState(() => new Set(saved?.labels ?? []))
   const [recomputing, setRecomputing] = useState(false)
   const [selectedId, setSelectedId] = useState(() => saved?.selectedId ?? null)
   const [focusId, setFocusId] = useState(null)
@@ -64,15 +65,14 @@ export function GanttPage({ ctx }) {
   // The whole persisted view lives in one ref so the debounced scroll write and
   // every state-driven write persist the same complete record.
   const viewRef = useRef({
-    level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    level, labels, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
   })
   const writePageStateNow = useCallback(() => {
     const view = viewRef.current
     const { top, left } = scrollRef.current
     writePageState({
       level: view.level,
-      filter: view.filter,
-      tagFilter: [...view.tagFilter],
+      labels: [...view.labels],
       collapsed: [...view.collapsed],
       scrollTop: top,
       scrollLeft: left,
@@ -86,11 +86,11 @@ export function GanttPage({ ctx }) {
   }, [])
   useEffect(() => {
     viewRef.current = {
-      level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+      level, labels, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
     }
     writePageStateNow()
   }, [
-    level, filter, tagFilter, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
+    level, labels, collapsed, scale, anchor, selectedId, panelTaskId, panelTab, workMode,
     writePageStateNow,
   ])
   // A hide or an entry swap never waits for a debounce timer, so the latest
@@ -148,18 +148,21 @@ export function GanttPage({ ctx }) {
   const dailyBrief = data?.dailyBrief ?? null
   const allTasks = useMemo(() => flattenTree(tasks), [tasks])
   const byId = useMemo(() => new Map(allTasks.map(task => [task.id, task])), [allTasks])
-  // Label statistics drive both the tag filter row and the dialog suggestions;
-  // tree order keeps them stable between renders and refreshes.
-  const tagStats = useMemo(() => {
-    const counts = new Map()
+  // The tag filter row and the dialog suggestions read the same index; tree
+  // order keeps both stable between renders and refreshes.
+  const tagIdsByName = useMemo(() => {
+    const ids = new Map()
     for (const task of allTasks) {
       for (const tag of Array.isArray(task.tags) ? task.tags : []) {
-        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+        if (!ids.has(tag)) ids.set(tag, new Set())
+        ids.get(tag).add(task.id)
       }
     }
-    return [...counts.entries()]
+    return ids
   }, [allTasks])
-  const allTags = useMemo(() => tagStats.map(([tag]) => tag), [tagStats])
+  /** @type {[string, number][]} */
+  const tagStats = useMemo(() => [...tagIdsByName].map(([tag, ids]) => [tag, ids.size]), [tagIdsByName])
+  const allTags = useMemo(() => [...tagIdsByName.keys()], [tagIdsByName])
   const options = useMemo(() => taskOptions(tasks), [tasks])
   const frontierIds = useMemo(() => {
     const ids = new Set()
@@ -192,32 +195,30 @@ export function GanttPage({ ctx }) {
     }
     return activities
   }, [allTasks, statuses])
-  const filterIds = useMemo(() => {
-    if (filter === 'unfinished') return unfinishedIds
-    if (filter === 'active') return new Set(activityByTask.keys())
-    if (filter === 'frontier') return frontierIds
-    if (filter === 'next') return nextIds
-    if (filter === 'today') return todayIds
-    if (filter === 'done') return doneIds
-    return null
-  }, [filter, unfinishedIds, frontierIds, nextIds, todayIds, doneIds, activityByTask])
-  // The tag filter is one more perspective over the same tree: selecting any
-  // tag keeps the tasks that carry one of them (OR), and the status
-  // perspective narrows that set further (AND).
-  const tagIds = useMemo(() => {
-    if (tagFilter.size === 0) return null
+  // Every label expands to the task ids it covers: a predefined one to its
+  // status/perspective set, an artificial one to the tasks that carry the tag.
+  // The selected labels are OR-ed (a union), and no selection means no filter.
+  const presetIds = useMemo(() => ({
+    unfinished: unfinishedIds,
+    active: new Set(activityByTask.keys()),
+    frontier: frontierIds,
+    next: nextIds,
+    today: todayIds,
+    done: doneIds,
+  }), [unfinishedIds, activityByTask, frontierIds, nextIds, todayIds, doneIds])
+  const effectiveIds = useMemo(() => {
+    if (labels.size === 0) return null
     const ids = new Set()
-    for (const task of allTasks) {
-      const chosen = Array.isArray(task.tags) && task.tags.some(tag => tagFilter.has(tag))
-      if (chosen) ids.add(task.id)
+    for (const preset of PRESET_LABELS) {
+      if (!labels.has(presetLabel(preset))) continue
+      for (const id of presetIds[preset]) ids.add(id)
+    }
+    for (const [tag, tagIds] of tagIdsByName) {
+      if (!labels.has(tagLabel(tag))) continue
+      for (const id of tagIds) ids.add(id)
     }
     return ids
-  }, [allTasks, tagFilter])
-  const effectiveIds = useMemo(() => {
-    if (filterIds === null) return tagIds
-    if (tagIds === null) return filterIds
-    return new Set([...filterIds].filter(id => tagIds.has(id)))
-  }, [filterIds, tagIds])
+  }, [labels, presetIds, tagIdsByName])
   const filterCount = effectiveIds === null ? 0 : [...effectiveIds].filter(id => byId.has(id)).length
   const filteredTasks = useMemo(
     () => (effectiveIds === null ? tasks : filterTree(tasks, effectiveIds)),
@@ -351,19 +352,19 @@ export function GanttPage({ ctx }) {
     setLevel(next)
     setCollapsed(collapseForLevel(tasks, next))
   }, [tasks])
-  const changeFilter = useCallback((next) => {
-    setFilter(next)
-    setCollapsed(next === 'all' ? collapseForLevel(tasks, level) : new Set())
+  // Picking any label means the matching branches are the view, so the tree
+  // expands; clearing the selection gives the current depth its folds back.
+  const applyLabels = useCallback((next) => {
+    setLabels(next)
+    setCollapsed(next.size === 0 ? collapseForLevel(tasks, level) : new Set())
   }, [tasks, level])
-  const toggleTag = useCallback((tag) => {
-    setTagFilter((current) => {
-      const next = new Set(current)
-      if (next.has(tag)) next.delete(tag)
-      else next.add(tag)
-      return next
-    })
-  }, [])
-  const clearTags = useCallback(() => setTagFilter(new Set()), [])
+  const toggleLabel = useCallback((label) => {
+    const next = new Set(labels)
+    if (next.has(label)) next.delete(label)
+    else next.add(label)
+    applyLabels(next)
+  }, [labels, applyLabels])
+  const clearLabels = useCallback(() => applyLabels(new Set()), [applyLabels])
   const openCreate = useCallback((parentTask) => {
     setDialog({ type: 'create', parentId: parentTask?.id ?? null })
   }, [])
@@ -506,8 +507,8 @@ export function GanttPage({ ctx }) {
     )
     : filteredTasks.length === 0
       ? h('div', { className: 'gantt-filter-empty' },
-        h('div', { className: 'gantt-empty-title' }, tagFilter.size > 0 ? t('filter.empty.tag') : t(`filter.empty.${filter}`)),
-        h('p', { className: 'gantt-hint' }, tagFilter.size > 0 ? t('filter.hint.tag') : t(`filter.hint.${filter}`)),
+        h('div', { className: 'gantt-empty-title' }, t('filter.empty.label')),
+        h('p', { className: 'gantt-hint' }, t('filter.hint.label')),
       )
       : h('div', { className: 'gantt-body', 'data-panel': panelId === null ? undefined : 'work' },
         h('div', { className: 'gantt-main', ref: paneRef, onScroll: handlePaneScroll },
@@ -668,20 +669,51 @@ export function GanttPage({ ctx }) {
       h('button', { className: 'gantt-btn', type: 'button', onClick: refresh }, t('error.retry')),
     ) : null,
     tasks.length > 0
-      ? h('section', { className: 'gantt-filter' },
+      ? h('section', { className: 'gantt-filter gantt-tag-filter' },
         h('span', { className: 'gantt-filter-label' }, t('filter.label')),
-        h('div', { className: 'gantt-seg', role: 'group', 'aria-label': t('filter.label') },
-          [['all', 'filter.all'], ['unfinished', 'filter.unfinished'], ['active', 'filter.active'], ['frontier', 'filter.frontier'], ['next', 'filter.next'], ['today', 'filter.today'], ['done', 'filter.done']].map(([value, key]) => h('button', {
-            key: value,
-            className: 'gantt-seg-btn',
+        h('div', { className: 'gantt-tag-options', role: 'group', 'aria-label': t('filter.label') },
+          h('button', {
+            className: 'gantt-tag-option gantt-tag-all',
             type: 'button',
-            'data-filter': value,
-            'data-active': filter === value ? 'true' : undefined,
-            onClick: () => changeFilter(value),
-          }, t(key))),
+            title: t('filter.presetHint'),
+            'data-label': 'all',
+            'data-kind': 'preset',
+            'data-active': labels.size === 0 ? 'true' : undefined,
+            'aria-pressed': labels.size === 0 ? 'true' : 'false',
+            onClick: clearLabels,
+          }, t('filter.all')),
+          PRESET_LABELS.map(preset => h('button', {
+            key: preset,
+            className: 'gantt-tag-option',
+            type: 'button',
+            title: t('filter.presetHint'),
+            'data-label': presetLabel(preset),
+            'data-kind': 'preset',
+            'data-active': labels.has(presetLabel(preset)) ? 'true' : undefined,
+            'aria-pressed': labels.has(presetLabel(preset)) ? 'true' : 'false',
+            onClick: () => toggleLabel(presetLabel(preset)),
+          }, `${t(`filter.${preset}`)} (${[...presetIds[preset]].filter(id => byId.has(id)).length})`)),
+          tagStats.map(([tag, count]) => h('button', {
+            key: `tag:${tag}`,
+            className: 'gantt-tag-option',
+            type: 'button',
+            'data-label': tagLabel(tag),
+            'data-kind': 'tag',
+            'data-active': labels.has(tagLabel(tag)) ? 'true' : undefined,
+            'aria-pressed': labels.has(tagLabel(tag)) ? 'true' : 'false',
+            onClick: () => toggleLabel(tagLabel(tag)),
+          }, `#${tag} (${count})`)),
         ),
         filterCount > 0
           ? h('span', { className: 'gantt-filter-count' }, `${filterCount} ${t('filter.paths')}`)
+          : null,
+        labels.size > 0
+          ? h('button', {
+            className: 'gantt-btn gantt-tag-clear',
+            type: 'button',
+            'data-action': 'clear-tags',
+            onClick: clearLabels,
+          }, t('filter.tagsClear'))
           : null,
         h('button', {
           className: 'gantt-btn gantt-filter-recompute',
@@ -690,30 +722,6 @@ export function GanttPage({ ctx }) {
           disabled: recomputing,
           onClick: recomputeBrief,
         }, recomputing ? '…' : t('filter.recompute')),
-      )
-      : null,
-    tagStats.length > 0
-      ? h('section', { className: 'gantt-filter gantt-tag-filter' },
-        h('span', { className: 'gantt-filter-label' }, t('filter.tagLabel')),
-        h('div', { className: 'gantt-tag-options', role: 'group', 'aria-label': t('filter.tagLabel') },
-          tagStats.map(([tag, count]) => h('button', {
-            key: tag,
-            className: 'gantt-tag-option',
-            type: 'button',
-            'data-tag': tag,
-            'data-active': tagFilter.has(tag) ? 'true' : undefined,
-            'aria-pressed': tagFilter.has(tag) ? 'true' : 'false',
-            onClick: () => toggleTag(tag),
-          }, `${tag} (${count})`)),
-        ),
-        tagFilter.size > 0
-          ? h('button', {
-            className: 'gantt-btn gantt-tag-clear',
-            type: 'button',
-            'data-action': 'clear-tags',
-            onClick: clearTags,
-          }, t('filter.tagsClear'))
-          : null,
       )
       : null,
     content,

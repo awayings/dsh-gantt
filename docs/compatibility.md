@@ -22,9 +22,12 @@ the `gantt-work` workbench tab; the cancelled-status round adds schema-v7
 conversation titles on trajectory rows, covered by the same gate; the
 page-restore round adds the sessionStorage main-panel marker and stops a no-op
 build from rewriting the artifact (which used to reload open pages). The tags
-round adds schema-v9 `tasks.tags`, the dialog tag editor, row chips, the tag
-filter row (persisted as page-state v3), and their tests. The manual GUI
-checklist is in `docs/development.md` and had not been run at that date.
+round adds schema-v9 `tasks.tags`, the dialog tag editor, and row chips; the
+label-filter round unifies the predefined status/perspective views and the
+manual tags into one union label row (persisted as page-state v4) and adds
+`?tags=&mode=` filtering to the tree and ready reads plus the MCP ready tool,
+with their tests. The manual GUI checklist is in `docs/development.md` and had
+not been run at that date.
 
 ## 1 · Supported set
 
@@ -172,16 +175,18 @@ checklist is in `docs/development.md` and had not been run at that date.
    page.
 13. **Gantt page state is client-only `localStorage`.** `src/client/page-state.js`
     keeps the page's own view state in `localStorage` under `gantt.pageState`,
-    schema version 2: tree depth, filter view, collapsed rows, both task-pane
-    scroll offsets, the timeline scale and window anchor, the highlighted task,
-    the in-page work panel's task and sub-tab, and the work-mode switch. It uses
-    no shell service, so no harness face has to be verified for it. The record
-    is per browser origin, not per conversation. A v1 record (depth, filter,
-    collapse, and scroll only) keeps those four fields and seeds the fields
-    added in version 2 from their defaults; the old standalone `gantt.workMode`
-    key is read once into the new record and removed on the next write. A
-    missing, blocked, malformed, or unknown-version record falls back to the
-    page defaults instead of failing the page.
+    schema version 4: tree depth, the encoded label selection (`labels`, preset
+    and tag entries), collapsed rows, both task-pane scroll offsets, the
+    timeline scale and window anchor, the highlighted task, the in-page work
+    panel's task and sub-tab, and the work-mode switch. It uses no shell
+    service, so no harness face has to be verified for it. The record is per
+    browser origin, not per conversation. Older records migrate forward: v1/v2
+    records keep depth, status filter (as one predefined label), collapse and
+    scroll; a v3 record converts its status filter and tag filter into the
+    label list (its AND becomes the row's union). The old standalone
+    `gantt.workMode` key is read once into the new record and removed on the
+    next write. A missing, blocked, malformed, or unknown-version record falls
+    back to the page defaults instead of failing the page.
 
 ## 3 · Rules
 

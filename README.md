@@ -10,13 +10,14 @@ sidebar:
   timeline grid), deletion. The six imported tracks are the tree roots and
   their Hermes nodes hang below them, so the imported work is visible here.
   Decompose a node into subtasks, schedule a node into a day plan, and export
-  the whole tree as markdown model context. **全部 / 未完成 / 进行中 / 前沿 /
-  该动 / 今日 / 已完成** perspectives prune the tree to the paths that matter
+  the whole tree as markdown model context. The **label row** above the
+  timeline mixes the predefined **全部 / 未完成 / 进行中 / 前沿 / 该动 / 今日 /
+  已完成** labels with your own `#tags`; selecting several unions their paths
   (未完成 keeps every task whose status is neither done nor cancelled; 进行中
   keeps tasks whose work conversation is running or waiting for a choice; 前沿
   and 该动 keep each track's frontier and next paths; 今日 keeps the tasks the
-  daily brief picked for today), and **重算前沿和该动** on the right of the
-  switch recomputes the daily brief. A **甘特** tab in the
+  daily brief picked for today), and **重算前沿和该动** on the right of the row
+  recomputes the daily brief. A **甘特** tab in the
   native conversation sidebar focuses one task per conversation, and the host
   assistant tools let that conversation read the focused chain and write
   decompositions straight into the tree. Every tool write records the DSH
@@ -124,12 +125,12 @@ is always by path — it is not published to npm.
 6. On a tree row, **Decompose** creates subtasks (and optionally schedules each
    one), **Schedule** puts an existing node into a day's plan, and **Export
    context** copies the tree plus today's plan as markdown.
-7. The perspective switch (**All / Unfinished / Active / Frontier / Next /
-   Today / Done**) prunes the tree to the paths that matter: Unfinished keeps
-   every task whose status is neither done nor cancelled, Frontier keeps each
-   track's newest pending leaf, Next the first executable leaf, and Today the
-   tasks the daily brief picked for today. **Recompute frontier and next** on
-   the right of the switch refreshes the daily brief.
+7. The label row (**All / Unfinished / Active / Frontier / Next / Today /
+   Done** plus your manual tags) prunes and unions the tree paths that matter:
+   Unfinished keeps every task whose status is neither done nor cancelled,
+   Frontier keeps each track's newest pending leaf, Next the first executable
+   leaf, and Today the tasks the daily brief picked for today. **Recompute
+   frontier and next** on the right of the row refreshes the daily brief.
 8. With `dsh-better-sidebar`, open the **甘特** tab in a native conversation
    and click a task to focus it. Ask the conversation model to decompose it:
    the assistant tools read the focused chain (`gantt_context`) and write the
@@ -162,7 +163,7 @@ the one-time tree backfill for v2, and the
 task-day zone; task status is one of `todo`, `in_progress`, `blocked`, `done`, `cancelled`;
 plan-block status is one of `todo`, `in_progress`, `done`, `skipped`.
 
-Schema version 6 keeps one working tree in `tasks`: `kind='track'` roots (the
+Schema version 9 keeps one working tree in `tasks`: `kind='track'` roots (the
 six imported tracks), `kind='node'` imported Hermes nodes, and `kind='task'`
 manual or decomposed tasks. Each row carries the tracker's `ref`, `state`,
 `lane`, `dep`, `done_when`, `landing`, `estimate`, `category`, `inspiration`,
@@ -210,11 +211,11 @@ status.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief` |
+| `GET` | `/api/gantt/tree` | Unified tree, numbers, rollups, stats, the frontier/next `brief`, and today's `dailyBrief`; `?tags=&mode=` filters by manual tags |
 | `GET` | `/api/gantt/agents` | Registered external operators (`?type=&role=&q=&limit=`) |
 | `POST` | `/api/gantt/agents` | Register or update an external operator |
 | `GET` | `/api/gantt/task/context` | One task's stable markdown context (`?taskId=`) |
-| `GET` | `/api/gantt/ready` | Ready/next/todo work (`?tag=&limit=`) |
+| `GET` | `/api/gantt/ready` | Ready/next/todo work (`?tag=&tags=&mode=&limit=`) |
 | `POST` | `/api/gantt/task/report` | Write an external completion report back (`{taskId, agentId, report, ...}`) |
 | `GET` | `/api/gantt/focus` | The task a conversation is focused on (`?sessionId=`) |
 | `POST` | `/api/gantt/focus/set` | Focus one task for a conversation, or clear it |

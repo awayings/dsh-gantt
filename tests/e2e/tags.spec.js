@@ -98,7 +98,7 @@ describe('task tags end to end', () => {
     expect(qa(view.container, '.gantt-row-tag')).toHaveLength(3)
 
     const uiChip = await waitFor(
-      () => q(view.container, '.gantt-tag-filter [data-tag="ui"]'),
+      () => q(view.container, '.gantt-tag-filter [data-label="tag:ui"]'),
       'ui tag filter',
     )
     click(uiChip)
@@ -106,14 +106,22 @@ describe('task tags end to end', () => {
     expect(row(view.container, '1 Tagged parent')).not.toBeNull()
     expect(row(view.container, '1.1 Tagged child')).not.toBeNull()
     expect(row(view.container, '2 Plain')).toBeNull()
-    expect(JSON.parse(String(window.localStorage.getItem('gantt.pageState'))).tagFilter).toEqual(['ui'])
+    expect(JSON.parse(String(window.localStorage.getItem('gantt.pageState'))).labels).toEqual(['tag:ui'])
 
-    const clear = await waitFor(() => q(view.container, '[data-action="clear-tags"]'), 'clear tags')
+    const clear = await waitFor(() => q(view.container, '[data-action="clear-tags"]'), 'clear labels')
     click(clear)
     await waitFor(() => qa(view.container, '.gantt-row').length === 3, 'cleared rows')
 
-    click(q(view.container, '.gantt-tag-filter [data-tag="ops"]'))
+    // Predefined labels are unioned with artificial ones: an empty perspective
+    // adds nothing, and a status label widens the tag selection again.
+    click(q(view.container, '.gantt-tag-filter [data-label="preset:done"]'))
+    await waitFor(() => qa(view.container, '.gantt-row').length === 0, 'empty done rows')
+    click(q(view.container, '.gantt-tag-filter [data-label="tag:ops"]'))
     await waitFor(() => qa(view.container, '.gantt-row').length === 2, 'ops rows')
     expect(row(view.container, '2 Plain')).toBeNull()
+    click(q(view.container, '.gantt-tag-filter [data-label="preset:unfinished"]'))
+    await waitFor(() => qa(view.container, '.gantt-row').length === 3, 'union rows')
+    expect(JSON.parse(String(window.localStorage.getItem('gantt.pageState'))).labels)
+      .toEqual(['preset:done', 'tag:ops', 'preset:unfinished'])
   })
 })

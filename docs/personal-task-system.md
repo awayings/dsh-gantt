@@ -152,12 +152,26 @@ labels, each a trimmed string of 1–40 characters, with duplicates dropped in
 order. The API accepts it on create/update/split/decompose; the task dialog is
 the manual maintenance surface (type a label, press Enter or **Add**; × removes
 it; the input suggests labels already used in the tree). The Gantt page renders
-each label as a `#tag` chip on the row and offers a tag row under the
-perspective switch: selecting one or more labels keeps tasks carrying any of
-them plus their ancestor path, so a label reads as a cross-cutting view over the
-same tree (the status perspective narrows the same set further). The selection
-is part of the page state (`gantt.pageState`, record v3), so it survives a
-reload. Tags never roll up to parents and never affect status or progress.
+each manual label as a `#tag` chip on the row.
+
+The page's filter row is a single **label row** that mixes two kinds of filter
+in one multi-select: the seven predefined labels — 全部 (clear), 未完成, 进行中,
+前沿, 该动, 今日, 已完成 — and the manual tags. Picking any number of them keeps
+the union of their task sets plus the ancestor path, so a label reads as a
+cross-cutting view over the same tree; with no selection the full tree is
+shown. 全部 only clears the selection and is highlighted while nothing is
+selected. The selection is part of the page state (`gantt.pageState`, record
+v4), so it survives a reload; a v3 record migrates its single status filter and
+tag filter into the same label list (the old AND of the two becomes the union of
+the migrated labels).
+
+The stored labels are also queryable server-side: `GET /api/gantt/tree` and
+`GET /api/gantt/ready` accept `?tags=a,b&mode=any|and` (comma-separated or
+repeated, default `any`), and the MCP `list_ready_tasks` tool exposes the same
+`tags`/`mode` parameters for external workers. The ready classes (`tag=ready`,
+`next`, `todo`) are a separate vocabulary and are documented with the
+[endpoint](api.md#list-ready-tasks). Tags never roll up to parents and never
+affect status or progress.
 
 ### State vocabulary and the status mapping
 
@@ -414,8 +428,10 @@ process is running, and the manual route is the fallback after downtime.
 
 ## Perspectives: all, unfinished, active, frontier, next, today, done
 
-The Gantt page can render the same tree through seven perspectives; the
-timeline and row set are filtered from the pruned tree, not merely collapsed.
+The Gantt page can render the same tree through seven perspectives. They are
+offered as the predefined labels in the single label row beside the manual
+tags, and the timeline and row set are filtered from the pruned tree, not
+merely collapsed.
 
 - **All** — the full tree, using the depth level and manual collapse controls as
   before.
@@ -439,10 +455,13 @@ timeline and row set are filtered from the pruned tree, not merely collapsed.
 The pruning rule is: a node survives when it is in the keep set or has a
 surviving descendant. 前沿/该动/今日 split what the old 待做 view aggregated;
 未完成 restores the plain status dimension (not done, not cancelled).
-Switching to any pruned view clears the collapse set so every kept path is
-visible; switching back to 全部 re-applies the depth-level collapse. The page
-shows the number of kept tasks next to the switch, a mode-specific empty hint
-when the result is empty, and a **重算前沿和该动** button on the right that POSTs
+
+Because the row is multi-select, several predefined labels (and manual tags)
+union their keep sets; 全部 is the empty selection. Picking any label clears
+the collapse set so every kept path is visible; clearing the selection gives
+the current depth level its folds back. The page shows the number of kept tasks,
+one generic empty hint when the selection matches nothing, a **清除标签**
+button, and a **重算前沿和该动** button on the right that POSTs
 `api/gantt/brief/compute` and refreshes the tree.
 
 ## Links
@@ -548,7 +567,7 @@ results straight into the tree.
   place or in a new window. The task view also renders the task's markdown
   description in a fixed-height, scrollable preview above the write-back rows
   (an empty description shows a hint instead).
-  The **Active** view filter keeps tasks whose bound conversation is running or
+  The **Active** (进行中) label keeps tasks whose bound conversation is running or
   waiting for a user choice, and waiting tasks carry a warning badge. `GET
   api/gantt/work` reports the task, its bound conversation, and the work
   directory (`DSH_GANTT_WORK_CWD`, default `/data/home/ws-plugin`);
@@ -703,8 +722,9 @@ semantics that make the tree readable:
   the metadata chips for state, `doneWhen`, landing point, estimate, category,
   inspiration, links, and tags (the tracker colours a lane; the plugin keeps the
   lane as data and a chip);
-- a tag row under the perspective switch: tags are manual labels, and selecting
-  any of them keeps the tasks that carry one plus their ancestor path;
+- a label row above the timeline that mixes the predefined status/perspective
+  labels with the manual tags in one multi-select; selecting any of them keeps
+  the union of the matching tasks plus their ancestor paths;
 - a depth zoom (all nodes, two levels, one level) that mirrors the tracker
   page's depth-limited views.
 

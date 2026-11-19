@@ -1,11 +1,10 @@
 // The Gantt page is a global main panel that the shell remounts on a client
 // rebuild or a browser reload. These cases pin the localStorage record that
-// gives the page back with the same depth, filter, folded tasks, scroll
+// gives the page back with the same depth, label filter, folded tasks, scroll
 // offsets, timeline window, highlighted task, work panel and work mode,
 // including every hostile shape a stored record can take.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  FILTERS,
   LEGACY_WORK_MODE_KEY,
   LEVELS,
   PAGE_STATE_KEY,
@@ -22,8 +21,7 @@ function record(overrides = {}) {
   return {
     v: PAGE_STATE_VERSION,
     level: 2,
-    filter: 'active',
-    tagFilter: ['docs'],
+    labels: ['preset:active', 'tag:docs'],
     collapsed: ['1.1'],
     scrollTop: 40,
     scrollLeft: 8,
@@ -41,8 +39,7 @@ function record(overrides = {}) {
 function defaults(overrides = {}) {
   return {
     level: 99,
-    filter: 'all',
-    tagFilter: [],
+    labels: [],
     collapsed: [],
     scrollTop: 0,
     scrollLeft: 0,
@@ -93,11 +90,10 @@ afterEach(() => {
 })
 
 describe('page-state constants', () => {
-  it('pins the keys, schema version, filters, levels, scales and panel tabs', () => {
+  it('pins the keys, schema version, levels, scales and panel tabs', () => {
     expect(PAGE_STATE_KEY).toBe('gantt.pageState')
-    expect(PAGE_STATE_VERSION).toBe(3)
+    expect(PAGE_STATE_VERSION).toBe(4)
     expect(LEGACY_WORK_MODE_KEY).toBe('gantt.workMode')
-    expect(FILTERS).toEqual(['all', 'unfinished', 'active', 'frontier', 'next', 'today', 'done'])
     expect(LEVELS).toEqual([99, 2, 1])
     expect(SCALES).toEqual(['week', 'month'])
     expect(PANEL_TABS).toEqual(['task', 'skills', 'team'])
@@ -108,11 +104,10 @@ describe('sanitizePageState', () => {
   it('round-trips a complete record', () => {
     expect(sanitizePageState(record())).toEqual({
       level: 2,
-      filter: 'active',
       collapsed: ['1.1'],
       scrollTop: 40,
       scrollLeft: 8,
-      tagFilter: ['docs'],
+      labels: ['preset:active', 'tag:docs'],
       scale: 'month',
       anchor: '2026-03-09',
       selectedId: 'task-9',
@@ -122,40 +117,66 @@ describe('sanitizePageState', () => {
     })
   })
 
-  it('treats a non-array tag filter as no tag filter', () => {
-    for (const tagFilter of ['docs', 42, null, undefined, { 0: 'docs' }]) {
-      expect(sanitizePageState(record({ tagFilter })).tagFilter).toEqual([])
+  it('treats a non-array label selection as no filter', () => {
+    for (const labels of ['docs', 42, null, undefined, { 0: 'tag:docs' }]) {
+      expect(sanitizePageState(record({ labels })).labels).toEqual([])
     }
   })
 
-  it('drops unusable tags but keeps a forty-character one', () => {
-    const longest = 't'.repeat(40)
-    const tagFilter = ['docs', 42, null, '', '   ', 'x'.repeat(41), longest, 'release']
-    expect(sanitizePageState(record({ tagFilter })).tagFilter).toEqual(['docs', longest, 'release'])
+  it('keeps only recognized, deduplicated labels in first-seen order', () => {
+    const labels = [
+      'tag: docs ',
+      'preset:frontier',
+      'docs',
+      'bogus',
+      42,
+      null,
+      '',
+      'tag:',
+      'tag:docs',
+      'preset:nope',
+      'preset:frontier',
+      'tag:release',
+    ]
+    expect(sanitizePageState(record({ labels })).labels).toEqual([
+      'tag:docs',
+      'preset:frontier',
+      'tag:release',
+    ])
   })
 
-  it('trims tags and deduplicates them in first-seen order', () => {
-    const tagFilter = [' docs ', 'docs', 'release', ' docs', 'release ']
-    expect(sanitizePageState(record({ tagFilter })).tagFilter).toEqual(['docs', 'release'])
+  it('drops over-long tags and keeps a forty-character one', () => {
+    const longest = `tag:${'t'.repeat(40)}`
+    const labels = [longest, `tag:${'x'.repeat(41)}`]
+    expect(sanitizePageState(record({ labels })).labels).toEqual([longest])
   })
 
-  it('caps a huge tag filter at 20 tags', () => {
-    const tagFilter = Array.from({ length: 21 }, (_value, index) => `tag-${index}`)
-    const result = sanitizePageState(record({ tagFilter })).tagFilter
-    expect(result).toHaveLength(20)
-    expect(result[0]).toBe('tag-0')
-    expect(result.at(-1)).toBe('tag-19')
+  it('caps a huge selection at 26 labels', () => {
+    const labels = [
+      ...Array.from({ length: 21 }, (_value, index) => `tag:tag-${index}`),
+      'preset:unfinished',
+      'preset:active',
+      'preset:frontier',
+      'preset:next',
+      'preset:today',
+      'preset:done',
+    ]
+    const result = sanitizePageState(record({ labels })).labels
+    expect(result).toHaveLength(26)
+    expect(result[0]).toBe('tag:tag-0')
+    expect(result[19]).toBe('tag:tag-19')
+    expect(result.at(-1)).toBe('preset:done')
   })
 
-  it('starts with no tag filter when the record carries none', () => {
-    expect(sanitizePageState({ v: PAGE_STATE_VERSION }).tagFilter).toEqual([])
+  it('starts with no labels when the record carries none', () => {
+    expect(sanitizePageState({ v: PAGE_STATE_VERSION }).labels).toEqual([])
   })
 
-  it('rejects a version 2 record in the current-version sanitizer', () => {
-    expect(sanitizePageState({ v: 2, tagFilter: ['docs'] })).toBeNull()
+  it('rejects an older record in the current-version sanitizer', () => {
+    expect(sanitizePageState({ v: 3, labels: ['tag:docs'] })).toBeNull()
   })
 
-  it('rejects anything that is not a version-3 plain object', () => {
+  it('rejects anything that is not a version-4 plain object', () => {
     const rejected = [
       null,
       undefined,
@@ -166,8 +187,9 @@ describe('sanitizePageState', () => {
       [record()],
       {},
       record({ v: 1 }),
-      { v: 4 },
-      { v: '3' },
+      record({ v: 3 }),
+      { v: 5 },
+      { v: '4' },
       { v: 0, level: 1 },
     ]
     for (const raw of rejected) expect(sanitizePageState(raw)).toBeNull()
@@ -181,13 +203,6 @@ describe('sanitizePageState', () => {
     for (const level of LEVELS) expect(sanitizePageState(record({ level })).level).toBe(level)
     for (const level of [0, 3, 98, '2', null, undefined, {}, []]) {
       expect(sanitizePageState(record({ level })).level).toBe(99)
-    }
-  })
-
-  it('keeps every supported filter and drops the rest', () => {
-    for (const filter of FILTERS) expect(sanitizePageState(record({ filter })).filter).toBe(filter)
-    for (const filter of ['bogus', '', null, 7, undefined]) {
-      expect(sanitizePageState(record({ filter })).filter).toBe('all')
     }
   })
 
@@ -318,11 +333,10 @@ describe('sanitizePageState', () => {
     const result = sanitizePageState({ ...record(), extra: 'x', nested: { v: 1 } })
     expect(Object.keys(result)).toEqual([
       'level',
-      'filter',
+      'labels',
       'collapsed',
       'scrollTop',
       'scrollLeft',
-      'tagFilter',
       'scale',
       'anchor',
       'selectedId',
@@ -339,17 +353,16 @@ describe('readPageState', () => {
   it('reads and normalizes a stored record', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({
       level: 1,
-      filter: 'today',
+      labels: ['preset:today'],
       scale: 'week',
       anchor: null,
     })))
     expect(readPageState()).toEqual({
       level: 1,
-      filter: 'today',
       collapsed: ['1.1'],
       scrollTop: 40,
       scrollLeft: 8,
-      tagFilter: ['docs'],
+      labels: ['preset:today'],
       scale: 'week',
       anchor: null,
       selectedId: 'task-9',
@@ -359,17 +372,17 @@ describe('readPageState', () => {
     })
   })
 
-  it('normalizes the tag filter of a stored record', () => {
+  it('normalizes the label selection of a stored record', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({
-      tagFilter: [' docs ', 'docs', 42, '', 'x'.repeat(41), 'release'],
+      labels: [' tag: docs ', 'tag:docs', 42, '', 'tag:' + 'x'.repeat(41), 'preset:done'],
     })))
-    expect(readPageState().tagFilter).toEqual(['docs', 'release'])
+    expect(readPageState().labels).toEqual(['tag:docs', 'preset:done'])
   })
 
   it('falls back to defaults for a valid record with unusable fields', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({
       level: 0,
-      filter: 'nope',
+      labels: 'tag:docs',
       collapsed: 'nope',
       scrollTop: -1,
       scrollLeft: 'x',
@@ -379,7 +392,6 @@ describe('readPageState', () => {
       panelTaskId: 'x'.repeat(201),
       panelTab: 'bogus',
       workMode: 'true',
-      tagFilter: 'docs',
     })))
     expect(readPageState()).toEqual(defaults())
   })
@@ -402,7 +414,7 @@ describe('readPageState', () => {
   })
 
   it('ignores records written by another schema version', () => {
-    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 4 })))
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 5 })))
     expect(readPageState()).toBeNull()
 
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ v: 0 })))
@@ -414,18 +426,19 @@ describe('readPageState', () => {
     expect(readPageState()).toEqual(defaults({ workMode: true }))
   })
 
-  it('carries a version 1 record forward with the defaults for the new fields', () => {
+  it('carries a version 1 status filter forward as a label', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 1,
       level: 1,
       filter: 'done',
+      tagFilter: ['docs'],
       collapsed: ['1.1', '2.1'],
       scrollTop: 400,
       scrollLeft: 30,
     }))
     expect(readPageState()).toEqual(defaults({
       level: 1,
-      filter: 'done',
+      labels: ['preset:done', 'tag:docs'],
       collapsed: ['1.1', '2.1'],
       scrollTop: 400,
       scrollLeft: 30,
@@ -437,6 +450,7 @@ describe('readPageState', () => {
       v: 1,
       level: 7,
       filter: 'bogus',
+      labels: ['tag:docs'],
       collapsed: [null, '1.1', '1.1'],
       scrollTop: -4,
       scrollLeft: 2.6,
@@ -461,7 +475,7 @@ describe('readPageState', () => {
     localStorage.setItem(LEGACY_WORK_MODE_KEY, '1')
     expect(readPageState()).toEqual(defaults({
       level: 2,
-      filter: 'unfinished',
+      labels: ['preset:unfinished'],
       collapsed: ['1.1'],
       scrollTop: 120,
       scrollLeft: 6,
@@ -469,11 +483,12 @@ describe('readPageState', () => {
     }))
   })
 
-  it('migrates a version 2 record to version 3 with an empty tag filter', () => {
+  it('migrates a version 2 status filter into a label', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 2,
       level: 2,
       filter: 'frontier',
+      labels: ['tag:docs'],
       collapsed: ['1.1'],
       scrollTop: 60,
       scrollLeft: 5,
@@ -486,11 +501,10 @@ describe('readPageState', () => {
     }))
     expect(readPageState()).toEqual({
       level: 2,
-      filter: 'frontier',
+      labels: ['preset:frontier'],
       collapsed: ['1.1'],
       scrollTop: 60,
       scrollLeft: 5,
-      tagFilter: [],
       scale: 'month',
       anchor: '2026-03-09',
       selectedId: 'task-9',
@@ -500,7 +514,7 @@ describe('readPageState', () => {
     })
   })
 
-  it('normalizes the fields of a version 2 record and drops a stray tag filter', () => {
+  it('normalizes the fields of a version 2 record', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 2,
       level: 7,
@@ -514,21 +528,94 @@ describe('readPageState', () => {
       panelTaskId: 'x'.repeat(201),
       panelTab: 'bogus',
       workMode: 'true',
-      tagFilter: ['docs'],
     }))
     expect(readPageState()).toEqual(defaults({ collapsed: ['1.1'], scrollLeft: 3 }))
   })
 
-  it('prefers a version 3 record over the standalone switch', () => {
+  it('migrates a version 3 status filter and tag filter into labels', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
+      v: 3,
+      level: 2,
+      filter: 'frontier',
+      tagFilter: [' docs ', 'docs', 'release'],
+      collapsed: ['1.1'],
+      scrollTop: 60,
+      scrollLeft: 5,
+      scale: 'month',
+      anchor: '2026-03-09',
+      selectedId: 'task-9',
+      panelTaskId: 'task-7',
+      panelTab: 'team',
+      workMode: true,
+    }))
+    expect(readPageState()).toEqual({
+      level: 2,
+      labels: ['preset:frontier', 'tag:docs', 'tag:release'],
+      collapsed: ['1.1'],
+      scrollTop: 60,
+      scrollLeft: 5,
+      scale: 'month',
+      anchor: '2026-03-09',
+      selectedId: 'task-9',
+      panelTaskId: 'task-7',
+      panelTab: 'team',
+      workMode: true,
+    })
+  })
+
+  it('drops the all filter and unusable tags of a version 3 record', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
+      v: 3,
+      level: 1,
+      filter: 'all',
+      tagFilter: [42, null, '', '  ', 'x'.repeat(41), ['nested'], 'ok'],
+      collapsed: [],
+      scrollTop: 0,
+      scrollLeft: 0,
+    }))
+    expect(readPageState()).toEqual(defaults({ level: 1, labels: ['tag:ok'] }))
+  })
+
+  it('treats a version 3 record with no status or tag filter as no labels', () => {
+    for (const extra of [{}, { filter: 'bogus' }, { filter: null }, { filter: 'all' }, { tagFilter: 'docs' }, { tagFilter: null }]) {
+      localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({ v: 3, level: 2, ...extra }))
+      expect(readPageState()).toEqual(defaults({ level: 2 }))
+    }
+  })
+
+  it('normalizes the fields of a version 3 record', () => {
+    localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
+      v: 3,
+      level: 7,
+      filter: 'done',
+      tagFilter: ['docs'],
+      collapsed: [null, '1.1', '1.1'],
+      scrollTop: -4,
+      scrollLeft: 2.6,
+      scale: 'day',
+      anchor: '2026-02-30',
+      selectedId: 42,
+      panelTaskId: 'x'.repeat(201),
+      panelTab: 'bogus',
+      workMode: 'true',
+      labels: ['tag:ignored'],
+    }))
+    expect(readPageState()).toEqual(defaults({
+      labels: ['preset:done', 'tag:docs'],
+      collapsed: ['1.1'],
+      scrollLeft: 3,
+    }))
+  })
+
+  it('prefers a version 4 record over the standalone switch', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify(record({ workMode: false })))
     localStorage.setItem(LEGACY_WORK_MODE_KEY, '1')
     expect(readPageState()).toEqual({
       level: 2,
-      filter: 'active',
+      labels: ['preset:active', 'tag:docs'],
       collapsed: ['1.1'],
       scrollTop: 40,
       scrollLeft: 8,
-      tagFilter: ['docs'],
       scale: 'month',
       anchor: '2026-03-09',
       selectedId: 'task-9',
@@ -576,8 +663,7 @@ describe('readPageState', () => {
 describe('writePageState', () => {
   const state = {
     level: 1,
-    filter: 'today',
-    tagFilter: ['docs', 'urgent'],
+    labels: ['preset:today', 'tag:docs', 'tag:urgent'],
     collapsed: ['2', '3'],
     scrollTop: 120,
     scrollLeft: 4,
@@ -597,8 +683,7 @@ describe('writePageState', () => {
     expect(Object.keys(raw)).toEqual([
       'v',
       'level',
-      'filter',
-      'tagFilter',
+      'labels',
       'collapsed',
       'scrollTop',
       'scrollLeft',

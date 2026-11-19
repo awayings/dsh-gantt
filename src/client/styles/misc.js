@@ -51,6 +51,14 @@ export const CSS_MISC = `
     transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
   }
   .gantt-tag-option:hover { color: var(--gantt-text); border-color: var(--gantt-line-strong); }
+  .gantt-tag-option[data-kind="preset"] {
+    border-style: dashed;
+    color: var(--gantt-text);
+  }
+  .gantt-tag-option[data-kind="preset"][data-active="true"] {
+    color: var(--gantt-accent);
+    border-style: dashed;
+  }
   .gantt-tag-option[data-active="true"] {
     color: var(--gantt-accent);
     border-color: color-mix(in srgb, var(--gantt-accent) 45%, transparent);

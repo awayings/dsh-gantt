@@ -1,5 +1,5 @@
 // The Gantt page keeps the whole view it last showed across visits: depth,
-// filter, folded tasks, pane offsets, timeline scale and window, the
+// labels, folded tasks, pane offsets, timeline scale and window, the
 // highlighted task, the in-page work panel and work mode. These cases wire the
 // real page to the real page-state module: what a mount restores, what a
 // gesture persists, and how hide/refresh/unmount paths keep the record honest.
@@ -79,8 +79,7 @@ function seed(overrides = {}) {
   localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
     v: PAGE_STATE_VERSION,
     level: 99,
-    filter: 'all',
-    tagFilter: [],
+    labels: [],
     collapsed: [],
     scrollTop: 0,
     scrollLeft: 0,
@@ -187,31 +186,31 @@ function workTab(view, name) {
 }
 
 describe('restoring a saved view', () => {
-  it('restores and persists the tag filter', async () => {
-    seed({ tagFilter: ['docs'] })
+  it('restores and persists the label selection', async () => {
+    seed({ labels: ['tag:docs'] })
 
     const { view } = await renderPage()
 
-    const tag = q(view.container, '.gantt-tag-filter [data-tag="docs"]')
+    const tag = q(view.container, '.gantt-tag-filter [data-label="tag:docs"]')
     expect(tag.getAttribute('data-active')).toBe('true')
     expect(rowLabels(view.container)).toEqual([
       '1 Release 2.0',
       '1.1 Write spec',
     ])
-    expect(stored()).toMatchObject({ tagFilter: ['docs'] })
+    expect(stored()).toMatchObject({ labels: ['tag:docs'] })
 
     click(tag)
     expect(qa(view.container, '.gantt-row')).toHaveLength(6)
-    expect(stored()).toMatchObject({ tagFilter: [] })
+    expect(stored()).toMatchObject({ labels: [] })
   })
 
-  it('restores the saved depth, filter, folded task and pane offsets', async () => {
-    seed({ level: 2, filter: 'unfinished', collapsed: ['p1'], scrollTop: 180, scrollLeft: 24 })
+  it('restores the saved depth, labels, folded task and pane offsets', async () => {
+    seed({ level: 2, labels: ['preset:unfinished'], collapsed: ['p1'], scrollTop: 180, scrollLeft: 24 })
 
     const { view } = await renderPage()
 
     expect(q(view.container, '[data-level="2"]').getAttribute('data-active')).toBe('true')
-    expect(q(view.container, '[data-filter="unfinished"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-label="preset:unfinished"]').getAttribute('data-active')).toBe('true')
     expect(rowLabels(view.container)).toEqual([
       '1 Release 2.0',
       '2 Launch',
@@ -228,14 +227,14 @@ describe('restoring a saved view', () => {
   it('starts at the defaults and stays interactive with no saved view', async () => {
     const { view } = await renderPage()
 
-    expect(q(view.container, '[data-filter="all"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-label="all"]').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '[data-level="99"]').getAttribute('data-active')).toBe('true')
     expect(qa(view.container, '.gantt-row')).toHaveLength(6)
     expect(paneOf(view).scrollTop).toBe(0)
 
     click(q(view.container, '[data-level="1"]'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(3)
-    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 1, filter: 'all', collapsed: ['p1', 'p2'] })
+    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 1, labels: [], collapsed: ['p1', 'p2'] })
   })
 
   it('starts at the defaults for a corrupted record', async () => {
@@ -243,7 +242,7 @@ describe('restoring a saved view', () => {
 
     const { view } = await renderPage()
 
-    expect(q(view.container, '[data-filter="all"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-label="all"]').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '[data-level="99"]').getAttribute('data-active')).toBe('true')
     expect(qa(view.container, '.gantt-row')).toHaveLength(6)
     expect(paneOf(view).scrollTop).toBe(0)
@@ -253,7 +252,7 @@ describe('restoring a saved view', () => {
     localStorage.setItem(PAGE_STATE_KEY, JSON.stringify({
       v: 1,
       level: 2,
-      filter: 'done',
+      filter: 'all',
       collapsed: ['p1'],
       scrollTop: 200,
       scrollLeft: 30,
@@ -262,7 +261,7 @@ describe('restoring a saved view', () => {
     const { view } = await renderPage()
 
     expect(q(view.container, '[data-level="2"]').getAttribute('data-active')).toBe('true')
-    expect(q(view.container, '[data-filter="done"]').getAttribute('data-active')).toBe('true')
+    expect(q(view.container, '[data-label="all"]').getAttribute('data-active')).toBe('true')
     expect(buttonByText(view.container, 'Week').getAttribute('data-active')).toBe('true')
     expect(q(view.container, '.gantt-row[data-task-id="p1"] .gantt-chevron').getAttribute('aria-expanded')).toBe('false')
     expect(paneOf(view).scrollTop).toBe(200)
@@ -270,7 +269,7 @@ describe('restoring a saved view', () => {
     expect(stored()).toMatchObject({
       v: PAGE_STATE_VERSION,
       level: 2,
-      filter: 'done',
+      labels: [],
       collapsed: ['p1'],
       scrollTop: 200,
       scrollLeft: 30,
@@ -293,20 +292,20 @@ describe('restoring a saved view', () => {
     const { view } = await renderPage()
 
     expect(qa(view.container, '.gantt-row')).toHaveLength(6)
-    expect(q(view.container, '[data-filter="all"]').getAttribute('data-active')).toBe('true')
-    click(q(view.container, '[data-filter="done"]'))
+    expect(q(view.container, '[data-label="all"]').getAttribute('data-active')).toBe('true')
+    click(q(view.container, '[data-label="preset:done"]'))
     expect(rowLabels(view.container)).toEqual(['1 Release 2.0', '1.1 Write spec'])
   })
 
   it('waits for rows before restoring a saved view that opens empty', async () => {
-    seed({ filter: 'today', scrollTop: 90, scrollLeft: 12 })
+    seed({ labels: ['preset:today'], scrollTop: 90, scrollLeft: 12 })
 
     const { view } = await renderPage()
 
     expect(q(view.container, '.gantt-filter-empty')).not.toBeNull()
     expect(paneOf(view)).toBeNull()
 
-    click(q(view.container, '[data-filter="all"]'))
+    click(q(view.container, '[data-label="all"]'))
     const pane = paneOf(view)
     expect(pane.scrollTop).toBe(90)
     expect(pane.scrollLeft).toBe(12)
@@ -408,14 +407,14 @@ describe('restoring the highlight', () => {
   })
 
   it('keeps a restored highlight that the filter hides without crashing', async () => {
-    seed({ selectedId: 'c1', filter: 'unfinished' })
+    seed({ selectedId: 'c1', labels: ['preset:unfinished'] })
 
     const { view } = await renderPage()
 
     expect(q(view.container, '.gantt-row[data-task-id="c1"]')).toBeNull()
     expect(qa(view.container, '.gantt-row')).toHaveLength(5)
     expect(qa(view.container, '.gantt-row[data-selected="true"]')).toHaveLength(0)
-    expect(stored()).toMatchObject({ filter: 'unfinished', selectedId: 'c1' })
+    expect(stored()).toMatchObject({ labels: ['preset:unfinished'], selectedId: 'c1' })
   })
 })
 
@@ -512,20 +511,20 @@ describe('working mode', () => {
 })
 
 describe('persisting the view', () => {
-  it('writes filter, depth and folded tasks as the view changes', async () => {
+  it('writes labels, depth and folded tasks as the view changes', async () => {
     const { view } = await renderPage()
 
-    click(q(view.container, '[data-filter="unfinished"]'))
-    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 99, filter: 'unfinished', collapsed: [] })
+    click(q(view.container, '[data-label="preset:unfinished"]'))
+    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 99, labels: ['preset:unfinished'], collapsed: [] })
 
     click(q(view.container, '[data-level="2"]'))
-    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 2, filter: 'unfinished' })
+    expect(stored()).toMatchObject({ v: PAGE_STATE_VERSION, level: 2, labels: ['preset:unfinished'] })
 
     click(q(view.container, '.gantt-row[data-task-id="p1"] .gantt-chevron'))
     expect(stored()).toMatchObject({
       v: PAGE_STATE_VERSION,
       level: 2,
-      filter: 'unfinished',
+      labels: ['preset:unfinished'],
       collapsed: ['p1'],
     })
   })

@@ -588,7 +588,7 @@ describe('timeline window', () => {
   })
 })
 
-describe('task filter', () => {
+describe('label filter', () => {
   async function renderFiltered(payload = filterTreePayload(), options = {}, routes = {}) {
     const fetchState = installFetch({ [TREE]: () => jsonResponse(payload), ...routes })
     const app = setupApp(options)
@@ -597,64 +597,83 @@ describe('task filter', () => {
     return { ...fetchState, app, view }
   }
 
-  function filterButton(view, value) {
-    return q(view.container, `.gantt-filter [data-filter="${value}"]`)
+  function labelButton(view, label) {
+    return q(view.container, `.gantt-tag-filter [data-label="${label}"]`)
   }
 
   function rowLabels(view) {
     return qa(view.container, '.gantt-row').map(element => element.getAttribute('aria-label'))
   }
 
-  function tagButton(view, tag) {
-    return q(view.container, `.gantt-tag-filter [data-tag="${tag}"]`)
+  function chips(view) {
+    return qa(view.container, '.gantt-tag-filter [data-label]')
   }
 
-  it('offers the perspective views and starts on All', async () => {
+  it('offers one label row with counted predefined labels and artificial tags', async () => {
     const { view } = await renderFiltered()
 
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
-    expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.getAttribute('data-filter')))
-      .toEqual(['all', 'unfinished', 'active', 'frontier', 'next', 'today', 'done'])
-    expect(filterButton(view, 'all').getAttribute('data-active')).toBe('true')
+    expect(chips(view).map(button => button.getAttribute('data-label'))).toEqual([
+      'all',
+      'preset:unfinished',
+      'preset:active',
+      'preset:frontier',
+      'preset:next',
+      'preset:today',
+      'preset:done',
+      'tag:backend',
+      'tag:invest',
+      'tag:urgent',
+      'tag:life',
+    ])
+    expect(chips(view).map(button => button.getAttribute('data-kind'))).toEqual([
+      ...Array.from({ length: 7 }, () => 'preset'),
+      ...Array.from({ length: 4 }, () => 'tag'),
+    ])
+    expect(chips(view).map(button => button.textContent)).toEqual([
+      'All',
+      'Unfinished (8)',
+      'Active (0)',
+      'Frontier (1)',
+      'Next (1)',
+      'Today (2)',
+      'Done (0)',
+      '#backend (1)',
+      '#invest (2)',
+      '#urgent (1)',
+      '#life (1)',
+    ])
+    expect(labelButton(view, 'all').getAttribute('data-active')).toBe('true')
+    expect(labelButton(view, 'preset:frontier').getAttribute('aria-pressed')).toBe('false')
+    expect(labelButton(view, 'tag:invest').getAttribute('aria-pressed')).toBe('false')
+    expect(labelButton(view, 'preset:frontier').getAttribute('title'))
+      .toBe('Predefined label: filter by status or perspective.')
+    expect(q(view.container, '.gantt-filter [data-filter]')).toBeNull()
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
-    expect(q(view.container, '.gantt-brief')).toBeNull()
+    expect(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBeNull()
+    expect(q(view.container, '.gantt-tag-filter [data-action="recompute-brief"]')).not.toBeNull()
   })
 
-  it('keeps only the frontier paths in Frontier', async () => {
+  it('keeps only the paths of the picked status label', async () => {
     const { view } = await renderFiltered()
 
-    click(filterButton(view, 'frontier'))
-    expect(rowLabels(view)).toEqual([
-      '1 投资系统',
-      '1.8 交易仓',
-      '1.8.4 读数收口',
-    ])
+    click(labelButton(view, 'preset:frontier'))
+    expect(rowLabels(view)).toEqual(['1 投资系统', '1.8 交易仓', '1.8.4 读数收口'])
     expect(row(view.container, '2 生活系统')).toBeNull()
-    expect(row(view.container, '1.1 数据底座')).toBeNull()
     expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('3 tasks')
-    expect(filterButton(view, 'frontier').getAttribute('data-active')).toBe('true')
-  })
+    expect(labelButton(view, 'preset:frontier').getAttribute('data-active')).toBe('true')
+    expect(labelButton(view, 'all').getAttribute('data-active')).toBeNull()
 
-  it('keeps only the next paths in Next', async () => {
-    const { view } = await renderFiltered()
-
-    click(filterButton(view, 'next'))
+    click(labelButton(view, 'all'))
+    click(labelButton(view, 'preset:next'))
     expect(rowLabels(view)).toEqual(['2 生活系统', '2.1 生活实验'])
     expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('2 tasks')
-  })
 
-  it("keeps only today's picked paths in Today", async () => {
-    const { view } = await renderFiltered()
-
-    click(filterButton(view, 'today'))
-    expect(rowLabels(view)).toEqual([
-      '1 投资系统',
-      '1.1 数据底座',
-      '2 生活系统',
-      '2.1 生活实验',
-    ])
+    click(labelButton(view, 'all'))
+    click(labelButton(view, 'preset:today'))
+    expect(rowLabels(view)).toEqual(['1 投资系统', '1.1 数据底座', '2 生活系统', '2.1 生活实验'])
     expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('4 tasks')
   })
@@ -676,7 +695,7 @@ describe('task filter', () => {
     expect(q(view.container, '.gantt-row[data-task-id="n31"] .gantt-row-activity').getAttribute('title'))
       .toBe('The work conversation is waiting for your choice')
 
-    click(filterButton(view, 'active'))
+    click(labelButton(view, 'preset:active'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.1 数据底座',
@@ -686,27 +705,33 @@ describe('task filter', () => {
     expect(row(view.container, '3 元能力')).toBeNull()
     expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
 
-    act(() => uiSession.update({ 'session-run': { pendingInteraction: 'question' } }))
+    act(() => uiSession.update({
+      'session-run': { pendingInteraction: 'question' },
+      'session-wait': { running: true },
+    }))
     expect(q(view.container, '.gantt-row[data-task-id="n1"] .gantt-row-activity').getAttribute('data-state')).toBe('waiting')
+    // A session-status change keeps the label selection instead of resetting it.
+    expect(labelButton(view, 'preset:active').getAttribute('data-active')).toBe('true')
+    expect(qa(view.container, '.gantt-row')).toHaveLength(4)
   })
 
-  it('shows a mode-specific hint when no conversation is active', async () => {
+  it('shows the generic hint when the selected labels match nothing', async () => {
     const { view } = await renderFiltered()
 
-    click(filterButton(view, 'active'))
+    click(labelButton(view, 'preset:active'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(0)
     expect(text(view.container, '.gantt-filter-empty .gantt-empty-title'))
-      .toBe('No work conversation is running or waiting.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All to see the whole tree.')
+      .toBe('No task matches the selected labels.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Clear the labels, or pick another one.')
   })
 
-  it('keeps only done nodes and their ancestors in Done', async () => {
+  it('keeps only done nodes and their ancestors for the done label', async () => {
     const tasks = makeFilterTree()
     tasks[0].children[0].status = 'done'
     tasks[0].children[0].progress = 100
     const { view } = await renderFiltered(filterTreePayload({ tasks }))
 
-    click(filterButton(view, 'done'))
+    click(labelButton(view, 'preset:done'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.1 数据底座',
@@ -715,7 +740,7 @@ describe('task filter', () => {
     expect(q(view.container, '.gantt-banner')).toBeNull()
   })
 
-  it('keeps only unfinished nodes and their ancestors in Unfinished', async () => {
+  it('keeps only unfinished nodes and their ancestors for the unfinished label', async () => {
     const tasks = makeFilterTree()
     tasks[0].children[0].status = 'done'
     tasks[0].children[0].progress = 100
@@ -724,7 +749,7 @@ describe('task filter', () => {
     tasks[2].status = 'done'
     const { view } = await renderFiltered(filterTreePayload({ tasks }))
 
-    click(filterButton(view, 'unfinished'))
+    click(labelButton(view, 'preset:unfinished'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.8 交易仓',
@@ -736,10 +761,10 @@ describe('task filter', () => {
     expect(row(view.container, '2 生活系统')).toBeNull()
     expect(text(view.container, '.gantt-filter-count')).toBe('4 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('5 tasks')
-    expect(filterButton(view, 'unfinished').getAttribute('data-active')).toBe('true')
+    expect(labelButton(view, 'preset:unfinished').getAttribute('data-active')).toBe('true')
   })
 
-  it('shows a mode-specific hint when nothing is unfinished', async () => {
+  it('shows the generic hint when nothing is unfinished', async () => {
     const tasks = makeFilterTree()
     const markDone = (nodes) => {
       for (const node of nodes) {
@@ -751,60 +776,47 @@ describe('task filter', () => {
     tasks[1].status = 'cancelled'
     const { view } = await renderFiltered(filterTreePayload({ tasks }))
 
-    click(filterButton(view, 'unfinished'))
+    click(labelButton(view, 'preset:unfinished'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(0)
     expect(q(view.container, '.gantt-body')).toBeNull()
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing is unfinished.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All to see the whole tree.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title'))
+      .toBe('No task matches the selected labels.')
+    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Clear the labels, or pick another one.')
     expect(q(view.container, '.gantt-filter-count')).toBeNull()
 
-    click(filterButton(view, 'all'))
+    click(labelButton(view, 'all'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
+    expect(q(view.container, '.gantt-filter-empty')).toBeNull()
   })
 
-  it('shows a mode-specific hint when a perspective is empty', async () => {
-    const { view } = await renderFiltered()
-
-    click(filterButton(view, 'done'))
-    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
-    expect(q(view.container, '.gantt-body')).toBeNull()
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing is done yet.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Switch to All or Next to keep planning.')
-    expect(q(view.container, '.gantt-filter-count')).toBeNull()
-
-    click(filterButton(view, 'all'))
-    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
-  })
-
-  it('treats a tree without brief data as empty frontier, next, and today views', async () => {
+  it('treats a tree without brief data as empty frontier, next, and today labels', async () => {
     const fetchState = installFetch({ [TREE]: () => jsonResponse(treePayload()) })
     const app = setupApp()
     const view = mount(createElement(app.page().component))
     await flush()
 
-    click(q(view.container, '.gantt-filter [data-filter="frontier"]'))
-    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No pending frontier task in this view.')
-    expect(q(view.container, '.gantt-filter-count')).toBeNull()
-
-    click(q(view.container, '.gantt-filter [data-filter="next"]'))
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('Nothing can start right now.')
-
-    click(q(view.container, '.gantt-filter [data-filter="today"]'))
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No frontier and next picks for today yet.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Recompute the frontier and next to fill today.')
+    for (const label of ['preset:frontier', 'preset:next', 'preset:today']) {
+      click(q(view.container, `.gantt-tag-filter [data-label="${label}"]`))
+      expect(qa(view.container, '.gantt-row')).toHaveLength(0)
+      expect(text(view.container, '.gantt-filter-empty .gantt-empty-title'))
+        .toBe('No task matches the selected labels.')
+      expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Clear the labels, or pick another one.')
+      expect(q(view.container, '.gantt-filter-count')).toBeNull()
+      click(q(view.container, '.gantt-tag-filter [data-label="all"]'))
+      expect(qa(view.container, '.gantt-row')).toHaveLength(6)
+    }
     expect(fetchState.calls.filter(call => call.path === TREE)).toHaveLength(1)
   })
 
-  it('clears collapse for a perspective and reapplies the level for All', async () => {
+  it('expands for any label and gives the level folds back once the selection clears', async () => {
     const { view } = await renderFiltered()
     click(buttonByText(view.container, 'One level'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(3)
 
-    click(filterButton(view, 'frontier'))
+    click(labelButton(view, 'preset:frontier'))
     expect(rowLabels(view)).toEqual(['1 投资系统', '1.8 交易仓', '1.8.4 读数收口'])
 
-    click(filterButton(view, 'all'))
+    click(labelButton(view, 'all'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(3)
 
     // The source tree was never mutated: expanding again restores every row.
@@ -812,7 +824,7 @@ describe('task filter', () => {
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
   })
 
-  it('is hidden for an empty tree and localizes the perspectives', async () => {
+  it('is hidden for an empty tree and localizes the labels', async () => {
     const emptyFetch = installFetch({ [TREE]: () => jsonResponse(emptyTreePayload()) })
     const emptyApp = setupApp()
     const emptyView = mount(createElement(emptyApp.page().component))
@@ -822,20 +834,38 @@ describe('task filter', () => {
     emptyView.unmount()
 
     const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
-    expect(qa(view.container, '.gantt-filter [data-filter]').map(button => button.textContent))
-      .toEqual(['全部', '未完成', '进行中', '前沿', '该动', '今日', '已完成'])
-    click(filterButton(view, 'frontier'))
+    expect(text(view.container, '.gantt-tag-filter .gantt-filter-label')).toBe('标签')
+    expect(chips(view).map(button => button.textContent)).toEqual([
+      '全部',
+      '未完成 (8)',
+      '进行中 (0)',
+      '前沿 (1)',
+      '该动 (1)',
+      '今日 (2)',
+      '已完成 (0)',
+      '#backend (1)',
+      '#invest (2)',
+      '#urgent (1)',
+      '#life (1)',
+    ])
+    expect(labelButton(view, 'preset:frontier').getAttribute('title')).toBe('预定义标签：按状态或视角筛选。')
+    click(labelButton(view, 'preset:frontier'))
     expect(text(view.container, '.gantt-filter-count')).toBe('1 条路径')
     expect(text(view.container, '.gantt-corner-sub')).toBe('3 个任务')
-    expect(text(view.container, '.gantt-filter [data-action="recompute-brief"]')).toBe('重算前沿和该动')
+    expect(text(view.container, '.gantt-tag-filter [data-action="recompute-brief"]')).toBe('重算前沿和该动')
+    expect(text(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBe('清除标签')
+
+    const { view: english } = await renderFiltered()
+    expect(text(english.container, '.gantt-tag-filter .gantt-filter-label')).toBe('Tags')
+    expect(text(english.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBe('Clear labels')
   })
 
-  it('recomputes the frontier and next from the filter bar and refreshes the tree', async () => {
+  it('recomputes the frontier and next from the label row and refreshes the tree', async () => {
     const gate = deferred()
     const { calls, view } = await renderFiltered(filterTreePayload(), {}, {
       'api/gantt/brief/compute': () => gate.promise,
     })
-    const button = q(view.container, '.gantt-filter [data-action="recompute-brief"]')
+    const button = q(view.container, '.gantt-tag-filter [data-action="recompute-brief"]')
     expect(button.textContent).toBe('Recompute frontier and next')
 
     click(button)
@@ -854,16 +884,13 @@ describe('task filter', () => {
     expect(button.textContent).toBe('Recompute frontier and next')
   })
 
-  it('renders a tag row with usage counts only when the tree has tags', async () => {
+  it('shows artificial tags with usage counts and keeps the row when a tree has none', async () => {
     const { view } = await renderFiltered()
 
-    expect(qa(view.container, '.gantt-tag-filter [data-tag]').map(button => button.getAttribute('data-tag')))
-      .toEqual(['backend', 'invest', 'urgent', 'life'])
-    expect(qa(view.container, '.gantt-tag-filter [data-tag]').map(button => button.textContent))
-      .toEqual(['backend (1)', 'invest (2)', 'urgent (1)', 'life (1)'])
-    expect(tagButton(view, 'invest').getAttribute('data-active')).toBeNull()
-    expect(tagButton(view, 'invest').getAttribute('aria-pressed')).toBe('false')
-    expect(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBeNull()
+    expect(qa(view.container, '.gantt-tag-filter [data-kind="tag"]').map(button => button.getAttribute('data-label')))
+      .toEqual(['tag:backend', 'tag:invest', 'tag:urgent', 'tag:life'])
+    expect(qa(view.container, '.gantt-tag-filter [data-kind="tag"]').map(button => button.textContent))
+      .toEqual(['#backend (1)', '#invest (2)', '#urgent (1)', '#life (1)'])
 
     const tasks = makeFilterTree()
     const strip = (nodes) => {
@@ -874,33 +901,36 @@ describe('task filter', () => {
     }
     strip(tasks)
     const { view: plain } = await renderFiltered(filterTreePayload({ tasks }))
-    expect(q(plain.container, '.gantt-tag-filter')).toBeNull()
+    expect(qa(plain.container, '.gantt-tag-filter [data-kind="tag"]')).toHaveLength(0)
+    expect(qa(plain.container, '.gantt-tag-filter [data-kind="preset"]')).toHaveLength(7)
+    expect(q(plain.container, '.gantt-tag-filter')).not.toBeNull()
   })
 
   it('keeps matching tasks and their ancestors when a tag is picked', async () => {
     const { view } = await renderFiltered()
 
-    click(tagButton(view, 'invest'))
+    click(labelButton(view, 'tag:invest'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.8 交易仓',
       '1.8.4 读数收口',
     ])
-    expect(tagButton(view, 'invest').getAttribute('data-active')).toBe('true')
-    expect(tagButton(view, 'invest').getAttribute('aria-pressed')).toBe('true')
+    expect(labelButton(view, 'tag:invest').getAttribute('data-active')).toBe('true')
+    expect(labelButton(view, 'tag:invest').getAttribute('aria-pressed')).toBe('true')
     expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
     expect(text(view.container, '.gantt-corner-sub')).toBe('3 tasks')
 
-    click(tagButton(view, 'invest'))
+    click(labelButton(view, 'tag:invest'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
     expect(text(view.container, '.gantt-filter-count')).toBeNull()
+    expect(labelButton(view, 'all').getAttribute('data-active')).toBe('true')
   })
 
-  it('combines several tags with OR and clears the whole selection', async () => {
+  it('unions several selected labels and clears the whole selection', async () => {
     const { view } = await renderFiltered()
 
-    click(tagButton(view, 'invest'))
-    click(tagButton(view, 'life'))
+    click(labelButton(view, 'tag:invest'))
+    click(labelButton(view, 'tag:life'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.8 交易仓',
@@ -913,47 +943,31 @@ describe('task filter', () => {
     click(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]'))
     expect(qa(view.container, '.gantt-row')).toHaveLength(8)
     expect(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBeNull()
-    expect(tagButton(view, 'invest').getAttribute('data-active')).toBeNull()
+    expect(labelButton(view, 'tag:invest').getAttribute('data-active')).toBeNull()
     expect(text(view.container, '.gantt-filter-count')).toBeNull()
   })
 
-  it('narrows a status perspective with the selected tags and shows the tag empty state', async () => {
+  it('unions predefined labels with artificial tags instead of narrowing them', async () => {
     const { view } = await renderFiltered()
 
-    click(filterButton(view, 'frontier'))
-    click(tagButton(view, 'invest'))
+    click(labelButton(view, 'preset:frontier'))
+    click(labelButton(view, 'tag:life'))
     expect(rowLabels(view)).toEqual([
       '1 投资系统',
       '1.8 交易仓',
       '1.8.4 读数收口',
+      '2 生活系统',
+      '2.1 生活实验',
     ])
-    expect(text(view.container, '.gantt-filter-count')).toBe('1 paths')
+    expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
 
-    click(tagButton(view, 'invest'))
-    click(tagButton(view, 'life'))
-    expect(qa(view.container, '.gantt-row')).toHaveLength(0)
-    expect(q(view.container, '.gantt-body')).toBeNull()
-    expect(text(view.container, '.gantt-filter-empty .gantt-empty-title')).toBe('No task carries the selected tags.')
-    expect(text(view.container, '.gantt-filter-empty .gantt-hint')).toBe('Clear the tag filter, or pick another tag.')
+    // A label whose set is empty adds nothing to the union.
+    click(labelButton(view, 'preset:done'))
+    expect(qa(view.container, '.gantt-row')).toHaveLength(5)
+    expect(text(view.container, '.gantt-filter-count')).toBe('2 paths')
 
     click(q(view.container, '.gantt-tag-filter [data-action="clear-tags"]'))
-    expect(rowLabels(view)).toEqual([
-      '1 投资系统',
-      '1.8 交易仓',
-      '1.8.4 读数收口',
-    ])
-  })
-
-  it('localizes the tag row and its clear action', async () => {
-    const { view } = await renderFiltered(filterTreePayload(), { locale: 'zh' })
-
-    expect(text(view.container, '.gantt-tag-filter .gantt-filter-label')).toBe('标签')
-    expect(tagButton(view, 'invest').textContent).toBe('invest (2)')
-    click(tagButton(view, 'invest'))
-    expect(text(view.container, '.gantt-tag-filter [data-action="clear-tags"]')).toBe('清除标签')
-
-    const { view: english } = await renderFiltered()
-    expect(text(english.container, '.gantt-tag-filter .gantt-filter-label')).toBe('Tags')
+    expect(qa(view.container, '.gantt-row')).toHaveLength(8)
   })
 
   it('reports a recompute failure in an error toast', async () => {
@@ -961,7 +975,7 @@ describe('task filter', () => {
       'api/gantt/brief/compute': () => jsonResponse({ ok: false, error: 'brief is locked' }, 409),
     })
 
-    click(q(view.container, '.gantt-filter [data-action="recompute-brief"]'))
+    click(q(view.container, '.gantt-tag-filter [data-action="recompute-brief"]'))
     await flush()
 
     const toast = q(view.container, '.gantt-toast')
@@ -972,7 +986,7 @@ describe('task filter', () => {
     const exploding = await renderFiltered(filterTreePayload(), {}, {
       'api/gantt/brief/compute': () => Promise.reject('compute exploded'),
     })
-    click(q(exploding.view.container, '.gantt-filter [data-action="recompute-brief"]'))
+    click(q(exploding.view.container, '.gantt-tag-filter [data-action="recompute-brief"]'))
     await flush()
     expect(text(exploding.view.container, '.gantt-toast')).toBe('compute exploded')
   })
