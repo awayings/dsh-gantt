@@ -29,11 +29,11 @@ Base URL: the origin printed by your own `dsh web` launch, for example
 
 | Method | Path | Body / Query | Success |
 | --- | --- | --- | --- |
-| `GET` | `/api/gantt/tree` | — | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats |
+| `GET` | `/api/gantt/tree` | `?tags=&mode=` | `200` tree, frontier `brief`, `dailyBrief`, numbers, rollups, stats; filtered reads also echo `filter` |
 | `GET` | `/api/gantt/agents` | `?type=&role=&q=&limit=` | `200 { ok, agents }` |
 | `POST` | `/api/gantt/agents` | `{ id?, name, type, role?, description?, details?, endpoint? }` | `200 { ok, agent }` |
 | `GET` | `/api/gantt/task/context` | `?taskId=<id>` | `200 { ok, taskId, markdown, chars, task }` |
-| `GET` | `/api/gantt/ready` | `?tag=ready\|next\|todo&limit=` | `200 { ok, tag, tasks }` |
+| `GET` | `/api/gantt/ready` | `?tag=ready\|next\|todo&tags=&mode=&limit=` | `200 { ok, tag, tasks }` |
 | `POST` | `/api/gantt/task/report` | `{ taskId, agentId, report, status?, progress? }` | `200 { ok, task, event }` |
 | `GET` | `/api/gantt/focus` | `?sessionId=<id>` | `200 { ok, taskId }` |
 | `POST` | `/api/gantt/focus/set` | `{ sessionId, taskId? }` | `200 { ok, taskId }` |
@@ -129,9 +129,12 @@ share the `agents` table. The plugin itself never calls a model.
   `400`. `update` replaces the whole array.
 - **Tags** is an array of at most 20 labels. Each label is a trimmed string of
   1–40 characters; duplicates are dropped keeping the first occurrence. Imported
-  rows start with `[]`; the UI edits tags in the task dialog and filters the
-  tree by any selected tag plus its ancestor path. `update` replaces the whole
-  array, and `null` clears it.
+  rows start with `[]`; the UI edits tags in the task dialog. The page's filter
+  row mixes these manual labels with the derived status views (未完成 / 进行中 /
+  前沿 / 该动 / 今日 / 已完成) into one union filter; only the manual tags are
+  stored. The API can filter a read by tags with `?tags=&mode=` on
+  `/api/gantt/tree` and `/api/gantt/ready`. `update` replaces the whole array,
+  and `null` clears it.
 - **Plan status** is one of `todo`, `in_progress`, `done`, `skipped` — the
   vocabulary of a *plan block* (a time slot on a day), not of a task.
 - **Plan slot** is one of `morning` (starts before `10:00`), `daytime` (starts
@@ -281,6 +284,41 @@ manual/decomposed tasks:
 | `blocked` | rows whose derived status is `blocked` |
 | `overdue` | non-done rows whose `endDate` is before `today` |
 | `progress` | `round(done / total * 100)`, `0` for an empty tree |
+
+### Filter the tree by tags
+
+```
+curl -s 'http://127.0.0.1:3080/api/gantt/tree?tags=投资,复盘'
+curl -s 'http://127.0.0.1:3080/api/gantt/tree?tags=投资,复盘&mode=and'
+curl -s 'http://127.0.0.1:3080/api/gantt/tree?tags=投资&tags=复盘'
+```
+
+- `tags` selects tasks by their manual labels. Values are comma-separated and
+  the parameter may be repeated; the occurrences merge in order, each value is
+  trimmed, must be 1–40 characters, at most 20 labels are allowed, and
+  duplicates are dropped. An empty `tags` value is a `400`, exactly as on the
+  write routes.
+- `mode` is `any` (default) or `and`. `any` keeps a task carrying at least one
+  selected label; `and` keeps only tasks carrying all of them. Any other value
+  is a `400`, even when `tags` is absent.
+- The returned `tasks` are the matching tasks plus their ancestor path, kept as
+  containers so the hierarchy numbers stay readable; only the matching part of
+  each subtree survives. Numbers are the full-tree dot ids and are never
+  renumbered. A retained parent whose children were pruned recomputes its
+  rollup (dates, progress, derived status) from the children it still shows;
+  a matching task whose own children were all pruned keeps its full-tree
+  rollup fields and becomes a leaf (`hasChildren: false`).
+- `stats` summarizes the returned (pruned) tree. `brief` and `dailyBrief` are
+  cross-tree views of the whole tree and are intentionally **not** filtered:
+  frontier/next picks and the daily plan still refer to tasks outside the
+  pruned result.
+- A filtered response adds a self-describing echo,
+  `"filter": { "tags": ["投资", "复盘"], "mode": "any" }`. Without `tags` the
+  response is unchanged and carries no `filter` field (no tag filter).
+- The page's predefined labels (未完成/进行中/前沿/该动/今日/已完成) are derived
+  views, not stored tags, and are not accepted here; `GET /api/gantt/ready`
+  covers the ready/next/todo classes.
+
 
 ### `brief`
 
@@ -578,6 +616,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/task/context?taskId=<task-id>'
 
 ```sh
 curl -s 'http://127.0.0.1:3080/api/gantt/ready?tag=ready&limit=20'
+curl -s 'http://127.0.0.1:3080/api/gantt/ready?tag=ready&tags=投资&mode=any'
 ```
 
 ```json
@@ -593,6 +632,7 @@ curl -s 'http://127.0.0.1:3080/api/gantt/ready?tag=ready&limit=20'
       "status": "todo",
       "description": "",
       "doneWhen": "每天一句读数 + 三条腿各一个数",
+      "tags": ["投资", "复盘"],
       "trackId": "…",
       "trackName": "投资系统"
     }
@@ -603,6 +643,13 @@ curl -s 'http://127.0.0.1:3080/api/gantt/ready?tag=ready&limit=20'
 - `tag` is `ready` (default), `next`, or `todo`; any other value is a `400`.
   `ready` keeps pending leaves whose dependency is empty or already done;
   `next` reuses the tree brief's per-track pick; `todo` keeps every pending leaf.
+  These are the **ready classes** — the selection vocabulary of this route, not
+  stored task tags.
+- `tags` and `mode` filter the rows by manual task tags with the same parsing,
+  validation and `any`/`and` semantics as
+  [`/api/gantt/tree`](#filter-the-tree-by-tags). They are applied after the
+  ready class is collected and before `limit`; each returned row carries its
+  `tags` array so an external agent can see why it matched.
 - `limit` is an integer 1–100 (default 20), and the rows are grouped by track in
   rendered tree order.
 
@@ -1452,6 +1499,7 @@ All failures are JSON with a `4xx`/`5xx` status:
 | `400` | missing/invalid field | `title is required`, `status must be one of todo, in_progress, blocked, done, cancelled`, `endDate must not be before startDate` |
 | `400` | invalid links | `links must be an array`, `links[0].type must be one of memory, file, url, task, note` |
 | `400` | invalid tags | `tags must be an array`, `tags[0] must be a string`, `tags[0] must not be empty`, `tags must have at most 20 entries` |
+| `400` | invalid tag query | `tags[0] must not be empty`, `tags[0] must be at most 40 characters`, `tags must have at most 20 entries`, `mode must be one of any, and` |
 | `400` | hierarchy violation | `a task cannot be its own parent`, `a task cannot move under one of its descendants` |
 | `400` | decomposition depth cap | `decompose would exceed 4 levels` |
 | `400` | invalid plan/import/context/brief input | `date must be a YYYY-MM-DD date`, `date is not a valid calendar day`, `dir must be an absolute path`, `notes must be at most 500 characters`, `limit must be an integer from 1000 to 60000` |

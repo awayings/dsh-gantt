@@ -143,9 +143,11 @@ Steps 1-2 happen once per worker, 3-8 once per task, and step 9 closes a round.
 2. **Load the playbook.** `get_worker_guide` once at the start of a Gantt task;
    it returns the deployed server's full markdown playbook.
 3. **Pull a task.** `list_ready_tasks` with `tag=ready` (dependencies met),
-   `next` (frontier pick per track), or `todo` (every pending leaf). Rows carry
-   `id`, `number` (`1.8.1`), `ref`, title, status, description, `doneWhen`, and
-   the track.
+   `next` (frontier pick per track), or `todo` (every pending leaf). Narrow by
+   manual labels with `tags: ["投资"]` and `mode: "any" | "and"` (default
+   `any`); the ready class and the tag filter combine. Rows carry `id`, `number`
+   (`1.8.1`), `ref`, title, status, description, `doneWhen`, `tags`, and the
+   track.
 4. **Read before you write.** `get_task_context` for the picked task: ancestor
    chain, fields, links, earlier report, recent trajectory.
 5. **Work** in your own environment; the store never runs your code.
@@ -225,7 +227,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' 
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   http://100.83.77.65:18765/mcp   # every tool name, get_worker_guide included
 curl -fsS -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_ready_tasks","arguments":{"tag":"ready","limit":2}}}' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_ready_tasks","arguments":{"tag":"ready","tags":["投资"],"mode":"any","limit":2}}}' \
   http://100.83.77.65:18765/mcp   # expect {"ok":true,"tag":"ready","tasks":[...]}
 ```
 

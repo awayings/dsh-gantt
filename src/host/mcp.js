@@ -33,7 +33,7 @@ export function assertHttpBinding(host, token) {
  */
 export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: conversations and turns gain time and relation dimensions in a Gantt tree. This server is pull-only — nothing is dispatched to you.
 
-Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Then: list_ready_tasks (tag=ready) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
+Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Then: list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
 Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
 
@@ -50,7 +50,9 @@ pulling from it; nothing is ever pushed to you.
    always returns the same agent id. Pass agentName on every later call.
 2. list_ready_tasks {tag: "ready"} — leaves whose dependencies are met. Use
    tag "next" for the first executable pick per track, "todo" for every pending
-   leaf. Pick one task (a human may also hand you the point number).
+   leaf. Add tags: ["ops"] to keep only tasks carrying those manual labels;
+   mode "any" (default) needs one of them, "and" needs all. Pick one task (a
+   human may also hand you the point number).
 3. get_task_context {taskId} — always before writing. The chain, the detail, and
    the completion report are the context a decomposition needs; a title alone is
    never enough.
@@ -137,12 +139,14 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
   },
   {
     name: 'list_ready_tasks',
-    description: 'List the tasks an external tool can work on: ready (dependencies met), next (the first executable pick per track), or todo (every pending leaf).',
+    description: 'List the tasks an external tool can work on: ready (dependencies met), next (the first executable pick per track), or todo (every pending leaf). Filter by manual task tags with tags and mode; each returned task carries its tags.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
         tag: { type: 'string', enum: ['ready', 'next', 'todo'], description: 'Selection vocabulary; defaults to ready.' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Optional manual task tags to match: trimmed, 1-40 characters each, at most 20, deduplicated.' },
+        mode: { type: 'string', enum: ['any', 'and'], description: 'Tag match: any (default) keeps a task carrying one of the tags, and keeps only tasks carrying all of them.' },
         limit: { type: 'integer', minimum: 1, maximum: 100 },
       },
     },
@@ -415,7 +419,7 @@ function callTool(store, name, args) {
     return { ok: true, agents: store.listAgents({ type: args.type, role: args.role, q: args.q, limit: args.limit }) }
   }
   if (name === 'list_ready_tasks') {
-    return { ok: true, ...store.readyTasks({ tag: args.tag, limit: args.limit }) }
+    return { ok: true, ...store.readyTasks({ tag: args.tag, limit: args.limit, tags: args.tags, mode: args.mode }) }
   }
   if (name === 'get_task_context') {
     return { ok: true, ...store.taskContext(resolveTaskId(store, args.taskId)) }

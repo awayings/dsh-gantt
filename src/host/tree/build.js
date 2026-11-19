@@ -85,6 +85,25 @@ export function deriveSummaryStatus(children, progress, state = '') {
 }
 
 /**
+ * Recompute a node's cached rollup fields from its current children, applying
+ * the documented child rules. `buildTree` runs it on the full tree; read-time
+ * tag filtering runs it again on the pruned children so a filtered parent still
+ * summarizes the subtree the caller can see. The caller guarantees that
+ * `node.children` is non-empty.
+ * @param {TreeTaskNode} node
+ * @returns {void}
+ */
+export function rollupNode(node) {
+  const { children } = node
+  const active = children.filter(child => child.status !== 'cancelled')
+  const rollup = active.length > 0 ? active : children
+  node.startDate = rollup.reduce((min, child) => (child.startDate < min ? child.startDate : min), rollup[0].startDate)
+  node.endDate = rollup.reduce((max, child) => (child.endDate > max ? child.endDate : max), rollup[0].endDate)
+  node.progress = active.length === 0 ? 0 : Math.round(active.reduce((sum, child) => sum + child.progress, 0) / active.length)
+  node.status = deriveSummaryStatus(children, node.progress, node.state)
+}
+
+/**
  * Build the nested tree, assigning hierarchical numbers and rollup fields.
  * @param {TreeTask[]} rows
  * @returns {TreeTaskNode[]}
@@ -117,14 +136,7 @@ export function buildTree(rows) {
     const children = build(row.id, number)
     /** @type {TreeTaskNode} */
     const node = { ...row, number, hasChildren: children.length > 0, children }
-    if (children.length > 0) {
-      const active = children.filter(child => child.status !== 'cancelled')
-      const rollup = active.length > 0 ? active : children
-      node.startDate = rollup.reduce((min, child) => (child.startDate < min ? child.startDate : min), rollup[0].startDate)
-      node.endDate = rollup.reduce((max, child) => (child.endDate > max ? child.endDate : max), rollup[0].endDate)
-      node.progress = active.length === 0 ? 0 : Math.round(active.reduce((sum, child) => sum + child.progress, 0) / active.length)
-      node.status = deriveSummaryStatus(children, node.progress, node.state)
-    }
+    if (children.length > 0) rollupNode(node)
     return node
   })
 

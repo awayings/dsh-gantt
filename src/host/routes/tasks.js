@@ -1,6 +1,7 @@
 // Task routes: the tree read, task CRUD, split/decompose, and scheduling.
 
-import { json, readBody, requiredId } from './http.js'
+import { filterTreeByTags, normalizeTagMode, summarize } from '../tree.js'
+import { json, parseQueryTags, readBody, requiredId } from './http.js'
 
 /** @typedef {import('../store.js').DecomposeChildInput} DecomposeChildInput */
 /** @typedef {import('../store.js').ScheduleInput} ScheduleInput */
@@ -13,11 +14,28 @@ import { json, readBody, requiredId } from './http.js'
 export const treeRoute = {
   method: 'GET',
   path: '/api/gantt/tree',
-  description: 'Read the hierarchical task tree with numbers, rollups, and stats.',
-  fetch: async (_request, { store }) => json({
-    ok: true,
-    ...store.snapshot(),
-  }),
+  description: 'Read the hierarchical task tree with numbers, rollups, and stats. Query: tags? (comma-separated or repeated labels), mode? (any|and).',
+  fetch: async (request, { store }) => {
+    const params = new URL(request.url, 'http://localhost').searchParams
+    const tags = parseQueryTags(params.getAll('tags'))
+    const mode = normalizeTagMode(params.get('mode'))
+    if (tags === null) return json({ ok: true, ...store.snapshot() })
+    const snapshot = store.snapshot()
+    const tasks = filterTreeByTags(snapshot.tasks, tags, mode)
+    // `brief` and `dailyBrief` are cross-tree views (frontier, next pick, the
+    // daily plan); they intentionally keep the whole tree, and only `tasks` and
+    // `stats` narrow to the label filter.
+    return json({
+      ok: true,
+      today: snapshot.today,
+      statuses: snapshot.statuses,
+      tasks,
+      stats: summarize(tasks),
+      brief: snapshot.brief,
+      dailyBrief: snapshot.dailyBrief,
+      filter: { tags, mode },
+    })
+  },
 }
 
 /** @type {RouteSpec} */

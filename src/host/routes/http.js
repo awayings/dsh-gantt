@@ -2,6 +2,7 @@
 // buffered body parser, the id guard, and the error mapping.
 
 import { GanttError } from '../errors.js'
+import { normalizeTags } from '../store/tasks.js'
 import { todayIso } from '../tree.js'
 
 /** @typedef {import('../store.js').GanttStore} GanttStore */
@@ -100,6 +101,19 @@ export function requiredId(body) {
 export function requestedDate(request) {
   const date = new URL(request.url, 'http://localhost').searchParams.get('date')
   return date === null || date.trim() === '' ? todayIso() : date.trim()
+}
+
+/**
+ * Read the `tags` query parameter(s) into one normalized label list: repeated
+ * parameters and comma-separated values merge in the order they appear, then
+ * the write-path tag rules apply (trimmed, 1-40 characters, at most 20
+ * entries, deduplicated). Absent means "no tag filter" and returns `null`.
+ * @param {string[]} values one entry per `?tags=` occurrence
+ * @returns {string[] | null}
+ */
+export function parseQueryTags(values) {
+  if (values.length === 0) return null
+  return normalizeTags(values.flatMap(value => value.split(',')))
 }
 
 /**

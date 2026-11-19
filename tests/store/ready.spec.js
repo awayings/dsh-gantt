@@ -18,12 +18,12 @@ afterEach(() => {
 function makeTree() {
   const first = store.create({ title: '投资系统', kind: 'track', ref: 'track:1' })
   store.create({ title: 'Done leaf', parentId: first.id, kind: 'node', ref: 'node:1.1', status: 'done' })
-  store.create({ title: 'Ready leaf', parentId: first.id, kind: 'node', ref: 'node:1.2', dep: '1.1' })
-  store.create({ title: 'Missing dep', parentId: first.id, kind: 'node', ref: 'node:1.3', dep: '9.9' })
+  store.create({ title: 'Ready leaf', parentId: first.id, kind: 'node', ref: 'node:1.2', dep: '1.1', tags: ['ops'] })
+  store.create({ title: 'Missing dep', parentId: first.id, kind: 'node', ref: 'node:1.3', dep: '9.9', tags: ['ops', 'db'] })
   store.create({ title: 'Blocked leaf', parentId: first.id, kind: 'node', ref: 'node:1.4', status: 'blocked' })
   store.create({ title: 'Running leaf', parentId: first.id, kind: 'node', ref: 'node:1.5', status: 'in_progress' })
   const second = store.create({ title: '元能力', kind: 'track', ref: 'track:2' })
-  store.create({ title: 'Second leaf', parentId: second.id, kind: 'node', ref: 'node:2.1' })
+  store.create({ title: 'Second leaf', parentId: second.id, kind: 'node', ref: 'node:2.1', tags: ['db'] })
   return store.tree()
 }
 
@@ -80,6 +80,7 @@ describe('GanttStore.readyTasks', () => {
       status: 'todo',
       description: '',
       doneWhen: '',
+      tags: ['ops'],
       trackId: expect.any(String),
       trackName: '投资系统',
     })
@@ -95,9 +96,29 @@ describe('GanttStore.readyTasks', () => {
     expect(store.readyTasks({ tag: null, limit: null })).toEqual({ tag: 'ready', tasks: expect.any(Array) })
   })
 
-  it('validates the tag and the limit', () => {
+  it('filters the ready list by manual tags in any and and mode', () => {
+    makeTree()
+    expect(store.readyTasks({ tags: ['ops'] }).tasks.map(task => task.ref)).toEqual(['node:1.2'])
+    expect(store.readyTasks({ tags: ['ops'], tag: 'todo' }).tasks.map(task => task.ref)).toEqual(['node:1.2', 'node:1.3'])
+    expect(store.readyTasks({ tags: ['ops'], mode: 'any', tag: 'todo' }).tasks.map(task => task.ref)).toEqual(['node:1.2', 'node:1.3'])
+    expect(store.readyTasks({ tags: ['ops'], mode: 'and', tag: 'todo' }).tasks.map(task => task.ref)).toEqual(['node:1.2', 'node:1.3'])
+    expect(store.readyTasks({ tags: ['ops', 'db'], mode: 'and', tag: 'todo' }).tasks.map(task => task.ref)).toEqual(['node:1.3'])
+    expect(store.readyTasks({ tags: ['db'], tag: 'todo' }).tasks.map(task => task.ref)).toEqual(['node:1.3', 'node:2.1'])
+    expect(store.readyTasks({ tags: [] }).tasks).toHaveLength(3)
+    expect(store.readyTasks({ tags: ['db'], tag: 'todo', limit: 1 }).tasks.map(task => task.ref)).toEqual(['node:1.3'])
+  })
+
+  it('validates the tag, the limit, the tag list, and the mode', () => {
+    makeTree()
     expectGanttError(() => store.readyTasks({ tag: 'later' }), 'tag must be one of ready, next, todo')
     expectGanttError(() => store.readyTasks({ limit: 0 }), 'limit must be an integer from 1 to 100')
     expectGanttError(() => store.readyTasks({ limit: 101 }), 'limit must be an integer from 1 to 100')
+    expectGanttError(() => store.readyTasks({ tags: 'ops' }), 'tags must be an array')
+    expectGanttError(() => store.readyTasks({ tags: [''] }), 'tags[0] must not be empty')
+    expectGanttError(
+      () => store.readyTasks({ tags: Array.from({ length: 21 }, (_, index) => `tag-${index}`) }),
+      'tags must have at most 20 entries',
+    )
+    expectGanttError(() => store.readyTasks({ mode: 'all' }), 'mode must be one of any, and')
   })
 })

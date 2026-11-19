@@ -42,6 +42,11 @@ describe('MCP metadata', () => {
     }
     expect(MCP_TOOLS[0].inputSchema.required).toEqual(['name', 'type'])
     expect(MCP_TOOLS[8].inputSchema.required).toEqual(['taskId', 'report'])
+    const ready = /** @type {any} */ (MCP_TOOLS.find(tool => tool.name === 'list_ready_tasks'))
+    expect(ready.description).toMatch(/manual task tags/)
+    expect(ready.inputSchema.properties.tag).toMatchObject({ enum: ['ready', 'next', 'todo'] })
+    expect(ready.inputSchema.properties.tags).toMatchObject({ type: 'array', items: { type: 'string' } })
+    expect(ready.inputSchema.properties.mode).toMatchObject({ type: 'string', enum: ['any', 'and'] })
     expect(MCP_INSTRUCTIONS).toMatch(/register_agent/)
     expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
     expect(WORKER_GUIDE).toMatch(/## Loop/)
@@ -181,6 +186,32 @@ describe('tools/call', () => {
     expect(context.taskId).toBe(task.id)
     expect(context.markdown).toContain('# 任务上下文：1 Ready task（任务）')
     expect(context.chars).toBe(context.markdown.length)
+  })
+
+  it('filters ready tasks by manual tags and validates the filter', () => {
+    store.create({ title: 'Ops', tags: ['ops'] })
+    store.create({ title: 'UI', tags: ['ui'] })
+    store.create({ title: 'Both', tags: ['ops', 'ui'] })
+    const call = args => rpc({
+      jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'list_ready_tasks', arguments: args },
+    })
+
+    const any = toolJson(call({ tags: ['ops'] }))
+    expect(any.tag).toBe('ready')
+    expect(any.tasks.map(task => task.title)).toEqual(['Ops', 'Both'])
+    expect(any.tasks.map(task => task.tags)).toEqual([['ops'], ['ops', 'ui']])
+    const and = toolJson(call({ tags: ['ops', 'ui'], mode: 'and' }))
+    expect(and.tasks.map(task => task.title)).toEqual(['Both'])
+    expect(toolJson(call({ tags: ['ops'], limit: 1 })).tasks).toHaveLength(1)
+    expect(toolJson(call({ tags: [] })).tasks).toHaveLength(3)
+
+    for (const [args, message] of [
+      [{ tags: 'ops' }, 'tags must be an array'],
+      [{ tags: [''] }, 'tags[0] must not be empty'],
+      [{ mode: 'all' }, 'mode must be one of any, and'],
+    ]) {
+      expect(call(args).result).toEqual({ content: [{ type: 'text', text: message }], isError: true })
+    }
   })
 
   it('converts a thrown non-Error value into isError text', () => {

@@ -15,9 +15,10 @@ description: 通过 MCP 从共享甘特任务树里领取工作 —— 当被要
 agent id。
 
 **开始。** 接手甘特任务时，先调用一次 `get_worker_guide` 并照它执行。然后拉取：
-`list_ready_tasks`（`tag` 取 `ready` | `next` | `todo`，默认 `ready`），再对你选中
-的任务调用 `get_task_context`。写任何东西之前，先读完它的祖先链路、字段、关联和
-轨迹。
+`list_ready_tasks`（`tag` 取 `ready` | `next` | `todo`，默认 `ready`；可用
+`tags: [...]` + `mode: "any" | "and"` 按人工标签过滤，返回的每条任务带 `tags`），
+再对你选中的任务调用 `get_task_context`。写任何东西之前，先读完它的祖先链路、
+字段、关联和轨迹。
 
 **循环。**
 

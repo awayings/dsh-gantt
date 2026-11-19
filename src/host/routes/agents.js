@@ -2,7 +2,7 @@
 // surface external coding tools use beside the MCP transport.
 
 import { GanttError } from '../errors.js'
-import { json, readBody } from './http.js'
+import { json, parseQueryTags, readBody } from './http.js'
 
 /** @typedef {import('../store.js').AgentInput} AgentInput */
 /** @typedef {import('../store.js').ReportCompletionInput} ReportCompletionInput */
@@ -59,11 +59,19 @@ export const taskContextRoute = {
 export const readyRoute = {
   method: 'GET',
   path: '/api/gantt/ready',
-  description: 'List the ready/next/todo leaves. Query: tag? (ready|next|todo), limit?.',
+  description: 'List the ready/next/todo leaves. Query: tag? (ready|next|todo), tags? (manual labels, comma-separated or repeated), mode? (any|and), limit?.',
   fetch: async (request, { store }) => {
     const params = new URL(request.url, 'http://localhost').searchParams
     const limit = params.get('limit')
-    return json({ ok: true, ...store.readyTasks({ tag: params.get('tag') ?? undefined, limit: limit === null ? undefined : limit }) })
+    return json({
+      ok: true,
+      ...store.readyTasks({
+        tag: params.get('tag') ?? undefined,
+        limit: limit === null ? undefined : limit,
+        tags: parseQueryTags(params.getAll('tags')) ?? undefined,
+        mode: params.get('mode') ?? undefined,
+      }),
+    })
   },
 }
 

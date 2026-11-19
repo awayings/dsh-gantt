@@ -199,6 +199,128 @@ describe('GET /api/gantt/tree', () => {
   })
 })
 
+describe('GET /api/gantt/tree tag filter', () => {
+  /** Create one task through the write route and return it. */
+  async function createTagTask(routes, body) {
+    const created = await invoke(routes, ROUTES.tasks, body)
+    expect(created.status).toBe(201)
+    return created.payload.task
+  }
+
+  /** One track with tagged and untagged descendants plus one untagged root. */
+  async function tagFixture(routes) {
+    const track = await createTagTask(routes, { title: 'Track', tags: ['ops'] })
+    const ui = await createTagTask(routes, { title: 'UI', parentId: track.id, tags: ['ui'], status: 'done', progress: 100 })
+    const ops = await createTagTask(routes, { title: 'Ops', parentId: track.id, tags: ['ops'], status: 'in_progress', progress: 40 })
+    const infra = await createTagTask(routes, { title: 'Infra', parentId: ops.id, tags: ['ops', 'infra'] })
+    const both = await createTagTask(routes, { title: 'Both', parentId: track.id, tags: ['ops', 'ui'], status: 'in_progress', progress: 10 })
+    const plain = await createTagTask(routes, { title: 'Plain' })
+    return { track, ui, ops, infra, both, plain }
+  }
+
+  /** Flatten a response tree into `[title, number]` pairs in document order. */
+  function rendered(nodes) {
+    const flat = []
+    const walk = (list) => {
+      for (const node of list) {
+        flat.push([node.title, node.number])
+        walk(node.children)
+      }
+    }
+    walk(nodes)
+    return flat
+  }
+
+  it('leaves the response shape unchanged without a tags parameter', async () => {
+    const { routes } = start()
+    await tagFixture(routes)
+    const plain = await invoke(routes, ROUTES.tree)
+    expect(plain.status).toBe(200)
+    expect(plain.payload).not.toHaveProperty('filter')
+    expect(rendered(plain.payload.tasks)).toEqual([
+      ['Track', '1'], ['UI', '1.1'], ['Ops', '1.2'], ['Infra', '1.2.1'], ['Both', '1.3'], ['Plain', '2'],
+    ])
+    const explicitMode = await invoke(routes, `${ROUTES.tree}?mode=any`)
+    expect(explicitMode.payload).toEqual(plain.payload)
+  })
+
+  it('keeps the matching tasks and their ancestor path with full-tree numbers', async () => {
+    const { routes } = start()
+    await tagFixture(routes)
+    const full = await invoke(routes, ROUTES.tree)
+    const filtered = await invoke(routes, `${ROUTES.tree}?tags=ops`)
+    expect(filtered.status).toBe(200)
+    expect(filtered.payload.filter).toEqual({ tags: ['ops'], mode: 'any' })
+    expect(rendered(filtered.payload.tasks)).toEqual([
+      ['Track', '1'], ['Ops', '1.2'], ['Infra', '1.2.1'], ['Both', '1.3'],
+    ])
+    expect(filtered.payload.stats).toEqual({
+      total: 4,
+      done: 0,
+      inProgress: 2,
+      blocked: 0,
+      cancelled: 0,
+      overdue: 0,
+      progress: 0,
+    })
+    // brief and dailyBrief are whole-tree views, so a label filter never rewrites them.
+    expect(filtered.payload.brief).toEqual(full.payload.brief)
+    expect(filtered.payload.dailyBrief).toEqual(full.payload.dailyBrief)
+  })
+
+  it('retains unmatched ancestors as containers with recomputed rollups', async () => {
+    const { routes } = start()
+    await tagFixture(routes)
+    const filtered = await invoke(routes, `${ROUTES.tree}?tags=infra`)
+    expect(rendered(filtered.payload.tasks)).toEqual([
+      ['Track', '1'], ['Ops', '1.2'], ['Infra', '1.2.1'],
+    ])
+    const track = filtered.payload.tasks[0]
+    const ops = track.children[0]
+    expect(track.hasChildren).toBe(true)
+    expect(track.tags).toEqual(['ops'])
+    expect(track).toMatchObject({ status: 'todo', progress: 0 })
+    expect(ops).toMatchObject({ status: 'todo', progress: 0, hasChildren: true })
+  })
+
+  it('supports and mode, repeated parameters, commas, and deduplication', async () => {
+    const { routes } = start()
+    await tagFixture(routes)
+    const and = await invoke(routes, `${ROUTES.tree}?tags=ops,ui&mode=and`)
+    expect(and.payload.filter).toEqual({ tags: ['ops', 'ui'], mode: 'and' })
+    expect(rendered(and.payload.tasks)).toEqual([['Track', '1'], ['Both', '1.3']])
+    const repeated = await invoke(routes, `${ROUTES.tree}?tags=ops&tags=ui`)
+    const commaSeparated = await invoke(routes, `${ROUTES.tree}?tags=ops,ui`)
+    expect(repeated.payload).toEqual(commaSeparated.payload)
+    expect(repeated.payload.filter).toEqual({ tags: ['ops', 'ui'], mode: 'any' })
+    const deduped = await invoke(routes, `${ROUTES.tree}?tags=ops,ops&tags=ui`)
+    expect(deduped.payload.filter).toEqual({ tags: ['ops', 'ui'], mode: 'any' })
+    const blankMode = await invoke(routes, `${ROUTES.tree}?tags=ops&mode=`)
+    expect(blankMode.payload.filter).toEqual({ tags: ['ops'], mode: 'any' })
+  })
+
+  it('maps invalid tag and mode parameters to 400', async () => {
+    const { routes } = start()
+    await tagFixture(routes)
+    const cases = [
+      ['tags=', 'tags[0] must not be empty'],
+      ['tags=ops,,ui', 'tags[1] must not be empty'],
+      [`tags=${'x'.repeat(41)}`, 'tags[0] must be at most 40 characters'],
+      [
+        `tags=${Array.from({ length: 21 }, (_, index) => `t${index}`).join(',')}`,
+        'tags must have at most 20 entries',
+      ],
+      ['mode=all', 'mode must be one of any, and'],
+      ['tags=ops&mode=all', 'mode must be one of any, and'],
+    ]
+    for (const [query, error] of cases) {
+      const result = await invoke(routes, `${ROUTES.tree}?${query}`)
+      expect(result.status).toBe(400)
+      expect(result.payload).toEqual({ ok: false, error })
+    }
+  })
+})
+
 describe('GET /api/gantt/meta', () => {
   it('describes the database, vocabulary, schema, and endpoint catalog', async () => {
     const { routes } = start()

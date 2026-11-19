@@ -144,7 +144,7 @@ as text; they never crash the server.
 | --- | --- |
 | `register_agent` | Register or update this tool as a human/AI operator |
 | `list_agents` | List operators with optional filters |
-| `list_ready_tasks` | Pull ready / next / todo work |
+| `list_ready_tasks` | Pull ready / next / todo work, optionally by manual tag |
 | `get_task_context` | Read one task's stable markdown context |
 | `create_task` | Create a child task, or the next sibling of a task |
 | `decompose_task` | Split one task into 1–100 child tasks |
@@ -217,7 +217,9 @@ same shape as `register_agent`'s `agent`.
 
 | Parameter | Required | Notes |
 | --- | --- | --- |
-| `tag` | no | `ready` (default), `next`, or `todo` |
+| `tag` | no | `ready` (default), `next`, or `todo` — the ready class |
+| `tags` | no | Manual task labels to match; array of trimmed 1–40 character strings, at most 20, deduplicated |
+| `mode` | no | `any` (default) keeps a task carrying one of `tags`; `and` keeps only tasks carrying all of them |
 | `limit` | no | Integer 1–100, default 20 |
 
 - `ready` — pending leaves (`todo`/`blocked`, no children) whose `dep` is empty
@@ -225,6 +227,14 @@ same shape as `register_agent`'s `agent`.
 - `next` — the frontier rule `computeBrief(tree).next`: the first executable
   pick per track.
 - `todo` — every pending leaf.
+
+`tags` is the manual label dimension, independent of the ready class: a task
+matches when its `tags` array intersects the requested labels (`any`) or
+contains all of them (`and`). The filter runs after the ready class is
+collected and before `limit`, so a small limit still means "the first matching
+tasks". Only manual labels are stored; the Gantt page's 未完成 / 进行中 / 前沿 /
+该动 / 今日 / 已完成 chips are derived views, not tags. An invalid `mode` or tag
+list is returned as `isError` text with the same message the HTTP routes use.
 
 Rows are grouped by track in rendered tree order, then in document order:
 
@@ -241,6 +251,7 @@ Rows are grouped by track in rendered tree order, then in document order:
       "status": "todo",
       "description": "",
       "doneWhen": "每天一句读数 + 三条腿各一个数",
+      "tags": ["投资", "复盘"],
       "trackId": "…",
       "trackName": "投资系统"
     }

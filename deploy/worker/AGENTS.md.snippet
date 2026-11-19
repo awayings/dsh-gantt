@@ -9,7 +9,8 @@ bearer token 来自 `GANTT_MCP_TOKEN`），本地不需要安装任何东西。
 `register_agent`（`type: "ai-agent"`）注册；同名重复注册会得到同一个 agent id。
 
 **接到甘特任务时。** 先调用一次 `get_worker_guide` 并照它执行。用
-`list_ready_tasks`（`tag` 取 `ready`、`next` 或 `todo`）拉取任务，然后对你选中的
+`list_ready_tasks`（`tag` 取 `ready`、`next` 或 `todo`；`tags: [...]` + `mode:
+"any" | "and"` 可按人工标签过滤，返回任务带 `tags`）拉取任务，然后对你选中的
 任务读 `get_task_context` —— 先读到它的祖先链路和背景，再动手写。
 
 **循环。** register -> 拉取 -> 读上下文 -> 干活 -> `decompose_task`（1–100 个子

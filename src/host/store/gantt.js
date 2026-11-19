@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { GanttError } from '../errors.js'
-import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
+import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, matchesTagFilter, normalizeTagMode, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
 import { collectReadyTasks } from '../tree/ready.js'
 import { renderTaskContext } from '../tree/task-context.js'
 import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, normalizeAgentFields, normalizeAgentFilter } from './agents.js'
@@ -63,11 +63,11 @@ import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MAT
  * `session` is the worker's own context key, recorded on the complete event.
  * @typedef {{ taskId?: unknown, agentId?: unknown, session?: unknown, status?: unknown,
  * progress?: unknown, report?: unknown }} ReportCompletionInput */
-/** The ready-list query: which vocabulary and how many rows.
- * @typedef {{ tag?: unknown, limit?: unknown }} ReadyTasksInput */
+/** The ready-list query: which vocabulary, which manual-tag filter, and how many rows.
+ * @typedef {{ tag?: unknown, limit?: unknown, tags?: unknown, mode?: unknown }} ReadyTasksInput */
 /** A compact task row returned by the ready list. @typedef {{ id: string, number: string,
  * ref: string, title: string, status: TaskStatus, description: string, doneWhen: string,
- * trackId: string, trackName: string }} ReadyTask */
+ * tags: string[], trackId: string, trackName: string }} ReadyTask */
 /** A compact task row returned beside the task-context markdown. @typedef {{ id: string,
  * number: string, ref: string, title: string, status: TaskStatus, progress: number,
  * doneWhen: string }} ContextTask */
@@ -871,13 +871,19 @@ export class GanttStore {
     return { taskId: row.id, markdown, chars: markdown.length }
   }
 
-  /** The ready/next/todo leaves, grouped by track and capped by `limit`.
+  /** The ready/next/todo leaves matching an optional manual-tag filter, grouped
+   * by track and capped by `limit`. An empty tag list keeps every row; `mode`
+   * decides whether one tag (any) or every tag (and) must be present.
    * @param {ReadyTasksInput} [input]
    * @returns {{ tag: ReadyTag, tasks: ReadyTask[] }} */
   readyTasks(input = {}) {
     const tag = input.tag === undefined || input.tag === null || input.tag === '' ? 'ready' : input.tag
     const limit = normalizeLimit(input.limit)
-    const entries = collectReadyTasks(this.tree(), /** @type {ReadyTag} */ (tag)).slice(0, limit)
+    const tags = normalizeTags(input.tags)
+    const mode = normalizeTagMode(input.mode)
+    const entries = collectReadyTasks(this.tree(), /** @type {ReadyTag} */ (tag))
+      .filter(entry => matchesTagFilter(entry.task.tags, tags, mode))
+      .slice(0, limit)
     return {
       tag: /** @type {ReadyTag} */ (tag),
       tasks: entries.map(entry => ({
@@ -888,6 +894,7 @@ export class GanttStore {
         status: entry.task.status,
         description: entry.task.description,
         doneWhen: entry.task.doneWhen,
+        tags: entry.task.tags,
         trackId: entry.trackId,
         trackName: entry.trackName,
       })),

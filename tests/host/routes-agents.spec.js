@@ -179,6 +179,43 @@ describe('GET /api/gantt/ready', () => {
     expect(limit.status).toBe(400)
     expect(limit.payload.error).toBe('limit must be an integer from 1 to 100')
   })
+
+  it('filters by manual tags in any and and mode and returns the tags', async () => {
+    const { routes } = start()
+    await createTask(routes, 'Ops one', { tags: ['ops'] })
+    await createTask(routes, 'Ops db', { tags: ['ops', 'db'] })
+    await createTask(routes, 'Db one', { tags: ['db'] })
+    await createTask(routes, 'Plain')
+
+    const all = await invoke(routes, ROUTES.ready)
+    expect(all.payload.tasks.map(task => task.title)).toEqual(['Ops one', 'Ops db', 'Db one', 'Plain'])
+    expect(all.payload.tasks.map(task => task.tags)).toEqual([['ops'], ['ops', 'db'], ['db'], []])
+
+    const any = await invoke(routes, `${ROUTES.ready}?tags=ops`)
+    expect(any.payload.tasks.map(task => task.title)).toEqual(['Ops one', 'Ops db'])
+    const and = await invoke(routes, `${ROUTES.ready}?tags=ops,db&mode=and`)
+    expect(and.payload.tasks.map(task => task.title)).toEqual(['Ops db'])
+    const repeated = await invoke(routes, `${ROUTES.ready}?tags=ops&tags=db`)
+    expect(repeated.payload.tasks.map(task => task.title)).toEqual(['Ops one', 'Ops db', 'Db one'])
+    const limited = await invoke(routes, `${ROUTES.ready}?tags=db&limit=1`)
+    expect(limited.payload.tasks.map(task => task.title)).toEqual(['Ops db'])
+    const explicitMode = await invoke(routes, `${ROUTES.ready}?mode=and`)
+    expect(explicitMode.payload.tasks).toEqual(all.payload.tasks)
+  })
+
+  it('validates the tag list and mode', async () => {
+    const { routes } = start()
+    for (const [query, error] of [
+      ['tags=', 'tags[0] must not be empty'],
+      ['tags=ops,,db', 'tags[1] must not be empty'],
+      [`tags=${'x'.repeat(41)}`, 'tags[0] must be at most 40 characters'],
+      ['mode=all', 'mode must be one of any, and'],
+    ]) {
+      const invalid = await invoke(routes, `${ROUTES.ready}?${query}`)
+      expect(invalid.status).toBe(400)
+      expect(invalid.payload).toEqual({ ok: false, error })
+    }
+  })
 })
 
 describe('POST /api/gantt/task/report', () => {
