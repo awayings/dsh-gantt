@@ -32,6 +32,8 @@ export const DICT_EN = {
   'status.cancelled': 'Cancelled',
   'status.summaryHint': 'Status is rolled up from subtasks',
   'status.cycleHint': 'Click to cycle status',
+  'row.unformed': 'Unshaped',
+  'row.unformedHint': 'Captured, not shaped yet: no completion standard; shape it when you pick it up.',
   'tree.task': 'Task',
   'tree.expand': 'Expand subtasks',
   'tree.collapse': 'Collapse subtasks',

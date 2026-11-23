@@ -32,6 +32,8 @@ export const DICT_ZH = {
   'status.cancelled': '已废弃',
   'status.summaryHint': '状态由子任务汇总',
   'status.cycleHint': '点击切换状态',
+  'row.unformed': '未定型',
+  'row.unformedHint': '已捕捉未定型：还没有完成标准，捡起它时再定型。',
   'tree.task': '任务',
   'tree.expand': '展开子任务',
   'tree.collapse': '收起子任务',

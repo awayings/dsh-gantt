@@ -18,6 +18,12 @@ function barRange(task, timeline) {
     width: Math.max(task.hasChildren ? 2 : 3, ((end - start) / DAY_MS) * timeline.pxPerDay),
   }
 }
+
+/** A captured, not-yet-shaped leaf: todo with no completion standard yet. The
+ * row dims and the bar goes dashed until the idea is groomed into a commitment. */
+function isUnshaped(task) {
+  return task.kind !== 'track' && !task.hasChildren && task.status === 'todo' && !task.doneWhen
+}
 function MetaChips({ task, t }) {
   const chips = []
   const push = (key, label, title) => {
@@ -126,6 +132,7 @@ function TaskBar({ task, timeline, onSelect, drag, onDragPreview, onDragCommit, 
     'data-status': task.status,
     'data-summary': task.hasChildren ? 'true' : undefined,
     'data-overdue': overdue ? 'true' : undefined,
+    'data-unformed': isUnshaped(task) ? 'true' : undefined,
     'data-editable': editable ? 'true' : undefined,
     'data-dragging': drag === null ? undefined : 'true',
     'data-range': drag === null ? undefined : `${drag.startDate} → ${drag.endDate}`,
@@ -187,12 +194,14 @@ export function GanttRow({
   const hasChildren = task.hasChildren
   const number = rowNumber(task)
   const isTrack = task.kind === 'track'
+  const unformed = isUnshaped(task)
   return h('div', {
     className: 'gantt-row',
     'data-selected': selected ? 'true' : undefined,
     'data-depth': depth,
     'data-kind': task.kind,
     'data-task-id': task.id,
+    'data-unformed': unformed ? 'true' : undefined,
     'data-work': work ? 'true' : undefined,
     'data-activity': activity ?? undefined,
     onClick: () => onSelect(task),
@@ -238,6 +247,13 @@ export function GanttRow({
         title: hasChildren ? t('status.summaryHint') : t('status.cycleHint'),
         onClick: () => onCycleStatus(task),
       }),
+      unformed
+        ? h('span', {
+          className: 'gantt-row-unformed',
+          title: t('row.unformedHint'),
+          'aria-label': t('row.unformed'),
+        }, t('row.unformed'))
+        : null,
       h('div', { className: 'gantt-row-actions' },
         work ? h('button', {
           className: 'gantt-row-action',

@@ -249,6 +249,21 @@ export const CSS_GRID = `
   @media (prefers-reduced-motion: reduce) {
     .gantt-row-activity[data-state="running"] { animation: none; }
   }
+  .gantt-row-unformed {
+    flex: 0 0 auto;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px dashed var(--gantt-muted);
+    color: var(--gantt-muted);
+    white-space: nowrap;
+  }
+  .gantt-row[data-unformed="true"] .gantt-task-title { color: var(--gantt-muted); }
+  .gantt-bar[data-unformed="true"] {
+    border-style: dashed;
+    opacity: 0.75;
+  }
   .gantt-add-child {
     flex: 0 0 20px;
     width: 20px; height: 20px;

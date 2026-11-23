@@ -471,6 +471,25 @@ describe('tree rendering', () => {
     })
     expect(q(view.container, '.gantt-toast')).toBeNull()
   })
+
+  it('marks unshaped todo rows and keeps shaped or rolled-up rows plain', async () => {
+    const { view } = await renderPage({})
+
+    const unshaped = row(view.container, '2.1 Announce')
+    expect(unshaped.getAttribute('data-unformed')).toBe('true')
+    expect(text(unshaped, '.gantt-row-unformed')).toBe('Unshaped')
+    expect(q(unshaped, '.gantt-row-unformed').getAttribute('title'))
+      .toBe('Captured, not shaped yet: no completion standard; shape it when you pick it up.')
+    expect(q(unshaped, '.gantt-bar').getAttribute('data-unformed')).toBe('true')
+
+    for (const label of ['1 Release 2.0', '1.1 Write spec', '1.2 Build UI', '2 Launch', '3 Later']) {
+      const shaped = row(view.container, label)
+      expect(shaped.getAttribute('data-unformed')).toBeNull()
+      expect(q(shaped, '.gantt-row-unformed')).toBeNull()
+      // A row outside the timeline window renders no bar at all.
+      expect(q(shaped, '.gantt-bar')?.getAttribute('data-unformed') ?? null).toBeNull()
+    }
+  })
 })
 
 describe('timeline window', () => {
