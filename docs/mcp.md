@@ -284,9 +284,9 @@ newest recorded events. Unknown ids are `isError` text `task … was not found`.
 | `title` | yes | 1–200 characters |
 | `parentId` | one of | Parent task; creates a child |
 | `afterTaskId` | one of | Reference task; creates the next sibling |
-| `doneWhen` | no | Verifiable completion standard; leave it out to capture an unshaped idea |
+| `doneWhen` | no | Verifiable completion standard; filling it shapes a captured idea |
 | `description` | no | At most 4000 characters |
-| `inspiration` | no | Source of the idea, kept verbatim; the client shows it in the inspiration pool |
+| `inspiration` | no | Source of the idea, kept verbatim; a new todo with this and no doneWhen renders unshaped |
 | `category` | no | Optional category |
 | `status` | no | Status vocabulary; default `todo` |
 | `startDate` / `endDate` | no | `YYYY-MM-DD`; default today and start + 3 days |

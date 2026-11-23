@@ -19,10 +19,14 @@ function barRange(task, timeline) {
   }
 }
 
-/** A captured, not-yet-shaped leaf: todo with no completion standard yet. The
- * row dims and the bar goes dashed until the idea is groomed into a commitment. */
+/** A captured idea not shaped yet: a todo leaf whose `inspiration` is set (the
+ * idea-tier marker the Inspiration label also filters on) and whose `doneWhen`
+ * is still empty. doneWhen alone marks nothing — decomposed tasks carry it,
+ * plain tasks never do — so an ordinary task stays plain here. The row dims
+ * and the bar goes dashed until the idea is groomed into a commitment. */
 function isUnshaped(task) {
-  return task.kind !== 'track' && !task.hasChildren && task.status === 'todo' && !task.doneWhen
+  return task.kind !== 'track' && !task.hasChildren && task.status === 'todo'
+    && Boolean(task.inspiration) && !task.doneWhen
 }
 function MetaChips({ task, t }) {
   const chips = []

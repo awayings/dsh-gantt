@@ -778,6 +778,9 @@ describe('capture dialog', () => {
     expect(q(view.container, '.gantt-form-error').textContent).toBe('Enter a title.')
 
     setField(fields.title, '  财务雷点 predict-L2  ')
+    click(fields.submit)
+    expect(q(view.container, '.gantt-form-error').textContent).toBe('Enter the words that sparked the idea.')
+
     setField(fields.inspiration, '  用户 11/23：现金流跟利润不匹配  ')
     setField(fields.parent, 'p1', 'change')
     click(fields.submit)
@@ -812,6 +815,7 @@ describe('capture dialog', () => {
     click(buttonByText(view.container, 'Capture'))
     const fields = captureFields(view)
     setField(fields.title, 'Idea')
+    setField(fields.inspiration, 'Origin words')
     click(fields.submit)
     await flush()
 
@@ -826,6 +830,7 @@ describe('capture dialog', () => {
     click(buttonByText(view.container, 'Capture'))
     const fields = captureFields(view)
     setField(fields.title, 'Idea')
+    setField(fields.inspiration, 'Origin words')
 
     click(fields.submit)
     expect(fields.submit.textContent).toBe('…')
@@ -842,6 +847,7 @@ describe('capture dialog', () => {
     click(buttonByText(view.container, 'Capture'))
     const fields = captureFields(view)
     setField(fields.title, 'Idea')
+    setField(fields.inspiration, 'Origin words')
     click(fields.submit)
     await flush()
 

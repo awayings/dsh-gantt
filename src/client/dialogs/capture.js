@@ -4,9 +4,10 @@ import { Dialog, Field } from './primitives.js'
 import { h } from '../dom.js'
 
 /** Capture one unshaped idea into the tree. Deliberately lighter than create:
- * a one-line title plus the words that sparked it — no completion standard and
- * no dates (the server parks today→+3 as placeholders), because shaping is a
- * later, deliberate step done from the row once the idea is picked up. */
+ * a one-line title plus the words that sparked it (required — those words are
+ * what mark the row as an idea) — no completion standard and no dates (the
+ * server parks today→+3 as placeholders), because shaping is a later,
+ * deliberate step done from the row once the idea is picked up. */
 export function CaptureDialog({ parentOptions, defaultParent, t, onClose, onSaved }) {
   const [title, setTitle] = useState('')
   const [parent, setParent] = useState(defaultParent)
@@ -19,6 +20,11 @@ export function CaptureDialog({ parentOptions, defaultParent, t, onClose, onSave
       setError(t('validation.title'))
       return
     }
+    const cleanInspiration = inspiration.trim()
+    if (cleanInspiration.length === 0) {
+      setError(t('validation.inspiration'))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -28,7 +34,7 @@ export function CaptureDialog({ parentOptions, defaultParent, t, onClose, onSave
           title: cleanTitle,
           parentId: parent || null,
           status: 'todo',
-          inspiration: inspiration.trim(),
+          inspiration: cleanInspiration,
         }),
       })
       onSaved(t('notice.captured'), result.task.id)

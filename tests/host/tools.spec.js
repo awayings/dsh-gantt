@@ -437,7 +437,7 @@ describe('gantt_capture', () => {
       { title: '灵感', inspiration: '  用户 11/23：现金流与利润不匹配  ', category: '财务雷点' },
       execWithTurn(3),
     ))
-    expect(value.message).toBe('已在 1.1.1 Collect data 下捕捉灵感 1.1.1.1 灵感（未定型：无完成标准，日期为占位）。\n已自动记录会话与轮次索引。')
+    expect(value.message).toBe('已在 1.1.1 Collect data 下捕捉灵感 1.1.1.1 灵感（未定型：灵感原话已记录，无完成标准，日期为占位）。\n已自动记录会话与轮次索引。')
     expect(capture.output.render({}, value)).toEqual([{ type: 'text', text: value.message }])
     const child = store.getNode(task.id)?.children[0]
     expect(child).toMatchObject({
@@ -459,19 +459,23 @@ describe('gantt_capture', () => {
   it('captures into a branch addressed by ref without a conversation', async () => {
     const { track } = focusTask()
     const capture = tool(toolDefinitions(store), TOOL_NAMES.capture)
-    const value = /** @type {any} */ (await capture.execute({ id: 'T1', title: 'Idea', description: 'Detail' }, {}))
-    expect(value).toEqual({ ok: true, message: '已在 T1 Content platform 下捕捉灵感 1.2 Idea（未定型：无完成标准，日期为占位）。' })
+    const value = /** @type {any} */ (await capture.execute(
+      { id: 'T1', title: 'Idea', description: 'Detail', inspiration: 'Origin words' },
+      {},
+    ))
+    expect(value).toEqual({ ok: true, message: '已在 T1 Content platform 下捕捉灵感 1.2 Idea（未定型：灵感原话已记录，无完成标准，日期为占位）。' })
     const child = store.getNode(track.id)?.children[1]
-    expect(child).toMatchObject({ title: 'Idea', parentId: track.id, description: 'Detail', inspiration: '', doneWhen: '' })
+    expect(child).toMatchObject({ title: 'Idea', parentId: track.id, description: 'Detail', inspiration: 'Origin words', doneWhen: '' })
     expect(store.trajectory({ taskId: track.id })).toEqual([])
     expect(store.trajectory({ taskId: child?.id })).toEqual([])
   })
 
-  it('reports a missing title, an unknown reference, and a missing focus', async () => {
+  it('reports a missing inspiration, a missing title, an unknown reference, and a missing focus', async () => {
     const { task } = focusTask()
     const capture = tool(toolDefinitions(store), TOOL_NAMES.capture)
-    await expectToolError(capture.execute({ id: task.id }, {}), 'title is required', 400)
-    await expectToolError(capture.execute({ id: 'missing', title: 'X' }, {}), 'task missing was not found', 404)
-    await expectToolError(capture.execute({ title: 'X' }, {}), 'id is required when this conversation has no focused task', 400)
+    await expectToolError(capture.execute({ id: task.id }, {}), 'inspiration is required', 400)
+    await expectToolError(capture.execute({ id: task.id, inspiration: 'W' }, {}), 'title is required', 400)
+    await expectToolError(capture.execute({ id: 'missing', title: 'X', inspiration: 'W' }, {}), 'task missing was not found', 404)
+    await expectToolError(capture.execute({ title: 'X', inspiration: 'W' }, {}), 'id is required when this conversation has no focused task', 400)
   })
 })

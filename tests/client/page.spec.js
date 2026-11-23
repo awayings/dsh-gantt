@@ -23,7 +23,7 @@ import {
   unmountAll,
   unparsableResponse,
 } from './harness.js'
-import { emptyTreePayload, treePayload } from './fixtures.js'
+import { emptyTreePayload, makeTree, treePayload } from './fixtures.js'
 
 const TREE = 'api/gantt/tree'
 const STATUS = 'api/gantt/task/status'
@@ -472,17 +472,32 @@ describe('tree rendering', () => {
     expect(q(view.container, '.gantt-toast')).toBeNull()
   })
 
-  it('marks unshaped todo rows and keeps shaped or rolled-up rows plain', async () => {
-    const { view } = await renderPage({})
+  it('marks unshaped idea rows and keeps plain, shaped, or rolled-up rows solid', async () => {
+    const tasks = makeTree()
+    tasks[1].children[0].inspiration = '#9'
+    tasks[0].children[1].status = 'todo'
+    tasks[0].children[1].progress = 0
+    tasks[2].status = 'todo'
+    tasks[2].progress = 0
+    tasks[2].inspiration = '#7'
+    tasks[2].doneWhen = 'Shipped'
+    const { view } = await renderPage({ [TREE]: () => jsonResponse(treePayload({ tasks })) })
 
     const unshaped = row(view.container, '2.1 Announce')
     expect(unshaped.getAttribute('data-unformed')).toBe('true')
     expect(text(unshaped, '.gantt-row-unformed')).toBe('Unshaped')
     expect(q(unshaped, '.gantt-row-unformed').getAttribute('title'))
-      .toBe('Captured, not shaped yet: no completion standard; shape it when you pick it up.')
+      .toBe('A captured idea, not shaped yet: no completion standard. Fill one in to shape the row.')
     expect(q(unshaped, '.gantt-bar').getAttribute('data-unformed')).toBe('true')
 
-    for (const label of ['1 Release 2.0', '1.1 Write spec', '1.2 Build UI', '2 Launch', '3 Later']) {
+    // A plain todo without doneWhen or inspiration and an already-shaped idea
+    // both stay solid: doneWhen emptiness alone never marks a row.
+    for (const label of ['1.2 Build UI', '3 Later']) {
+      const plain = row(view.container, label)
+      expect(plain.getAttribute('data-unformed')).toBeNull()
+      expect(q(plain, '.gantt-row-unformed')).toBeNull()
+    }
+    for (const label of ['1 Release 2.0', '1.1 Write spec', '2 Launch']) {
       const shaped = row(view.container, label)
       expect(shaped.getAttribute('data-unformed')).toBeNull()
       expect(q(shaped, '.gantt-row-unformed')).toBeNull()

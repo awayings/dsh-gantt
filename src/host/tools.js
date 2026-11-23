@@ -197,8 +197,8 @@ function track(store, args, exec) {
 /**
  * Capture an unshaped idea as a new child of the reference/focused task: no
  * completion standard, no schedule — just a title plus the words that sparked
- * it, kept verbatim in `inspiration`. Shaping (a doneWhen, real dates) happens
- * later, when the idea is picked up.
+ * it (required), kept verbatim in `inspiration`. Shaping (a doneWhen, real
+ * dates) happens later, when the idea is picked up.
  * @param {GanttStore} store
  * @param {any} args
  * @param {any} exec
@@ -208,11 +208,16 @@ function capture(store, args, exec) {
   const containerId = resolveTarget(store, args, exec)
   const container = /** @type {any} */ (store.getNode(containerId))
   const origin = originOf(exec)
+  // The verbatim words are the idea-tier marker — the Inspiration label and
+  // the unshaped row both key on them — so a capture without them is not a
+  // capture: the row would look like an ordinary task forever.
+  const inspiration = typeof args.inspiration === 'string' ? args.inspiration.trim() : ''
+  if (inspiration === '') throw new GanttError('inspiration is required')
   const created = /** @type {import('./tree.js').TaskNode} */ (store.create({
     parentId: containerId,
     title: args.title,
     description: args.description,
-    inspiration: args.inspiration,
+    inspiration,
     category: args.category,
     status: 'todo',
   }))
@@ -230,7 +235,7 @@ function capture(store, args, exec) {
   const recorded = origin === undefined ? '' : '\n已自动记录会话与轮次索引。'
   return {
     ok: true,
-    message: `已在 ${taskLabel(container)} ${container.title} 下捕捉灵感 ${taskLabel(created)} ${created.title}（未定型：无完成标准，日期为占位）。${recorded}`,
+    message: `已在 ${taskLabel(container)} ${container.title} 下捕捉灵感 ${taskLabel(created)} ${created.title}（未定型：灵感原话已记录，无完成标准，日期为占位）。${recorded}`,
   }
 }
 
@@ -425,11 +430,11 @@ export function toolDefinitions(store, titles = null) {
         properties: {
           id: { type: 'string', description: '捕捉到哪条支线或任务下：内部 id、点号 id 或编号（如 1 或 1.4）；省略时使用本会话的聚焦任务。' },
           title: { type: 'string', description: '一句话标题。' },
-          inspiration: { type: 'string', description: '灵感原话或来源，尽量原样保留。' },
+          inspiration: { type: 'string', description: '灵感原话或来源，尽量原样保留；必填，它是灵感池与未定型标记的依据。' },
           description: { type: 'string', description: '可选，补充说明（最多 4000 字符）。' },
           category: { type: 'string', description: '可选，类别。' },
         },
-        required: ['title'],
+        required: ['title', 'inspiration'],
       },
       output: {
         schema: {

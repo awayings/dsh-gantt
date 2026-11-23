@@ -1461,17 +1461,19 @@ Capture one unshaped idea as a new child of the reference task.
 | --- | --- | --- |
 | `id` | no | Container: internal id, `ref`, or dotted number — a branch or any task; omitted -> the focused task |
 | `title` | yes | 1–200 characters |
-| `inspiration` | no | The words that sparked the idea, kept verbatim |
+| `inspiration` | yes | The words that sparked the idea, kept verbatim |
 | `description` | no | Optional note |
 | `category` | no | Optional category |
 
 Returns `{ ok: true, message: string }` naming the container and the new
 child's dotted number. The division of labor with `gantt_create_task`:
 `create_task` is a committed task (with a `doneWhen`), while `capture` parks an
-idea — no completion standard, placeholder dates (today -> today + 3) — for a
-human to shape later. The empty `doneWhen` is exactly what the client renders
-as an unshaped row, and a non-empty `inspiration` feeds the Inspiration label
-in the filter row. The call records a `create` event on the new task and —
+idea — its verbatim words in `inspiration`, no completion standard, placeholder
+dates (today -> today + 3) — for a human to shape later. `inspiration` is the
+idea-tier marker: it feeds the Inspiration label in the filter row, and while
+`doneWhen` stays empty the client renders the row unshaped (dimmed title,
+dashed bar); filling the standard shapes it. A plain task carrying neither
+field renders solid. The call records a `create` event on the new task and —
 when it comes from a conversation — a `track` event on the container with
 detail `captured idea <child> <title>`.
 
