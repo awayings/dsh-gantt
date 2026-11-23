@@ -310,6 +310,21 @@ describe('write tools', () => {
     expect(store.trajectory({ taskId: anonymous.id })[0]).toMatchObject({ action: 'create', sessionId: 'mcp:manual' })
   })
 
+  it('creates a captured child carrying inspiration and category', () => {
+    const parent = store.create({ title: 'Parent' })
+    const task = toolJson(call('create_task', {
+      title: 'Idea', parentId: parent.id, inspiration: '#21 用户原话', category: 'invest', status: 'todo',
+    })).task
+    expect(task).toMatchObject({
+      parentId: parent.id,
+      title: 'Idea',
+      inspiration: '#21 用户原话',
+      category: 'invest',
+      doneWhen: '',
+      status: 'todo',
+    })
+  })
+
   it('decomposes a task and records the parent trajectory', () => {
     const agent = registerWorker()
     const parent = store.create({ title: 'Parent' })

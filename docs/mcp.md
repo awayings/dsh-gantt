@@ -284,8 +284,10 @@ newest recorded events. Unknown ids are `isError` text `task … was not found`.
 | `title` | yes | 1–200 characters |
 | `parentId` | one of | Parent task; creates a child |
 | `afterTaskId` | one of | Reference task; creates the next sibling |
-| `doneWhen` | no | Verifiable completion standard |
+| `doneWhen` | no | Verifiable completion standard; leave it out to capture an unshaped idea |
 | `description` | no | At most 4000 characters |
+| `inspiration` | no | Source of the idea, kept verbatim; the client shows it in the inspiration pool |
+| `category` | no | Optional category |
 | `status` | no | Status vocabulary; default `todo` |
 | `startDate` / `endDate` | no | `YYYY-MM-DD`; default today and start + 3 days |
 | `agentName` | no | Registered agent recorded as `operatorId` when the task has none |

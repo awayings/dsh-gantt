@@ -755,3 +755,105 @@ describe('API dialog', () => {
     expect(view.container.textContent).not.toContain('late failure')
   })
 })
+
+describe('capture dialog', () => {
+  const captureFields = view => ({
+    parent: q(view.container, '.gantt-dialog .gantt-select'),
+    title: q(view.container, '.gantt-dialog input.gantt-input:not([type])'),
+    inspiration: q(view.container, '.gantt-dialog textarea[data-field="inspiration"]'),
+    submit: q(view.container, '.gantt-dialog [data-action="capture-submit"]'),
+    hint: () => text(view.container, '.gantt-dialog .gantt-hint'),
+  })
+
+  it('captures a trimmed idea with its source words under the chosen branch', async () => {
+    const { calls, view } = await renderPage({})
+    click(buttonByText(view.container, 'Capture'))
+
+    expect(dialogTitle(view.container)).toBe('Capture an idea')
+    const fields = captureFields(view)
+    expect(fields.hint()).toBe('Unshaped by design: no completion standard, placeholder dates. Shape it from the row once you pick it up.')
+    expect(fields.parent.value).toBe('')
+
+    click(fields.submit)
+    expect(q(view.container, '.gantt-form-error').textContent).toBe('Enter a title.')
+
+    setField(fields.title, '  财务雷点 predict-L2  ')
+    setField(fields.inspiration, '  用户 11/23：现金流跟利润不匹配  ')
+    setField(fields.parent, 'p1', 'change')
+    click(fields.submit)
+    await flush()
+
+    const post = calls.find(call => call.path === TASKS)
+    expect(requestBody(post)).toEqual({
+      title: '财务雷点 predict-L2',
+      parentId: 'p1',
+      status: 'todo',
+      inspiration: '用户 11/23：现金流跟利润不匹配',
+    })
+    expect(text(view.container, '.gantt-toast')).toBe('Idea captured')
+    expect(dialog(view.container)).toBeNull()
+    expect(calls.filter(call => call.path === TREE)).toHaveLength(2)
+  })
+
+  it('defaults the parent to the selected row', async () => {
+    const { view } = await renderPage({})
+    click(row(view.container, '1.1 Write spec'))
+    expect(dialogTitle(view.container)).toBe('Edit task · 1.1')
+
+    click(buttonByText(view.container, 'Capture'))
+    const fields = captureFields(view)
+    expect(fields.parent.value).toBe('c1')
+    expect(fields.inspiration.value).toBe('')
+    expect(fields.title.value).toBe('')
+  })
+
+  it('keeps the dialog open and reports the failure', async () => {
+    const { view } = await renderPage({ [TASKS]: () => jsonResponse({ ok: false, error: 'capture rejected' }, 500) })
+    click(buttonByText(view.container, 'Capture'))
+    const fields = captureFields(view)
+    setField(fields.title, 'Idea')
+    click(fields.submit)
+    await flush()
+
+    expect(q(view.container, '.gantt-form-error').textContent).toBe('capture rejected')
+    expect(dialog(view.container)).not.toBeNull()
+    expect(q(view.container, '.gantt-toast')).toBeNull()
+  })
+
+  it('shows the pending state while the capture is in flight', async () => {
+    const gate = deferred()
+    const { view } = await renderPage({ [TASKS]: () => gate.promise })
+    click(buttonByText(view.container, 'Capture'))
+    const fields = captureFields(view)
+    setField(fields.title, 'Idea')
+
+    click(fields.submit)
+    expect(fields.submit.textContent).toBe('…')
+    expect(fields.submit.disabled).toBe(true)
+
+    gate.resolve(jsonResponse({ ok: true, task: mutationTask({ id: 'new-2' }) }, 201))
+    await flush()
+    expect(text(view.container, '.gantt-toast')).toBe('Idea captured')
+    expect(dialog(view.container)).toBeNull()
+  })
+
+  it('stringifies a non-Error capture failure', async () => {
+    const { view } = await renderPage({ [TASKS]: () => Promise.reject('capture exploded') })
+    click(buttonByText(view.container, 'Capture'))
+    const fields = captureFields(view)
+    setField(fields.title, 'Idea')
+    click(fields.submit)
+    await flush()
+
+    expect(q(view.container, '.gantt-form-error').textContent).toBe('capture exploded')
+    expect(dialog(view.container)).not.toBeNull()
+  })
+
+  it('closes from the cancel button without posting', async () => {
+    const { calls, view } = await renderPage({})
+    click(buttonByText(view.container, 'Capture'))
+    click(buttonByText(view.container, 'Cancel'))
+    expect(dialog(view.container)).toBeNull()
+    expect(calls.filter(call => call.path === TASKS)).toHaveLength(0)
+  })
+})

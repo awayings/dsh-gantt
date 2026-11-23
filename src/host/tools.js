@@ -1,9 +1,10 @@
 // Host-side assistant tools. A DSH conversation gets gantt_context,
-// gantt_decompose, gantt_update_task, gantt_track, and gantt_create_task on the
-// host tools service, so the model can read the chain the user focused in the
-// sidebar panel and write track associations, siblings, and decomposition
-// results straight into the task tree. The tools write through the store (no
-// sandboxed file or shell work), so they need no approval.
+// gantt_decompose, gantt_update_task, gantt_track, gantt_create_task, and
+// gantt_capture on the host tools service, so the model can read the chain the
+// user focused in the sidebar panel and write track associations, siblings,
+// decomposition results, and captured ideas straight into the task tree. The
+// tools write through the store (no sandboxed file or shell work), so they
+// need no approval.
 
 import { GanttError } from './errors.js'
 import { flattenTree } from './tree.js'
@@ -21,6 +22,7 @@ export const TOOL_NAMES = {
   update: 'gantt_update_task',
   track: 'gantt_track',
   createTask: 'gantt_create_task',
+  capture: 'gantt_capture',
 }
 
 const MAX_CONTEXT_CHARS = 6000
@@ -190,6 +192,46 @@ function track(store, args, exec) {
   const task = /** @type {any} */ (store.getNode(event.taskId))
   const recorded = event.turn === null ? '轮次未知' : `第 ${event.turn} 轮`
   return { ok: true, message: `已记录本轮与 ${taskLabel(task)} ${task.title} 的关联（${recorded}）。` }
+}
+
+/**
+ * Capture an unshaped idea as a new child of the reference/focused task: no
+ * completion standard, no schedule — just a title plus the words that sparked
+ * it, kept verbatim in `inspiration`. Shaping (a doneWhen, real dates) happens
+ * later, when the idea is picked up.
+ * @param {GanttStore} store
+ * @param {any} args
+ * @param {any} exec
+ * @returns {{ ok: boolean, message: string }}
+ */
+function capture(store, args, exec) {
+  const containerId = resolveTarget(store, args, exec)
+  const container = /** @type {any} */ (store.getNode(containerId))
+  const origin = originOf(exec)
+  const created = /** @type {import('./tree.js').TaskNode} */ (store.create({
+    parentId: containerId,
+    title: args.title,
+    description: args.description,
+    inspiration: args.inspiration,
+    category: args.category,
+    status: 'todo',
+  }))
+  // create() records no origin of its own; write the trajectory explicitly and
+  // leave a track event on the container so its workbench shows the capture.
+  store.recordOrigin(created.id, 'create', origin, `在 ${taskLabel(container)} 下捕捉灵感`)
+  if (origin !== undefined) {
+    store.recordTrack({
+      taskId: containerId,
+      sessionId: origin.sessionId,
+      turn: origin.turn,
+      detail: `captured idea ${taskLabel(created)} ${created.title}`,
+    })
+  }
+  const recorded = origin === undefined ? '' : '\n已自动记录会话与轮次索引。'
+  return {
+    ok: true,
+    message: `已在 ${taskLabel(container)} ${container.title} 下捕捉灵感 ${taskLabel(created)} ${created.title}（未定型：无完成标准，日期为占位）。${recorded}`,
+  }
 }
 
 /**
@@ -372,6 +414,34 @@ export function toolDefinitions(store, titles = null) {
       },
       async execute(args, exec) {
         return createTask(store, args, exec)
+      },
+    },
+    {
+      name: TOOL_NAMES.capture,
+      description: '把一条未定型的灵感捕捉进任务树：在 id 所指的支线或任务下创建子任务，不写完成标准、不排期（日期为占位），灵感原话放进 inspiration 字段，之后由人挑时间定型。与 gantt_create_task 的分工：create_task 是已定型任务（建议带 doneWhen），capture 是先落账后定型。不传 id 时默认捕捉到本会话聚焦任务之下。',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: '捕捉到哪条支线或任务下：内部 id、点号 id 或编号（如 1 或 1.4）；省略时使用本会话的聚焦任务。' },
+          title: { type: 'string', description: '一句话标题。' },
+          inspiration: { type: 'string', description: '灵感原话或来源，尽量原样保留。' },
+          description: { type: 'string', description: '可选，补充说明（最多 4000 字符）。' },
+          category: { type: 'string', description: '可选，类别。' },
+        },
+        required: ['title'],
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { ok: { type: 'boolean' }, message: { type: 'string' } },
+          required: ['ok', 'message'],
+        },
+        render: (_args, value) => [{ type: 'text', text: value.message }],
+      },
+      async execute(args, exec) {
+        return capture(store, args, exec)
       },
     },
   ]

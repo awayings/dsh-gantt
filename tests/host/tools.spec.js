@@ -41,10 +41,10 @@ function focusTask() {
 }
 
 describe('gantt assistant tools', () => {
-  it('defines the five model-facing tools with output schemas', () => {
+  it('defines the six model-facing tools with output schemas', () => {
     const tools = toolDefinitions(store)
     expect(tools.map(entry => entry.name)).toEqual([
-      TOOL_NAMES.context, TOOL_NAMES.decompose, TOOL_NAMES.update, TOOL_NAMES.track, TOOL_NAMES.createTask,
+      TOOL_NAMES.context, TOOL_NAMES.decompose, TOOL_NAMES.update, TOOL_NAMES.track, TOOL_NAMES.createTask, TOOL_NAMES.capture,
     ])
     for (const entry of tools) {
       expect(typeof entry.description).toBe('string')
@@ -55,6 +55,8 @@ describe('gantt assistant tools', () => {
     expect(update.parameters.properties.description.type).toBe('string')
     const decompose = /** @type {any} */ (tool(tools, TOOL_NAMES.decompose))
     expect(decompose.parameters.properties.children.items.properties.description.type).toBe('string')
+    const capture = /** @type {any} */ (tool(tools, TOOL_NAMES.capture))
+    expect(capture.parameters.properties.inspiration.type).toBe('string')
   })
 
   it('resolves a task by internal id, ref, or point number', () => {
@@ -232,10 +234,10 @@ describe('gantt assistant tools', () => {
       effect,
     }
     registerTools(ctx, store)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(6)
     const disposer = /** @type {() => void} */ (effect.mock.calls[0][0]())
     disposer()
-    expect(dispose).toHaveBeenCalledTimes(5)
+    expect(dispose).toHaveBeenCalledTimes(6)
   })
 
   it('keeps the tools service as the receiver of register', () => {
@@ -251,8 +253,8 @@ describe('gantt assistant tools', () => {
       },
     }
     registerTools({ get: name => (name === 'tools' ? service : undefined) }, store)
-    expect(service.seen).toBe(5)
-    expect(registered).toHaveLength(5)
+    expect(service.seen).toBe(6)
+    expect(registered).toHaveLength(6)
   })
 
   it('registers without an effect seam and no-ops without a usable tools service', () => {
@@ -260,7 +262,7 @@ describe('gantt assistant tools', () => {
     const registered = []
     const tools = { register: (definition) => { registered.push(definition); return () => {} } }
     registerTools({ get: name => (name === 'tools' ? tools : undefined) }, store)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(6)
     registerTools({}, store)
     registerTools({ get: () => undefined }, store)
     registerTools({ get: () => ({}) }, store)
@@ -420,5 +422,56 @@ describe('round-closing tools', () => {
     await expectToolError(create.execute({ id: task.id }, {}), 'title is required', 400)
     await expectToolError(create.execute({ id: 'missing', title: 'X' }, {}), 'task missing was not found', 404)
     await expectToolError(create.execute({ title: 'X' }, {}), 'id is required when this conversation has no focused task', 400)
+  })
+})
+
+describe('gantt_capture', () => {
+  const execWithTurn = (turn = 4) => /** @type {any} */ ({
+    agent: { session: { id: 'session-a', snapshotEvents: () => [{ type: 'turn/start', data: { turn } }] } },
+  })
+
+  it('captures an unshaped idea under the focused task with provenance', async () => {
+    const { task } = focusTask()
+    const capture = tool(toolDefinitions(store), TOOL_NAMES.capture)
+    const value = /** @type {any} */ (await capture.execute(
+      { title: '灵感', inspiration: '  用户 11/23：现金流与利润不匹配  ', category: '财务雷点' },
+      execWithTurn(3),
+    ))
+    expect(value.message).toBe('已在 1.1.1 Collect data 下捕捉灵感 1.1.1.1 灵感（未定型：无完成标准，日期为占位）。\n已自动记录会话与轮次索引。')
+    expect(capture.output.render({}, value)).toEqual([{ type: 'text', text: value.message }])
+    const child = store.getNode(task.id)?.children[0]
+    expect(child).toMatchObject({
+      title: '灵感',
+      parentId: task.id,
+      status: 'todo',
+      doneWhen: '',
+      inspiration: '用户 11/23：现金流与利润不匹配',
+      category: '财务雷点',
+    })
+    expect(store.trajectory({ taskId: child?.id })[0]).toMatchObject({
+      action: 'create', sessionId: 'session-a', turn: 3, detail: '在 1.1.1 下捕捉灵感',
+    })
+    expect(store.trajectory({ taskId: task.id })[0]).toMatchObject({
+      action: 'track', sessionId: 'session-a', turn: 3, detail: 'captured idea 1.1.1.1 灵感',
+    })
+  })
+
+  it('captures into a branch addressed by ref without a conversation', async () => {
+    const { track } = focusTask()
+    const capture = tool(toolDefinitions(store), TOOL_NAMES.capture)
+    const value = /** @type {any} */ (await capture.execute({ id: 'T1', title: 'Idea', description: 'Detail' }, {}))
+    expect(value).toEqual({ ok: true, message: '已在 T1 Content platform 下捕捉灵感 1.2 Idea（未定型：无完成标准，日期为占位）。' })
+    const child = store.getNode(track.id)?.children[1]
+    expect(child).toMatchObject({ title: 'Idea', parentId: track.id, description: 'Detail', inspiration: '', doneWhen: '' })
+    expect(store.trajectory({ taskId: track.id })).toEqual([])
+    expect(store.trajectory({ taskId: child?.id })).toEqual([])
+  })
+
+  it('reports a missing title, an unknown reference, and a missing focus', async () => {
+    const { task } = focusTask()
+    const capture = tool(toolDefinitions(store), TOOL_NAMES.capture)
+    await expectToolError(capture.execute({ id: task.id }, {}), 'title is required', 400)
+    await expectToolError(capture.execute({ id: 'missing', title: 'X' }, {}), 'task missing was not found', 404)
+    await expectToolError(capture.execute({ title: 'X' }, {}), 'id is required when this conversation has no focused task', 400)
   })
 })

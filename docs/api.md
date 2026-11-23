@@ -1338,7 +1338,7 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/plan/import \
 
 ## Assistant tools
 
-The host registers five tools on the DSH **tools service** so a native
+The host registers six tools on the DSH **tools service** so a native
 conversation can read the task tree and write task changes directly. The plugin
 does not call an LLM itself: the model is the normal DSH conversation, the tool
 schemas are the ones below, and every write goes through the store's validation
@@ -1452,6 +1452,28 @@ later siblings shift down one position, and ancestor rollups are recomputed in
 one transaction. The call records a `create` event on the new task, and — when
 it comes from a conversation — a `track` event on the reference with detail
 `sibling task <reference> <title>`.
+
+### `gantt_capture`
+
+Capture one unshaped idea as a new child of the reference task.
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `id` | no | Container: internal id, `ref`, or dotted number — a branch or any task; omitted -> the focused task |
+| `title` | yes | 1–200 characters |
+| `inspiration` | no | The words that sparked the idea, kept verbatim |
+| `description` | no | Optional note |
+| `category` | no | Optional category |
+
+Returns `{ ok: true, message: string }` naming the container and the new
+child's dotted number. The division of labor with `gantt_create_task`:
+`create_task` is a committed task (with a `doneWhen`), while `capture` parks an
+idea — no completion standard, placeholder dates (today -> today + 3) — for a
+human to shape later. The empty `doneWhen` is exactly what the client renders
+as an unshaped row, and a non-empty `inspiration` feeds the Inspiration label
+in the filter row. The call records a `create` event on the new task and —
+when it comes from a conversation — a `track` event on the container with
+detail `captured idea <child> <title>`.
 
 The tools are registered globally on the host, but the context they read is
 per conversation: the focus row keyed by the conversation id is what

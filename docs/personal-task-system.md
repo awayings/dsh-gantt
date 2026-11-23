@@ -524,9 +524,9 @@ still deferred; see [Not adopted](#not-adopted--deferred).
 
 The AI workflow lives in the native DSH conversation, not in the Gantt page.
 The plugin contributes a compact **甘特** tab to the conversation sidebar and
-five assistant tools to the host; a conversation model reads the focused task
-through the tools and writes track associations, siblings, and decomposition
-results straight into the tree.
+six assistant tools to the host; a conversation model reads the focused task
+through the tools and writes track associations, siblings, decomposition
+results, and captured ideas straight into the tree.
 
 - **Right-rail tab.** With the optional `dsh-better-sidebar` plugin installed,
   the conversation sidebar shows one `gantt` tab per conversation (`single:

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { STATUS_COLOR } from '../constants.js'
 import { addDays, addMonths, todayIso } from '../dates.js'
 import { ApiDialog } from '../dialogs/api.js'
+import { CaptureDialog } from '../dialogs/capture.js'
 import { ContextDialog } from '../dialogs/context.js'
 import { DecomposeDialog } from '../dialogs/decompose.js'
 import { ScheduleDialog } from '../dialogs/schedule.js'
@@ -375,6 +376,11 @@ export function GanttPage({ ctx }) {
   const openCreate = useCallback((parentTask) => {
     setDialog({ type: 'create', parentId: parentTask?.id ?? null })
   }, [])
+  // Capture parks an unshaped idea: it opens the light dialog instead of the
+  // full create form, and the selected row (if any) becomes the default parent.
+  const openCapture = useCallback(() => {
+    setDialog({ type: 'capture' })
+  }, [])
   const openEdit = useCallback((task) => {
     setSelectedId(task.id)
     setDialog({ type: 'edit', id: task.id })
@@ -445,6 +451,15 @@ export function GanttPage({ ctx }) {
       parentOptions: options,
       allTags,
       today,
+      t,
+      onClose: () => setDialog(null),
+      onSaved: handleSaved,
+    })
+  } else if (dialog?.type === 'capture') {
+    dialogNode = h(CaptureDialog, {
+      key: 'capture',
+      parentOptions: options,
+      defaultParent: selectedId ?? '',
       t,
       onClose: () => setDialog(null),
       onSaved: handleSaved,
@@ -636,6 +651,13 @@ export function GanttPage({ ctx }) {
           disabled: status === 'refreshing',
           onClick: refresh,
         }, status === 'refreshing' ? '…' : '⟳'),
+        h('button', {
+          className: 'gantt-btn',
+          type: 'button',
+          'data-action': 'capture',
+          title: t('capture.title'),
+          onClick: openCapture,
+        }, t('actions.capture')),
         h('button', { className: 'gantt-btn gantt-btn-primary', type: 'button', onClick: () => openCreate(null) }, `+ ${t('actions.new')}`),
       ),
     ),

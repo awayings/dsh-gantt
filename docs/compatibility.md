@@ -484,9 +484,10 @@ the task they point at.
   `/api/gantt/work/skills`, `/api/gantt/work/team`, plus a focus round trip:
   `POST /api/gantt/focus/set` with a task id, then `GET /api/gantt/focus` for
   the same `sessionId` returns it and clearing returns `taskId: null`).
-- **Check — assistant tools:** `tests/host/tools.spec.js` covers the five
+- **Check — assistant tools:** `tests/host/tools.spec.js` covers the six
   definitions, reference resolution, per-session context, round tracking,
-  sibling creation, and registration no-op; the live check is a native
+  sibling creation, idea capture, and registration no-op; the live check is a
+  native
   conversation: focus a task in the right-rail tab, ask the model to decompose
   it, and confirm the children appear in the tree and the parent/child events
   appear in `/api/gantt/trajectory` with the conversation's session id and
