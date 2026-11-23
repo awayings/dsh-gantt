@@ -33,6 +33,8 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
   const initialEnd = mode === 'create' ? addDays(initialStart, 3) : task?.endDate
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
+  const [doneWhen, setDoneWhen] = useState(task?.doneWhen ?? '')
+  const [inspiration, setInspiration] = useState(task?.inspiration ?? '')
   const [parent, setParent] = useState(task?.parentId ?? parentTask?.id ?? '')
   const [startDate, setStartDate] = useState(initialStart)
   const [endDate, setEndDate] = useState(initialEnd)
@@ -59,6 +61,8 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
   }, [writebackTask])
   const submit = async () => {
     const cleanTitle = title.trim()
+    const cleanDoneWhen = doneWhen.trim()
+    const cleanInspiration = inspiration.trim()
     if (cleanTitle.length === 0) {
       setError(t('validation.title'))
       return
@@ -76,6 +80,8 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
           body: JSON.stringify({
             title: cleanTitle,
             description,
+            doneWhen: cleanDoneWhen,
+            inspiration: cleanInspiration,
             parentId: parent || null,
             startDate,
             endDate,
@@ -90,6 +96,10 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
           id: task.id,
           title: cleanTitle,
           description,
+          // Both ride every save, empty included, so an edit can clear either
+          // one in the store; emptying doneWhen un-shapes the idea again.
+          doneWhen: cleanDoneWhen,
+          inspiration: cleanInspiration,
           parentId: parent || null,
           tags: [...tags],
         }
@@ -211,8 +221,29 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
         className: 'gantt-textarea',
         value: description,
         maxLength: 4000,
+        'data-field': 'description',
         placeholder: t('field.descriptionPlaceholder'),
         onChange: event => setDescription(event.target.value),
+      }),
+    ),
+    h(Field, { label: t('field.doneWhen'), full: true },
+      h('textarea', {
+        className: 'gantt-textarea',
+        value: doneWhen,
+        maxLength: 4000,
+        'data-field': 'doneWhen',
+        placeholder: t('field.doneWhenPlaceholder'),
+        onChange: event => setDoneWhen(event.target.value),
+      }),
+    ),
+    h(Field, { label: t('field.inspiration'), full: true },
+      h('textarea', {
+        className: 'gantt-textarea',
+        value: inspiration,
+        maxLength: 4000,
+        'data-field': 'inspiration',
+        placeholder: t('capture.inspirationPlaceholder'),
+        onChange: event => setInspiration(event.target.value),
       }),
     ),
     h(Field, { label: t('field.parent'), full: true, hint: hasChildren ? t('field.summaryDates') : null },

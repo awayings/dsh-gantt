@@ -129,6 +129,8 @@ describe('create dialog', () => {
     expect(requestBody(post)).toEqual({
       title: 'Plan release',
       description: '',
+      doneWhen: '',
+      inspiration: '',
       parentId: null,
       startDate: '2026-11-10',
       endDate: '2026-11-14',
@@ -187,12 +189,31 @@ describe('create dialog', () => {
     expect(requestBody(calls.find(call => call.path === TASKS))).toEqual({
       title: 'Design docs',
       description: 'notes',
+      doneWhen: '',
+      inspiration: '',
       parentId: 'p2',
       startDate: '2026-11-22',
       endDate: '2026-11-25',
       status: 'in_progress',
       progress: 25,
       tags: [],
+    })
+  })
+
+  it('posts the completion standard and source words, trimmed', async () => {
+    const { calls, view } = await renderPage({})
+    const fields = openCreate(view)
+    setField(fields.title, 'Idea with a standard')
+    setField(fields.doneWhen, '  The row renders solid  ')
+    setField(fields.inspiration, '  用户 11/23：主弹窗找不到灵感字段  ')
+
+    click(fields.submit)
+    await flush()
+
+    expect(requestBody(calls.find(call => call.path === TASKS))).toMatchObject({
+      title: 'Idea with a standard',
+      doneWhen: 'The row renders solid',
+      inspiration: '用户 11/23：主弹窗找不到灵感字段',
     })
   })
 
@@ -274,6 +295,8 @@ describe('edit dialog', () => {
       id: 'c1',
       title: 'Write the spec',
       description: 'updated',
+      doneWhen: '',
+      inspiration: '',
       parentId: 'p1',
       startDate: '2026-11-08',
       endDate: '2026-11-13',
@@ -283,6 +306,28 @@ describe('edit dialog', () => {
     })
     expect(text(view.container, '.gantt-toast')).toBe('Task saved')
     expect(dialog(view.container)).toBeNull()
+  })
+
+  it('prefills an unshaped idea and shapes it by filling the standard', async () => {
+    const payload = treePayload()
+    const idea = payload.tasks[1].children[0]
+    idea.inspiration = '用户 11/23：主弹窗找不到灵感字段'
+    const { calls, view } = await renderPage({ [TREE]: () => jsonResponse(payload) })
+
+    const fields = openEditor(view, '2.1 Announce')
+    expect(fields.inspiration.value).toBe('用户 11/23：主弹窗找不到灵感字段')
+    expect(fields.doneWhen.value).toBe('')
+
+    setField(fields.doneWhen, '  两个弹窗字段都能填能改，行转实线  ')
+    click(fields.submit)
+    await flush()
+
+    expect(requestBody(calls.find(call => call.path === UPDATE))).toMatchObject({
+      id: 'c3',
+      doneWhen: '两个弹窗字段都能填能改，行转实线',
+      inspiration: '用户 11/23：主弹窗找不到灵感字段',
+    })
+    expect(text(view.container, '.gantt-toast')).toBe('Task saved')
   })
 
   it('edits a summary task without sending rolled-up fields', async () => {
@@ -307,6 +352,8 @@ describe('edit dialog', () => {
       id: 'p1',
       title: 'Release 2.1',
       description: '',
+      doneWhen: '',
+      inspiration: '',
       parentId: null,
       tags: [],
     })

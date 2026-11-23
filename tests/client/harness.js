@@ -333,7 +333,9 @@ export function taskForm(container) {
   const selects = qa(container, '.gantt-dialog .gantt-select')
   return {
     title: field(container, 'input.gantt-input:not([type])'),
-    description: field(container, 'textarea.gantt-textarea'),
+    description: field(container, 'textarea[data-field="description"]'),
+    doneWhen: field(container, 'textarea[data-field="doneWhen"]'),
+    inspiration: field(container, 'textarea[data-field="inspiration"]'),
     parent: selects[0],
     start: dates[0],
     end: dates[1],
