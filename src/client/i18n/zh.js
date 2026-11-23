@@ -153,6 +153,7 @@ export const DICT_ZH = {
   'filter.next': '该动',
   'filter.today': '今日',
   'filter.done': '已完成',
+  'filter.inspiration': '灵感',
   'filter.presetHint': '预定义标签：按状态或视角筛选。',
   'filter.tagsClear': '清除标签',
   'filter.paths': '条路径',

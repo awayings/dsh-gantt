@@ -5,15 +5,17 @@
 // tags users put on tasks. Both are stored as plain strings so page-state can
 // persist them and the page can compare them without keeping objects around:
 //
-//   preset:<unfinished|active|frontier|next|today|done>
+//   preset:<unfinished|active|frontier|next|today|done|inspiration>
 //   tag:<trimmed tag name>
 //
 // An empty selection means "show everything"; several labels are OR-ed
 // together. This module owns the encoding, the decoding and the defensive
 // cleaning of values that come back from localStorage.
 
-/** The status/perspective labels the page offers; "all" is the empty selection. */
-export const PRESET_LABELS = ['unfinished', 'active', 'frontier', 'next', 'today', 'done']
+/** The status/perspective labels the page offers; "all" is the empty selection.
+ * `inspiration` keeps every task whose inspiration field is non-empty, so the
+ * captured ideas form one pool regardless of branch. */
+export const PRESET_LABELS = ['unfinished', 'active', 'frontier', 'next', 'today', 'done', 'inspiration']
 
 /** The most artificial tags one stored selection may carry. */
 export const MAX_TAGS = 20

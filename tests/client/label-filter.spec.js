@@ -16,10 +16,10 @@ import {
 
 describe('label constants', () => {
   it('pins the predefined labels and the caps', () => {
-    expect(PRESET_LABELS).toEqual(['unfinished', 'active', 'frontier', 'next', 'today', 'done'])
+    expect(PRESET_LABELS).toEqual(['unfinished', 'active', 'frontier', 'next', 'today', 'done', 'inspiration'])
     expect(MAX_TAGS).toBe(20)
     expect(MAX_TAG_LENGTH).toBe(40)
-    expect(MAX_LABELS).toBe(26)
+    expect(MAX_LABELS).toBe(27)
   })
 })
 
@@ -117,14 +117,14 @@ describe('sanitizeLabels', () => {
     expect(labels).not.toContain('tag:over-cap')
   })
 
-  it('caps the whole selection at 26 labels', () => {
+  it('caps the whole selection at 27 labels', () => {
     const value = [
       ...Array.from({ length: MAX_TAGS }, (_value, index) => `tag:tag-${index}`),
       ...PRESET_LABELS.map(preset => presetLabel(preset)),
     ]
     const labels = sanitizeLabels(value)
     expect(labels).toHaveLength(MAX_LABELS)
-    expect(labels.at(-1)).toBe('preset:done')
+    expect(labels.at(-1)).toBe('preset:inspiration')
   })
 
   it('keeps an empty selection empty', () => {

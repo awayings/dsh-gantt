@@ -187,6 +187,12 @@ export function GanttPage({ ctx }) {
     () => new Set(allTasks.filter(task => task.status !== 'done' && task.status !== 'cancelled').map(task => task.id)),
     [allTasks],
   )
+  // The inspiration pool: every node whose source-of-idea field is filled,
+  // whatever branch it lives in.
+  const inspirationIds = useMemo(
+    () => new Set(allTasks.filter(task => task.inspiration).map(task => task.id)),
+    [allTasks],
+  )
   const activityByTask = useMemo(() => {
     const activities = new Map()
     for (const task of allTasks) {
@@ -205,7 +211,8 @@ export function GanttPage({ ctx }) {
     next: nextIds,
     today: todayIds,
     done: doneIds,
-  }), [unfinishedIds, activityByTask, frontierIds, nextIds, todayIds, doneIds])
+    inspiration: inspirationIds,
+  }), [unfinishedIds, activityByTask, frontierIds, nextIds, todayIds, doneIds, inspirationIds])
   const effectiveIds = useMemo(() => {
     if (labels.size === 0) return null
     const ids = new Set()

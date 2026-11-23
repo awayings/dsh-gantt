@@ -153,6 +153,7 @@ export const DICT_EN = {
   'filter.next': 'Next',
   'filter.today': 'Today',
   'filter.done': 'Done',
+  'filter.inspiration': 'Inspiration',
   'filter.presetHint': 'Predefined label: filter by status or perspective.',
   'filter.tagsClear': 'Clear labels',
   'filter.paths': 'paths',
