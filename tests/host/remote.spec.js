@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { appendAudit, defaultIdentityFile, shellQuote, sshForwardArgs, SSH_TARGET_PATTERN } from '../../src/host/remote.js'
@@ -51,6 +51,16 @@ describe('defaultIdentityFile', () => {
     vi.stubEnv('HOME', '/nonexistent-dsh-gantt-home')
     expect(defaultIdentityFile()).toBe('')
     vi.unstubAllEnvs()
+    const home = makeTempDir('dsh-gantt-remote-home-')
+    try {
+      mkdirSync(join(home, '.ssh'), { recursive: true })
+      writeFileSync(join(home, '.ssh', 'id_rsa'), 'dummy-key')
+      vi.stubEnv('HOME', home)
+      expect(defaultIdentityFile()).toBe(join(home, '.ssh', 'id_rsa'))
+      vi.unstubAllEnvs()
+    } finally {
+      removeTempDir(home)
+    }
   })
 })
 
