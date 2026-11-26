@@ -265,16 +265,19 @@ against the same SQLite store.
 Installing the bundle also declares a second agent preset, **Gantt long-run**
 (`gantt-long-run`), for lightweight dispatch conversations. Its persona is
 complete — the dispatcher's protocol is the whole system prompt, so the host
-task protocol never binds these sessions. Each round: locate the landing task
-in the tree (or decompose/capture a subtask under it), optionally search the
-web for what the judgment needs, save the judgment's evaluation and lesson
-through `gantt_knowledge_save`, then hand execution to a standard-mode
-subagent through the `gantt_execute` delegation tool (`agentPreset: standard`,
-no model-facing override). The knowledge pair is visible only inside this
-preset; every entry lives in the same SQLite database (`knowledge_entries`),
-linked to its landing task and unlinked — never deleted — when that task
-goes. Execution lands in a `standard`-preset subagent with the full tool set
-and the task protocol.
+task protocol never binds these sessions. Each round closes the landing
+decision into one of three outcomes (attach to an existing task the user
+points at, create a subtask under the landing branch, or answer directly),
+optionally searches the web for what the judgment needs, saves the judgment's
+evaluation and lesson through `gantt_knowledge_save`, then hands execution to
+a standard-mode subagent through the `gantt_execute` delegation tool
+(`agentPreset: standard`, no model-facing override) with the user's original
+words verbatim. The knowledge pair is visible only inside this preset; every
+entry lives in the same SQLite database (`knowledge_entries`), linked to its
+landing task and unlinked — never deleted — when that task goes. Execution
+lands in a `standard`-preset subagent with the full tool set and the task
+protocol; the dispatcher relays its closing summary unchanged and re-locates
+anything an executor hands back.
 
 ## Verification
 
