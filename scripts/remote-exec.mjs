@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Forward one shell command to a remote host over SSH after passing it through
-// `scripts/remote-guard.mjs`. Two things matter here and nowhere else:
+// the shared safety gate (`src/host/remote-guard.js`). Two things matter here
+// and nowhere else:
 //
 // 1. The safety gate runs *before* SSH is spawned, so a refused command never
 //    leaves this machine. The refusal is still written to the audit log.
@@ -12,11 +13,12 @@
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { inspectCommand, redactCommand } from './remote-guard.mjs'
+import { inspectCommand, redactCommand } from '../src/host/remote-guard.js'
+import { SSH_TARGET_PATTERN, appendAudit, defaultIdentityFile, sshForwardArgs } from '../src/host/remote.js'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const USAGE = `Forward a shell command to a remote host over SSH, refusing destructive commands.
@@ -26,7 +28,7 @@ Usage:
 
 Options:
   -t, --target <user@host|alias>
-                               Remote target, or an ~/.ssh/config alias (env REMOTE_TARGET; required)
+                                Remote target, or an ~/.ssh/config alias (env REMOTE_TARGET; required)
   -i, --identity <file>        SSH private key (env REMOTE_SSH_IDENTITY, else ~/.ssh/id_rsa if present)
   -p, --port <port>            SSH port (env REMOTE_SSH_PORT, default 22)
       --timeout <seconds>      Kill the remote command after N seconds (default 120)
@@ -100,12 +102,12 @@ function parseArgs(argv) {
   if (!argv.slice(0, index).includes('--')) fatal('separate the remote command from the options with --')
   const target = options.target ?? process.env.REMOTE_TARGET ?? ''
   if (target === '') fatal('--target user@host|alias (or REMOTE_TARGET) is required')
-  if (!/^[A-Za-z0-9._-]+(@[A-Za-z0-9._:][A-Za-z0-9._:-]*)?$/.test(target)) fatal(`invalid target ${target}`)
+  if (!SSH_TARGET_PATTERN.test(target)) fatal(`invalid target ${target}`)
   const port = options.port ?? Number(process.env.REMOTE_SSH_PORT ?? 22)
   if (!Number.isInteger(port) || port < 1 || port > 65535) fatal('invalid port')
   const timeout = options.timeout ?? 120
   if (!Number.isInteger(timeout) || timeout < 1) fatal('invalid timeout')
-  const identity = options.identity ?? process.env.REMOTE_SSH_IDENTITY ?? defaultIdentity()
+  const identity = options.identity ?? process.env.REMOTE_SSH_IDENTITY ?? defaultIdentityFile()
   if (identity !== '' && !existsSync(identity)) fatal(`identity file not found: ${identity}`)
   const knownHosts = options.knownHosts ?? process.env.REMOTE_KNOWN_HOSTS ?? join(homedir(), '.ssh', 'known_hosts')
   const auditLog = options.auditLog ?? process.env.REMOTE_AUDIT_LOG ?? join(REPO_ROOT, '.tmp', 'remote-exec.log')
@@ -123,12 +125,6 @@ function parseArgs(argv) {
   }
 }
 
-/** @returns {string} */
-function defaultIdentity() {
-  const candidate = join(homedir(), '.ssh', 'id_rsa')
-  return existsSync(candidate) ? candidate : ''
-}
-
 /**
  * @param {string} command
  * @returns {string}
@@ -138,42 +134,13 @@ function sha256(command) {
 }
 
 /**
- * Append one JSONL audit entry. The command is redacted and hashed so the log
- * stays committable even when the command carries a bearer token.
- * @param {string} auditLog
- * @param {Record<string, unknown>} entry
- * @returns {void}
- */
-function audit(auditLog, entry) {
-  try {
-    mkdirSync(dirname(auditLog), { recursive: true })
-    appendFileSync(auditLog, JSON.stringify(entry) + '\n')
-  } catch (error) {
-    process.stderr.write(`remote-exec: cannot write audit log ${auditLog}: ${String(error)}\n`)
-  }
-}
-
-/**
- * @param {Options} options
- * @returns {string[]}
- */
-function sshArgs(options) {
-  const args = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4']
-  args.push('-o', 'StrictHostKeyChecking=accept-new', '-o', `UserKnownHostsFile=${options.knownHosts}`)
-  if (options.identity !== '') args.push('-i', options.identity)
-  if (options.port !== 22) args.push('-p', String(options.port))
-  args.push(options.target, options.command)
-  return args
-}
-
-/**
  * @param {Options} options
  * @param {string} decision
  * @param {string} rule
  * @returns {void}
  */
 function record(options, decision, rule) {
-  audit(options.auditLog, {
+  appendAudit(options.auditLog, {
     ts: new Date().toISOString(),
     target: options.target,
     decision,
@@ -206,7 +173,7 @@ async function run(options) {
   }
   record(options, 'allowed', '')
   const started = Date.now()
-  const child = spawn('ssh', sshArgs(options), {
+  const child = spawn('ssh', sshForwardArgs(options), {
     stdio: [options.stdin ? 'inherit' : 'ignore', 'inherit', 'inherit'],
   })
   const timer = setTimeout(() => {
@@ -222,7 +189,7 @@ async function run(options) {
   })
   clearTimeout(timer)
   const timedOut = code === 124 || code === 137
-  audit(options.auditLog, {
+  appendAudit(options.auditLog, {
     ts: new Date().toISOString(),
     target: options.target,
     decision: 'finished',

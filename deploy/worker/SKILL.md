@@ -14,6 +14,16 @@ description: 通过 MCP 从共享甘特任务树里领取工作 —— 当被要
 传进来。客户端能提供会话 id 时，再作为 `session` 传。同名重复注册会复用同一个
 agent id。
 
+**可被远程委派（登记一次）。** 想让甘特分发者把任务直接派到你这台机器，就在
+`register_agent` 时带上：`endpoint` 填 `ssh://user@host`（或 ssh 别名）；
+`details` 里加两行——`capabilities: <你能做什么，逗号分隔>` 与
+`dispatch: <无头启动你自己的命令>`。分发者经 SSH 把任务简报（点号编号、标题、
+完成标准、执行说明、写回方式）送进该命令的 stdin；命令读不了 stdin 就在命令里
+写 `{prompt}`，分发者会把简报安全内联。命令必须无 TTY 可跑；长任务自己
+`nohup` 并把日志落到你能回看的地方。守门会拒绝破坏性命令（rm -rf 等），
+每次派发都进审计日志。结果照常由你经 MCP 自上报（update_task /
+report_completion / decompose_task），不要等派发方。
+
 **开始。** 接手甘特任务时，先调用一次 `get_worker_guide` 并照它执行。然后拉取：
 `list_ready_tasks`（`tag` 取 `ready` | `next` | `todo`，默认 `ready`；可用
 `tags: [...]` + `mode: "any" | "and"` 按人工标签过滤，返回的每条任务带 `tags`），

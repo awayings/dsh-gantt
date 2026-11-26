@@ -9,6 +9,7 @@
 // runtime-context snapshot only when the rendered text changes, so the cache
 // prefix stays stable while the focus moves.
 
+import { agentNameMap } from './store/agents.js'
 import { findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from './tree/chain.js'
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
@@ -64,7 +65,7 @@ export function renderFocusContext(store, sessionId) {
   return [
     '# 甘特图聚焦上下文',
     ...renderFocusChain(tasks, focus),
-    ...renderFocusDetail(tasks, focus),
+    ...renderFocusDetail(tasks, focus, agentNameMap(store.listAgents({ limit: 100 }))),
     '',
     '## 任务轨迹（会话与轮次）',
     ...(events.length === 0 ? ['（暂无会话记录）'] : renderTrajectory(events)),

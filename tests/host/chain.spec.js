@@ -86,6 +86,22 @@ describe('focus chain helpers', () => {
     expect(lines).toContain('- 直接子任务：无')
   })
 
+  it('renders the operator as a registered agent name when given', () => {
+    const { task } = seededTree()
+    const agent = store.registerAgent({ name: 'pve-oc', type: 'ai-agent' })
+    store.update(task.id, { operatorId: agent.id })
+    const grown = /** @type {TreeTaskNode[]} */ (store.tree())
+    const named = renderFocusDetail(grown, /** @type {TreeTaskNode} */ (findFocus(grown, task.id)), new Map([[agent.id, 'pve-oc']]))
+    expect(named).toContain('- 操作人：pve-oc')
+    const raw = renderFocusDetail(grown, /** @type {TreeTaskNode} */ (findFocus(grown, task.id)))
+    expect(raw).toContain(`- 操作人：${agent.id}`)
+    // A task without an operator adds no line at all.
+    const plain = store.create({ title: 'Unowned task' })
+    const full = /** @type {TreeTaskNode[]} */ (store.tree())
+    const plainLines = renderFocusDetail(full, /** @type {TreeTaskNode} */ (findFocus(full, plain.id)))
+    expect(plainLines.some(line => line.startsWith('- 操作人'))).toBe(false)
+  })
+
   it('renders the focus description and skips the line when it is empty', () => {
     const described = store.create({ title: 'Explained task', description: 'First line\nSecond line' })
     const tasks = /** @type {TreeTaskNode[]} */ (store.tree())

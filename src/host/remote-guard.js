@@ -1,15 +1,17 @@
-// Safety gate for `scripts/remote-exec.mjs`: the wrapper forwards one shell
-// command to a remote host over SSH, so a typo there runs with the remote
-// user's full privileges. This module tokenises the command (quotes, pipes,
-// `&&`/`;` chains, `sudo`/`env`/`timeout` wrappers and `bash -c` payloads) and
-// refuses the handful of shapes that can destroy a machine: recursive deletes
-// of large directories, block-device writes, disk formatting, permission
-// rewrites of `/`, all-process kills, and power commands.
+// Safety gate for remote command forwarding: `scripts/remote-exec.mjs` (the
+// manual CLI) and the host's `gantt_delegate` tool both pass one shell command
+// through here before it reaches SSH, because a typo there runs with the
+// remote user's full privileges. This module tokenises the command (quotes,
+// pipes, `&&`/`;` chains, `sudo`/`env`/`timeout` wrappers and `bash -c`
+// payloads) and refuses the handful of shapes that can destroy a machine:
+// recursive deletes of large directories, block-device writes, disk
+// formatting, permission rewrites of `/`, all-process kills, and power
+// commands.
 //
 // The gate is deliberately a veto list, not a sandbox: it cannot see inside
-// scripts that the remote command merely *calls*. `scripts/remote-exec.mjs`
-// therefore also records every attempt in an audit log so a refusal or a
-// surprise is traceable after the fact.
+// scripts that the remote command merely *calls*. Both callers therefore also
+// record every attempt in an audit log so a refusal or a surprise is
+// traceable after the fact.
 
 /** Rules that always refuse, keyed by the rule id reported to the operator. */
 export const RULES = /** @type {const} */ ({
@@ -81,7 +83,7 @@ export function inspectCommand(command, options = {}) {
   if (typeof command !== 'string' || command.trim() === '') {
     return { rule: 'empty', reason: 'no command given' }
   }
-  const text = command === '' ? '' : command
+  const text = command
   if (text.includes('\0')) return { rule: 'invalid', reason: 'command contains a NUL byte' }
   if (text.length > 10_000) return { rule: 'invalid', reason: 'command is longer than 10000 characters' }
   if (/:\(\)\s*\{[^}]*\|[^}]*&\s*;?\s*\}/.test(text)) return violation('fork-bomb', 'command looks like a fork bomb')
@@ -311,10 +313,10 @@ function inspectSegment(rawTokens, context) {
   if (base === 'shutdown' || base === 'reboot' || base === 'halt' || base === 'poweroff') {
     return violation('power', `${base} would take the host down`)
   }
-  if (base === 'systemctl' && args.some((arg) => /^(reboot|poweroff|halt|kexec|suspend|hibernate|rescue|emergency)$/.test(arg))) {
+  if (base === 'systemctl' && args.some(arg => /^(reboot|poweroff|halt|kexec|suspend|hibernate|rescue|emergency)$/.test(arg))) {
     return violation('power', 'systemctl would take the host down')
   }
-  if (base === 'init' && args.some((arg) => arg === '0' || arg === '6')) return violation('power', 'init 0/6 would take the host down')
+  if (base === 'init' && args.some(arg => arg === '0' || arg === '6')) return violation('power', 'init 0/6 would take the host down')
   return inspectRedirections(tokens)
 }
 
@@ -341,7 +343,7 @@ function stripWrapper(tokens, base) {
     if (token.startsWith('-') && token !== '-') {
       index += 1
       const values = WRAPPER_VALUE_FLAGS[base]
-      if (values && (values.has(token) || [...values].some((flag) => flag.startsWith('--') && token.startsWith(flag + '=')))) {
+      if (values && (values.has(token) || [...values].some(flag => flag.startsWith('--') && token.startsWith(flag + '=')))) {
         index += 1
       }
       continue
@@ -475,8 +477,8 @@ function inspectPermissions(base, args) {
  * @returns {GuardRefusal | null}
  */
 function inspectKill(args) {
-  const signal = args.some((arg) => /^-(9|KILL|SIGKILL)$/i.test(arg))
-  const everyone = args.some((arg) => arg === '-1' || arg === '-- -1')
+  const signal = args.some(arg => /^-(9|KILL|SIGKILL)$/i.test(arg))
+  const everyone = args.some(arg => arg === '-1' || arg === '-- -1')
   if (signal && everyone) return violation('kill-all', 'kill -9 -1 signals every process')
   return null
 }
@@ -504,8 +506,7 @@ function inspectRedirections(tokens) {
  * @returns {boolean}
  */
 function isProtectedTarget(target) {
-  let path = target.trim()
-  if (path === '') return true
+  const path = target.trim()
   if (path === '*' || path === '/*' || path === '.' || path === '..' || path === './' || path === '../') return true
   if (HOME_ROOTS.includes(path)) return true
   for (const home of ['~', '$HOME', '${HOME}']) {
@@ -544,5 +545,5 @@ export function redactCommand(command) {
   return command
     .replace(/(\bBearer\s+)[A-Za-z0-9._~+/-]+/gi, '$1***')
     .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSWD))=("[^"]*"|'[^']*'|\S+)/gi, '$1=***')
-    .replace(/((?:-H|--header)\s+["']?[^:]*:\s*[^"']*)/gi, (match) => match.replace(/:\s*\S+\s*$/, ': ***'))
+    .replace(/((?:-H|--header)\s+["']?[^:]*:\s*[^"']*)/gi, match => match.replace(/:\s*\S+\s*$/, ': ***'))
 }

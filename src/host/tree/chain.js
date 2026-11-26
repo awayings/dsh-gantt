@@ -88,8 +88,9 @@ export function renderFocusChain(tasks, focus) {
 
 /** Render the focused task's own fields and its direct children.
  * @param {TreeTaskNode[]} tasks @param {TreeTaskNode} focus
+ * @param {Map<string, string>} [agentNames] agent id → display name
  * @returns {string[]} */
-export function renderFocusDetail(tasks, focus) {
+export function renderFocusDetail(tasks, focus, agentNames = new Map()) {
   const depth = depthOf(tasks, focus.id)
   const ref = focus.ref === '' ? focus.number : focus.ref
   // The description is optional user text; a multi-line value keeps its line
@@ -105,6 +106,7 @@ export function renderFocusDetail(tasks, focus) {
     ...(description === '' ? [] : [`- 描述：${description.split(/\r?\n/).join('\n  ')}`]),
     `- 层级：第 ${depth} 层（上限 ${DECOMPOSE_MAX_DEPTH} 层）`,
     `- 状态：${STATUS_LABELS[focus.status] ?? focus.status}`,
+    ...(focus.operatorId === '' ? [] : [`- 操作人：${agentNames.get(focus.operatorId) ?? focus.operatorId}`]),
     `- 完成标准：${focus.doneWhen === '' ? '（未填写）' : focus.doneWhen}`,
     depth >= DECOMPOSE_MAX_DEPTH ? '- 已达层级上限，不能再拆解。' : '- 可以继续拆解。',
   ]

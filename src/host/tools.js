@@ -6,8 +6,10 @@
 // tools write through the store (no sandboxed file or shell work), so they
 // need no approval.
 
+import { createHash } from 'node:crypto'
 import { GanttError } from './errors.js'
 import { flattenTree } from './tree.js'
+import { agentNameMap } from './store/agents.js'
 import { STATUS_LABELS, findFocus, renderFocusChain, renderFocusDetail, renderTrajectory } from './tree/chain.js'
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
@@ -26,6 +28,39 @@ export const TOOL_NAMES = {
 }
 
 const MAX_CONTEXT_CHARS = 6000
+
+/** Digest of the last context a conversation read, keyed by session id. An
+ * unchanged re-read answers with one line instead of re-entering the whole
+ * document, so a long-lived dispatch conversation keeps its token budget. */
+const lastContextBySession = new Map()
+
+/** Conversations remembered at once; beyond that the oldest entry drops. */
+const LAST_CONTEXT_CAP = 512
+
+/**
+ * The agents' display names by id, so a task's operator renders as a name
+ * rather than a uuid.
+ * @param {GanttStore} store
+ * @returns {Map<string, string>}
+ */
+function agentNamesOf(store) {
+  return agentNameMap(store.listAgents({ limit: 100 }))
+}
+
+/**
+ * Remember one conversation's context digest, evicting the oldest entries
+ * beyond the cap.
+ * @param {string} sessionId
+ * @param {string} digest
+ * @returns {void}
+ */
+function rememberContext(sessionId, digest) {
+  lastContextBySession.set(sessionId, digest)
+  while (lastContextBySession.size > LAST_CONTEXT_CAP) {
+    const oldest = /** @type {string} */ (lastContextBySession.keys().next().value)
+    lastContextBySession.delete(oldest)
+  }
+}
 
 /**
  * Session id of the conversation driving one tool call, or '' when the call has
@@ -106,7 +141,7 @@ async function contextMarkdown(store, sessionId, titles) {
     `- 任务总数：${stats.total}，进行中 ${stats.inProgress}，已完成 ${stats.done}，逾期 ${stats.overdue}`,
   ]
   if (focus !== null) {
-    lines.push('', ...renderFocusChain(tasks, focus), ...renderFocusDetail(tasks, focus), '', '## 任务轨迹（会话与轮次）')
+    lines.push('', ...renderFocusChain(tasks, focus), ...renderFocusDetail(tasks, focus, agentNamesOf(store)), '', '## 任务轨迹（会话与轮次）')
     const events = store.trajectory({ taskId: focus.id, limit: 8 })
     const resolved = titles === null ? new Map() : await titles.resolve(events.map(event => event.sessionId))
     lines.push(...(events.length === 0 ? ['（暂无会话记录）'] : renderTrajectory(events, resolved)))
@@ -171,7 +206,7 @@ function updateTask(store, args, exec) {
  * @param {any} exec
  * @returns {string}
  */
-function resolveTarget(store, args, exec) {
+export function resolveTarget(store, args, exec) {
   if (typeof args.id === 'string' && args.id.trim() !== '') return resolveTaskId(store, args.id)
   const sessionId = sessionIdOf(exec)
   const focus = sessionId === '' ? null : store.focusOf(sessionId)
@@ -287,8 +322,14 @@ export function toolDefinitions(store, titles = null) {
   return [
     {
       name: TOOL_NAMES.context,
-      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务、最近的会话与轮次轨迹，或（未聚焦时）整棵树。拆解任务或回答任务问题前先调用它。',
-      parameters: { type: 'object', additionalProperties: false, properties: {} },
+      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务、最近的会话与轮次轨迹，或（未聚焦时）整棵树。拆解任务或回答任务问题前先调用它。树自上次读取未变化时只回一行提示（沿用上次读取结果即可）；需要完整重读时传 full。',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          full: { type: 'boolean', description: '可选，强制返回完整上下文；默认树未变化时只回一行提示。' },
+        },
+      },
       output: {
         schema: {
           type: 'object',
@@ -298,8 +339,19 @@ export function toolDefinitions(store, titles = null) {
         },
         render: (_args, value) => [{ type: 'text', text: value.markdown }],
       },
-      async execute(_args, exec) {
-        return { ok: true, markdown: await contextMarkdown(store, exec?.agent?.session?.id, titles) }
+      async execute(args, exec) {
+        const markdown = await contextMarkdown(store, exec?.agent?.session?.id, titles)
+        const sessionId = sessionIdOf(exec)
+        if (args.full === true || sessionId === '') return { ok: true, markdown }
+        const digest = createHash('sha256').update(markdown).digest('hex')
+        if (lastContextBySession.get(sessionId) === digest) {
+          return {
+            ok: true,
+            markdown: '# 甘特图上下文（与上次读取一致）\n任务树与聚焦内容自上次读取未变化；请沿用上次读取结果，需要完整重读时传 full: true。',
+          }
+        }
+        rememberContext(sessionId, digest)
+        return { ok: true, markdown }
       },
     },
     {

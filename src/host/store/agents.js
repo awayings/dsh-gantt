@@ -101,3 +101,13 @@ function optionalText(value, field) {
   if (typeof value !== 'string') throw new GanttError(`${field} must be a string`)
   return value.trim()
 }
+
+/**
+ * The display-name lookup over registered agents: operator and completer ids
+ * render as names wherever a task's context is shown.
+ * @param {AgentRow[]} agents
+ * @returns {Map<string, string>}
+ */
+export function agentNameMap(agents) {
+  return new Map(agents.map(agent => [agent.id, agent.name]))
+}

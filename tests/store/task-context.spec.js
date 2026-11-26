@@ -21,6 +21,22 @@ function makeNode(extra = {}) {
 }
 
 describe('task context rendering', () => {
+  it('resolves the operator and completer through the agent name map', () => {
+    const agent = store.registerAgent({ name: 'pve-oc', type: 'ai-agent' })
+    const completer = store.registerAgent({ name: 'mac-co', type: 'ai-agent' })
+    const task = makeNode({ operatorId: agent.id, completedById: completer.id })
+    const tasks = /** @type {any} */ (store.tree())
+    const node = tasks[0].children.find(/** @returns {boolean} */ (/** @type {any} */ child) => child.id === task.id)
+    const names = new Map([[agent.id, 'pve-oc'], [completer.id, 'mac-co']])
+    const named = renderTaskContext(tasks, node, [], names)
+    expect(named).toContain('- 操作人：pve-oc')
+    expect(named).toContain('- 完成人：mac-co')
+    // The store-level context resolves the registered names on its own.
+    const fromStore = store.taskContext(task.id)
+    expect(fromStore.markdown).toContain('- 操作人：pve-oc')
+    expect(fromStore.markdown).toContain('- 完成人：mac-co')
+  })
+
   it('renders every populated field, the chain, the detail, the report, and the links', () => {
     const task = makeNode({
       description: 'first line\nsecond line',

@@ -48,8 +48,11 @@ describe('MCP metadata', () => {
     expect(ready.inputSchema.properties.tags).toMatchObject({ type: 'array', items: { type: 'string' } })
     expect(ready.inputSchema.properties.mode).toMatchObject({ type: 'string', enum: ['any', 'and'] })
     expect(MCP_INSTRUCTIONS).toMatch(/register_agent/)
+    expect(MCP_INSTRUCTIONS).toMatch(/dispatch:/)
     expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
     expect(WORKER_GUIDE).toMatch(/## Loop/)
+    expect(WORKER_GUIDE).toMatch(/## Registration doubles as the dispatch contract/)
+    expect(WORKER_GUIDE).toMatch(/\{prompt\}/)
   })
 })
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import path from 'node:path'
 import { apply, inject, name } from '../../src/host/long-run.js'
+import { DISPATCH_TOOL_NAMES } from '../../src/host/dispatch.js'
 import { KNOWLEDGE_TOOL_NAMES } from '../../src/host/knowledge.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
@@ -41,7 +42,7 @@ describe('gantt/long-run preset plugin', () => {
     expect(typeof apply).toBe('function')
   })
 
-  it('registers the knowledge tools over its own store handle and closes it on dispose', async () => {
+  it('registers the knowledge and dispatch tools over its own store handle and closes it on dispose', async () => {
     const service = new FakeToolsService()
     /** @type {Array<() => void>} */
     const effects = []
@@ -52,13 +53,19 @@ describe('gantt/long-run preset plugin', () => {
       },
     }
     apply(/** @type {any} */ (ctx))
-    expect(service.layers.map(definition => definition.name)).toEqual([KNOWLEDGE_TOOL_NAMES.save, KNOWLEDGE_TOOL_NAMES.query])
+    expect(service.layers.map(definition => definition.name)).toEqual([
+      KNOWLEDGE_TOOL_NAMES.save,
+      KNOWLEDGE_TOOL_NAMES.query,
+      DISPATCH_TOOL_NAMES.agents,
+      DISPATCH_TOOL_NAMES.delegate,
+    ])
     // The handle behind the registration is a real store on the shared schema.
     const save = /** @type {any} */ (service.layers[0])
     const value = await save.execute({ title: 'A', content: 'B' }, {})
     expect(value.ok).toBe(true)
-    // Effects: the store close first, then the tools disposer.
-    expect(effects).toHaveLength(2)
+    // Effects: the store close first, then the two tools disposers.
+    expect(effects).toHaveLength(3)
+    effects[2]()
     effects[1]()
     expect(service.layers).toEqual([])
     effects[0]()

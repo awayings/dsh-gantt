@@ -33,7 +33,7 @@ export function assertHttpBinding(host, token) {
  */
 export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: conversations and turns gain time and relation dimensions in a Gantt tree. This server is pull-only — nothing is dispatched to you.
 
-Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Then: list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
+Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
 Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
 
@@ -67,6 +67,39 @@ pulling from it; nothing is ever pushed to you.
    completer, the report, the status, and one complete event.
 7. track_task {taskId, summary} when a round wrote no task tree: it records the
    round against the task, so the trajectory still knows you were there.
+
+## Registration doubles as the dispatch contract
+
+The gantt dispatcher (the 甘特长城 preset) reads this registry to decide who
+receives a task, and its gantt_delegate tool launches you through exactly what
+you registered — so register_agent is not just an identity, it is how a task
+finds your machine:
+
+- endpoint: \`ssh://user@host\` or \`ssh://<ssh-config-alias>\` — the target the
+  dispatcher sshes to. Without it you can still pull work, but nothing can
+  hand you a task.
+- details must carry two single-line fields:
+  - \`capabilities: coding(python,sql), decompose, ops\` — what you can do,
+    comma-separated; the dispatcher routes by these words.
+  - \`dispatch: lo -p\` — the headless command that starts one run of you. It
+    must run unattended, without a TTY. The task brief (point number, title,
+    doneWhen, description, report instructions) is piped to the command's
+    stdin; a command that cannot read stdin puts the brief inline by writing
+    \`{prompt}\` where it belongs — the dispatcher substitutes it, safely
+    quoted, into the command line.
+- The launch is fire-and-forget: the dispatcher drops the connection after
+  the launch ack, so a long run must keep itself alive — wrap it in \`nohup\`
+  (or daemonize) and log somewhere you can read back.
+- Destructive shapes (\`rm -rf\`, disk writes, power commands) are refused
+  before ssh runs, and every attempt lands in an audit log with tokens
+  redacted — the same gate the manual remote-exec CLI uses.
+
+You never report to the dispatcher directly: you report to this store,
+through the same tools as always (update_task, report_completion,
+decompose_task, track_task — each with your agentName). The dispatcher only
+reads the tree and the trajectory, so the store stays the single channel
+between you two; a delegated task carries your name as its operator the
+moment it is dispatched.
 
 ## Rules
 
@@ -116,8 +149,8 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
         type: { type: 'string', enum: ['human', 'ai-agent'], description: 'Operator kind.' },
         role: { type: 'string', description: 'Optional role, such as implementer or reviewer.' },
         description: { type: 'string', description: 'Optional one-line description.' },
-        details: { type: 'string', description: 'Optional longer notes.' },
-        endpoint: { type: 'string', description: 'Optional callback or home endpoint.' },
+        details: { type: 'string', description: 'Optional longer notes. Remote dispatch eligibility needs two single-line fields here: capabilities: <what you can do, comma-separated> and dispatch: <headless command that starts one run of you; the task brief arrives on its stdin, or inline via {prompt}>.' },
+        endpoint: { type: 'string', description: 'Optional callback or home endpoint. Remote dispatch needs ssh://user@host or ssh://<ssh-config-alias>.' },
         id: { type: 'string', description: 'Optional existing agent id; ignored when unknown.' },
       },
       required: ['name', 'type'],

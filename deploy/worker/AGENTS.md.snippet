@@ -8,6 +8,13 @@ bearer token 来自 `GANTT_MCP_TOKEN`），本地不需要安装任何东西。
 `agentName` 传进来；有会话 id 时再作为 `session` 传。每个会话调用一次
 `register_agent`（`type: "ai-agent"`）注册；同名重复注册会得到同一个 agent id。
 
+**可被远程委派（登记一次）。** 想接甘特分发者的远程委派，`register_agent` 时把
+`endpoint` 填 `ssh://user@host`（或 ssh 别名），并在 `details` 里加两行：
+`capabilities: <你能做什么，逗号分隔>` 与 `dispatch: <无头启动你自己的命令>`。
+任务简报会经 SSH 送进该命令的 stdin（命令里写 `{prompt}` 则内联）；命令必须无
+TTY 可跑，长任务自己 `nohup`。完成后照常经 MCP 自上报，不要等派发方。完整契约
+见 `get_worker_guide`。
+
 **接到甘特任务时。** 先调用一次 `get_worker_guide` 并照它执行。用
 `list_ready_tasks`（`tag` 取 `ready`、`next` 或 `todo`；`tags: [...]` + `mode:
 "any" | "and"` 可按人工标签过滤，返回任务带 `tags`）拉取任务，然后对你选中的

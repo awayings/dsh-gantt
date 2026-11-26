@@ -20,15 +20,16 @@ function oneLine(value) {
 /**
  * Render the field block of one task; empty optional fields add no line.
  * @param {TreeTaskNode} task
+ * @param {Map<string, string>} [agentNames] agent id → display name
  * @returns {string[]}
  */
-function fieldLines(task) {
+function fieldLines(task, agentNames = new Map()) {
   const lines = [
     `- 状态：${STATUS_LABELS[task.status] ?? task.status}（${task.status}）`,
     `- 进度：${task.progress}%`,
   ]
-  if (task.operatorId !== '') lines.push(`- 操作人：${task.operatorId}`)
-  if (task.completedById !== '') lines.push(`- 完成人：${task.completedById}`)
+  if (task.operatorId !== '') lines.push(`- 操作人：${agentNames.get(task.operatorId) ?? task.operatorId}`)
+  if (task.completedById !== '') lines.push(`- 完成人：${agentNames.get(task.completedById) ?? task.completedById}`)
   if (task.description !== '') lines.push(`- 描述：${oneLine(task.description)}`)
   if (task.doneWhen !== '') lines.push(`- 完成标准：${task.doneWhen}`)
   lines.push(`- 起止：${task.startDate} → ${task.endDate}`)
@@ -53,19 +54,20 @@ function fieldLines(task) {
  * @param {TreeTaskNode[]} tasks
  * @param {TreeTaskNode} task
  * @param {ContextEvent[]} events
+ * @param {Map<string, string>} [agentNames] agent id → display name
  * @returns {string}
  */
-export function renderTaskContext(tasks, task, events) {
+export function renderTaskContext(tasks, task, events, agentNames = new Map()) {
   const kind = KIND_LABELS[task.kind] ?? task.kind
   const lines = [
     `# 任务上下文：${labelOf(task)} ${task.title}（${kind}）`,
-    ...fieldLines(task),
+    ...fieldLines(task, agentNames),
     '',
     ...renderFocusChain(tasks, task).map((line, index) => (
       index === 0 ? '## 任务链路（从支线根到当前任务）' : line
     )),
   ]
-  const detail = renderFocusDetail(tasks, task)
+  const detail = renderFocusDetail(tasks, task, agentNames)
   lines.push(...detail.map((line, index) => (index === 1 ? '## 当前任务' : line)))
   if (task.report !== '') lines.push('', '## 汇报结果', '', task.report)
   lines.push('', '## 任务轨迹')

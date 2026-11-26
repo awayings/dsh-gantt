@@ -329,10 +329,62 @@ describe('gantt assistant tools', () => {
   })
 
   it('renders an empty trajectory for a focused task without events', async () => {
-    focusTask()
+    const { task } = focusTask()
+    store.setFocus('session-empty', task.id)
     const context = tool(toolDefinitions(store), TOOL_NAMES.context)
-    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-a' } } }))
+    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-empty' } } }))
     expect(value.markdown).toContain('（暂无会话记录）')
+  })
+
+  it('renders the operator as a registered agent name', async () => {
+    const { task } = focusTask()
+    store.setFocus('session-operator', task.id)
+    const agent = store.registerAgent({ name: 'pve-oc', type: 'ai-agent' })
+    store.update(task.id, { operatorId: agent.id })
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-operator' } } }))
+    expect(value.markdown).toContain('- 操作人：pve-oc')
+  })
+
+  it('short-circuits an unchanged re-read and honors full', async () => {
+    const { task } = focusTask()
+    store.setFocus('session-unchanged', task.id)
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const exec = { agent: { session: { id: 'session-unchanged' } } }
+    const first = /** @type {any} */ (await context.execute({}, exec))
+    expect(first.markdown).toContain('## 当前聚焦任务（拆解对象）')
+    const second = /** @type {any} */ (await context.execute({}, exec))
+    expect(second.markdown).toContain('与上次读取一致')
+    expect(second.markdown).not.toContain('## 当前聚焦任务（拆解对象）')
+    const forced = /** @type {any} */ (await context.execute({ full: true }, exec))
+    expect(forced.markdown).toContain('## 当前聚焦任务（拆解对象）')
+  })
+
+  it('re-reads in full once the tree changed', async () => {
+    const { task } = focusTask()
+    store.setFocus('session-changed', task.id)
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const exec = { agent: { session: { id: 'session-changed' } } }
+    await context.execute({}, exec)
+    store.update(task.id, { progress: 40 }, { sessionId: 'someone', turn: 1, summary: 'bumped to forty' })
+    const value = /** @type {any} */ (await context.execute({}, exec))
+    expect(value.markdown).toContain('## 当前聚焦任务（拆解对象）')
+    expect(value.markdown).toContain('进行中')
+    expect(value.markdown).toContain('bumped to forty')
+    const again = /** @type {any} */ (await context.execute({}, exec))
+    expect(again.markdown).toContain('与上次读取一致')
+  })
+
+  it('keeps the dedup bounded across many conversations', async () => {
+    store.create({ title: 'Loose task' })
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    for (let index = 0; index < 520; index += 1) {
+      await context.execute({}, { agent: { session: { id: `session-flood-${index}` } } })
+    }
+    const exec = { agent: { session: { id: 'session-after-flood' } } }
+    await context.execute({}, exec)
+    const value = /** @type {any} */ (await context.execute({}, exec))
+    expect(value.markdown).toContain('与上次读取一致')
   })
 })
 

@@ -40,6 +40,8 @@ describe('gantt-long-run preset wiring', () => {
     expect(patch).toContain('complete: true')
     expect(patch).toContain('gantt_knowledge_query')
     expect(patch).toContain('gantt_knowledge_save')
+    expect(patch).toContain('gantt_agents')
+    expect(patch).toContain('gantt_delegate')
     expect(patch).toContain('gantt_execute')
     expect(patch).not.toContain('{{')
   })
@@ -61,7 +63,8 @@ describe('gantt-long-run preset wiring', () => {
 
   it('mirrors the shipped persona in docs/long-run-persona.md', () => {
     const persona = personaPrefix()
-    expect(persona).toContain('你是甘特图长运行分发者')
+    expect(persona).toContain('你是甘特长城分发者')
+    expect(persona).toContain('goal=decompose')
     const doc = fs.readFileSync(path.join(ROOT, 'docs/long-run-persona.md'), 'utf8')
     expect(doc).toContain(persona)
   })

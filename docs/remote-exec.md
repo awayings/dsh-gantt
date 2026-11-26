@@ -8,12 +8,16 @@ command runs with the host user's full privileges.
 
 The wrapper puts three things in front of `ssh`:
 
-1. **A veto list** (`scripts/remote-guard.mjs`) that inspects the command
-   before SSH is spawned. A refused command never leaves the machine.
+1. **A veto list** (`src/host/remote-guard.js`, shared with the
+   `gantt_delegate` tool) that inspects the command before SSH is spawned. A
+   refused command never leaves the machine.
 2. **A redacted audit log** of every attempt (allowed, refused, failed), so a
    remote change is traceable after the fact without storing bearer tokens.
+   The manual CLI writes `.tmp/remote-exec.log`; the delegation tool writes
+   beside the task database (override with `REMOTE_AUDIT_LOG`).
 3. **A fixed SSH posture**: batch mode, connect timeout, keepalive, and
-   `StrictHostKeyChecking=accept-new` against an explicit `known_hosts` file.
+   `StrictHostKeyChecking=accept-new` against an explicit `known_hosts` file
+   (`src/host/remote.js` builds the argv for both callers).
 
 It is not a sandbox. It cannot see inside a script or binary that the remote
 command merely invokes, so use it for small, explicit, read-mostly steps —

@@ -7,7 +7,7 @@ import { GanttError } from '../errors.js'
 import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, matchesTagFilter, normalizeTagMode, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
 import { collectReadyTasks } from '../tree/ready.js'
 import { renderTaskContext } from '../tree/task-context.js'
-import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, normalizeAgentFields, normalizeAgentFilter } from './agents.js'
+import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, agentNameMap, normalizeAgentFields, normalizeAgentFilter } from './agents.js'
 import { buildDailyReport, computeDailyBrief, dailyBrief, persistDailyBrief, previousDailyBriefs, readDailyBrief } from './brief.js'
 import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
@@ -859,7 +859,8 @@ export class GanttStore {
   }
 
   /** Stable markdown context for one task: fields, ancestor chain, detail,
-   * completion report, and recent trajectory.
+   * completion report, and recent trajectory. Operator and completer render
+   * as registered agent names, falling back to the raw id.
    * @param {unknown} taskId
    * @returns {{ taskId: string, markdown: string, chars: number }} */
   taskContext(taskId) {
@@ -867,7 +868,8 @@ export class GanttStore {
     const tasks = this.tree()
     const task = /** @type {TaskNode} */ (flattenTree(tasks).find(node => node.id === row.id))
     const events = this.trajectory({ taskId: row.id, limit: 8 })
-    const markdown = renderTaskContext(tasks, task, events)
+    const agentNames = agentNameMap(this.listAgents({ limit: 100 }))
+    const markdown = renderTaskContext(tasks, task, events, agentNames)
     return { taskId: row.id, markdown, chars: markdown.length }
   }
 

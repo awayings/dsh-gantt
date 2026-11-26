@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RULES, inspectCommand, redactCommand } from '../../scripts/remote-guard.mjs'
+import { RULES, inspectCommand, redactCommand } from '../../src/host/remote-guard.js'
 
 /** @param {string} command @param {{ allowRecursiveDelete?: boolean }} [options] */
 function ruleOf(command, options) {
@@ -136,5 +136,77 @@ describe('redactCommand', () => {
 
   it('keeps ordinary text intact', () => {
     expect(redactCommand('claude mcp list')).toBe('claude mcp list')
+  })
+})
+
+describe('remote guard: lexer and inspector corners', () => {
+  it('rejects NUL bytes and absurd nesting', () => {
+    expect(inspectCommand('ls \0').rule).toBe('invalid')
+    let deep = 'rm -rf /'
+    for (let index = 0; index < 8; index += 1) deep = `echo $(${deep})`
+    expect(inspectCommand(deep).rule).toBe('invalid')
+  })
+
+  it('handles escapes, unterminated substitutions, and double-quoted payloads', () => {
+    expect(inspectCommand('echo a\\b')).toBeNull()
+    expect(ruleOf('echo "`rm -rf /`"')).toBe('rm-recursive')
+    expect(inspectCommand('echo "`x')).toBeNull()
+    expect(ruleOf('echo $(rm -rf /)')).toBe('rm-recursive')
+    expect(inspectCommand('echo `x')).toBeNull()
+    expect(inspectCommand('echo $(a\\ b)')).toBeNull()
+    expect(inspectCommand('echo "$(echo "a)")"')).toBeNull()
+    expect(inspectCommand('echo $(oops')).toBeNull()
+  })
+
+  it('tokenises append and duplicated redirections', () => {
+    expect(inspectCommand('echo hi >> /tmp/log')).toBeNull()
+    expect(inspectCommand('echo hi >&2')).toBeNull()
+  })
+
+  it('peels shell keywords and wrapper flag corners', () => {
+    expect(ruleOf('{ rm -rf /; }')).toBe('rm-recursive')
+    expect(inspectCommand('bash -x echo hi')).toBeNull()
+    expect(ruleOf('bash -o errexit -c "rm -rf /"')).toBe('rm-recursive')
+    expect(inspectCommand('bash -l')).toBeNull()
+    expect(ruleOf('sudo -- rm -rf /')).toBe('rm-recursive')
+    expect(ruleOf('nice -5 rm -rf /usr')).toBe('rm-recursive')
+    expect(ruleOf('sudo ! rm -rf /usr')).toBe('rm-recursive')
+    expect(ruleOf('nice 5 rm -rf /usr')).toBe('rm-recursive')
+    expect(inspectCommand('sudo')).toBeNull()
+    expect(inspectCommand('rm -- -rf /')).toBeNull()
+  })
+
+  it('allows non-destructive and non-structural shapes', () => {
+    expect(inspectCommand('find /var -name "*.log"')).toBeNull()
+    expect(inspectCommand('find /tmp/build -delete')).toBeNull()
+    expect(inspectCommand('dd if=/dev/zero of=/tmp/img bs=1M')).toBeNull()
+    expect(inspectCommand('chmod 644 /etc/passwd')).toBeNull()
+    expect(inspectCommand('chmod -v 644 /tmp/f')).toBeNull()
+    expect(inspectCommand('chmod -R 777 /tmp/build')).toBeNull()
+    expect(inspectCommand('kill -9 123')).toBeNull()
+  })
+
+  it('covers the remaining inspector branch shapes', () => {
+    expect(inspectCommand('init 5')).toBeNull()
+    expect(inspectCommand('bash -c')).toBeNull()
+    expect(ruleOf('rm -r /etc', { allowRecursiveDelete: true })).toBe('rm-protected')
+    expect(inspectCommand('find ( -name "*.log" ) -delete')).toBeNull()
+    expect(ruleOf('find ! -delete')).toBe('find-delete-protected')
+    expect(inspectCommand('find / -exec')).toBeNull()
+    expect(ruleOf('find -delete')).toBe('find-delete-protected')
+    expect(ruleOf('chmod --recursive 777 /')).toBe('permissions-root')
+    expect(ruleOf('/usr/bin/rm -rf /')).toBe('rm-recursive')
+  })
+
+  it('protects home globs and unlisted top-level roots under the explicit flag', () => {
+    for (const command of ['rm -rf ~/', 'rm -rf ~/*', 'rm -rf ~/.*']) {
+      expect(ruleOf(command, { allowRecursiveDelete: true })).toBe('rm-protected')
+    }
+    expect(ruleOf('rm -rf ~/build', { allowRecursiveDelete: true })).toBe('rm-protected')
+    expect(inspectCommand('rm -rf ~/a/b', { allowRecursiveDelete: true })).toBeNull()
+    expect(ruleOf('rm -rf /custom', { allowRecursiveDelete: true })).toBe('rm-protected')
+    expect(inspectCommand('rm -rf /custom/sub', { allowRecursiveDelete: true })).toBeNull()
+    expect(ruleOf('rm -rf /home/jason/*', { allowRecursiveDelete: true })).toBe('rm-protected')
+    expect(inspectCommand('rm -rf /home/jason/build/x', { allowRecursiveDelete: true })).toBeNull()
   })
 })

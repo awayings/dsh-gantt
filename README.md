@@ -270,16 +270,26 @@ decision into one of three outcomes (attach to an existing task the user
 points at, create a subtask under the landing branch, or answer directly),
 optionally searches the web for what the judgment needs, saves the judgment's
 evaluation and lesson through `gantt_knowledge_save`, then hands execution to
-a standard-mode subagent through the `gantt_execute` delegation tool
-(`agentPreset: standard`, no model-facing override). The dispatch brief —
+whoever can do the work: a registered remote agent whose capabilities match
+(`gantt_agents` lists the MCP-registered operators and what each can do;
+`gantt_delegate` claims the task's operator, forwards the brief through the
+agent's registered `dispatch:` command over SSH, behind the same guard and
+audit log as `scripts/remote-exec.mjs`, and returns after the launch ack —
+the remote worker reports results itself through the gantt MCP surface) or,
+failing that, a standard-mode subagent through the `gantt_execute` delegation
+tool (`agentPreset: standard`, no model-facing override). Delegation can also
+ask a remote agent to decompose a task (`goal=decompose`) when the domain
+knowledge lives on its side. The dispatch brief —
 the user's original words, a routing note under 30 characters, and any links —
 lives in the subtask's `description`, which the workbench renders as markdown;
-the prompt quotes it because a spawned executor cannot read the task tree.
-The knowledge pair is visible only inside this preset; every
-entry lives in the same SQLite database (`knowledge_entries`), linked to its
+the prompt quotes it because neither a spawned executor nor a remote worker
+can read the task tree.
+The knowledge pair and the delegation pair are visible only inside this
+preset; every knowledge entry lives in the same SQLite database
+(`knowledge_entries`), linked to its
 landing task and unlinked — never deleted — when that task goes. Execution
 lands in a `standard`-preset subagent with the full tool set and the task
-protocol; the dispatcher relays its closing summary unchanged and re-locates
+protocol; the dispatcher relays closing reports unchanged and re-locates
 anything an executor hands back. The persona itself is mirrored for reading
 in [docs/long-run-persona.md](docs/long-run-persona.md), pinned byte-for-byte
 by `tests/host/preset.spec.js`.
@@ -343,6 +353,8 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | six assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`, `gantt_capture`), task-reference resolution, and automatic provenance recording |
 | `src/host/knowledge.js` | the knowledge pair (`gantt_knowledge_save`, `gantt_knowledge_query`) that only the gantt-long-run preset registers |
+| `src/host/dispatch.js` | the delegation pair (`gantt_agents`, `gantt_delegate`) that only the gantt-long-run preset registers: registry listing and guarded SSH dispatch to a registered agent's headless command |
+| `src/host/remote.js`, `src/host/remote-guard.js` | shared SSH forwarding mechanics and the destructive-command safety gate, used by `dispatch.js` and the manual `scripts/remote-exec.mjs` CLI |
 | `src/host/long-run.js` | the gantt-long-run preset plugin entry the bundle's `cordis.patch.yml` row mounts |
 | `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), page-state restore (`page-state`: timeline view, work panel), dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
