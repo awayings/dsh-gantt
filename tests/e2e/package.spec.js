@@ -38,6 +38,7 @@ const REQUIRED = [
   'deploy/k3s/README.md',
   'docs/deployment.md',
   'docs/mcp.md',
+  'docs/long-run-persona.md',
 ]
 
 const FORBIDDEN = ['tests/', 'node_modules/', 'coverage/', 'scripts/', '.github/', '.husky/']

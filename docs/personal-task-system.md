@@ -678,18 +678,23 @@ user's words into a located task and a delegated execution, nothing else.
   explicitly; a similar subject is a new request, and an open subtask that
   already covers the work wins over a new one), create a subtask under the
   landing branch via `gantt_decompose`/`gantt_capture`, or answer directly
-  (chat or a pure lookup; nothing enters the tree). Gather what the judgment
-  needs from the web and stop there. Evaluate the judgment and save it
+  (chat or a pure lookup; nothing enters the tree). The subtask's
+  `description` is the dispatch brief — the user's words verbatim, a routing
+  note under 30 characters of background and human constraints, never an
+  implementation plan — and the workbench renders it as markdown, so the
+  brief is readable from the page. Gather what the judgment needs from the
+  web and stop there. Evaluate the judgment and save it
   (`gantt_knowledge_save`, kind `lesson` or `feedback`, linked to the landing
   task); then delegate execution through `gantt_execute`, whose children are
   pinned to the `standard` preset — a fresh agent with the full tool set, the
   task protocol, and a self-contained prompt naming the task's point number,
-  its `doneWhen`, and the user's original words verbatim; the routing note
-  stays under 30 words of background, never an implementation plan. Relay the
+  its `doneWhen`, and the brief quoted verbatim, because a spawned executor
+  cannot read the task tree. Relay the
   completion notice as the executor's own closing summary stated it — never
   re-edited into a new technical claim — and treat an executor that hands the
   task back (blocked or cancelled because the landing was wrong) as a fresh
-  candidate to re-locate, never to re-attach.
+  candidate to re-locate, never to re-attach. The persona text is mirrored for
+  reading in [long-run-persona.md](long-run-persona.md).
 - **Knowledge.** Judgments and lessons live in `knowledge_entries`, written
   through the store with the writing session and turn. A query
   (`gantt_knowledge_query`) reads them back by keyword, linked task, kind, or

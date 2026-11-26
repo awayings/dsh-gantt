@@ -271,13 +271,18 @@ points at, create a subtask under the landing branch, or answer directly),
 optionally searches the web for what the judgment needs, saves the judgment's
 evaluation and lesson through `gantt_knowledge_save`, then hands execution to
 a standard-mode subagent through the `gantt_execute` delegation tool
-(`agentPreset: standard`, no model-facing override) with the user's original
-words verbatim. The knowledge pair is visible only inside this preset; every
+(`agentPreset: standard`, no model-facing override). The dispatch brief —
+the user's original words, a routing note under 30 characters, and any links —
+lives in the subtask's `description`, which the workbench renders as markdown;
+the prompt quotes it because a spawned executor cannot read the task tree.
+The knowledge pair is visible only inside this preset; every
 entry lives in the same SQLite database (`knowledge_entries`), linked to its
 landing task and unlinked — never deleted — when that task goes. Execution
 lands in a `standard`-preset subagent with the full tool set and the task
 protocol; the dispatcher relays its closing summary unchanged and re-locates
-anything an executor hands back.
+anything an executor hands back. The persona itself is mirrored for reading
+in [docs/long-run-persona.md](docs/long-run-persona.md), pinned byte-for-byte
+by `tests/host/preset.spec.js`.
 
 ## Verification
 
