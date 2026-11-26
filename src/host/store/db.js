@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 /** Columns added by schema v3, v4, v8, and v9; the migration appends whichever is missing. @type {Record<string, string>} */
 const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", tags: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'", operator_id: "TEXT NOT NULL DEFAULT ''", completed_by_id: "TEXT NOT NULL DEFAULT ''", report: "TEXT NOT NULL DEFAULT ''" }
@@ -81,6 +81,20 @@ const CREATE_SCHEMA = `
     updated_at TEXT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_name ON agents(name);
+  CREATE TABLE IF NOT EXISTS knowledge_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'lesson' CHECK (kind IN ('lesson', 'feedback', 'note')),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+    tags TEXT NOT NULL DEFAULT '[]',
+    session_id TEXT NOT NULL DEFAULT '',
+    turn INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_knowledge_task ON knowledge_entries(task_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_knowledge_kind ON knowledge_entries(kind, created_at);
 `
 
 /**

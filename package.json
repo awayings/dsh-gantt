@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/host/index.js",
     "./client": "./lib/client.js",
+    "./long-run": "./src/host/long-run.js",
     "./store": "./src/host/store.js",
     "./icon": "./icon.svg"
   },

@@ -50,6 +50,18 @@ function currentTurn(exec) {
   return start?.data?.turn ?? null
 }
 
+/** Provenance of the calling conversation for writes beyond the task tree
+ * (knowledge entries): the session id and current turn, or undefined when no
+ * agent session drives the call.
+ * @param {any} exec
+ * @returns {{ sessionId: string, turn: number | null } | undefined}
+ */
+export function sessionOriginOf(exec) {
+  const sessionId = sessionIdOf(exec)
+  if (sessionId === '') return undefined
+  return { sessionId, turn: currentTurn(exec) }
+}
+
 /** Provenance for one assistant write: the calling conversation and turn plus
  * the model-supplied summary. Undefined when there is no conversation, so the
  * manual routes never fabricate a session.
@@ -58,9 +70,8 @@ function currentTurn(exec) {
  * @returns {{ sessionId: string, turn: number | null, summary: string } | undefined}
  */
 function originOf(exec, summary) {
-  const sessionId = sessionIdOf(exec)
-  if (sessionId === '') return undefined
-  return { sessionId, turn: currentTurn(exec), summary: typeof summary === 'string' ? summary : '' }
+  const origin = sessionOriginOf(exec)
+  return origin === undefined ? undefined : { ...origin, summary: typeof summary === 'string' ? summary : '' }
 }
 
 /**

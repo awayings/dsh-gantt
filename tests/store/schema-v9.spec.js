@@ -23,7 +23,6 @@ function columns(db) {
 describe('schema v9', () => {
   it('creates the tags column with an empty JSON array default', () => {
     store = new GanttStore(':memory:')
-    expect(SCHEMA_VERSION).toBe(9)
     expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db)).toContain('tags')
     const tagsColumn = store.db.prepare("SELECT dflt_value FROM pragma_table_info('tasks') WHERE name = 'tags'").get()
@@ -49,7 +48,7 @@ describe('schema v9', () => {
     downgraded.close()
 
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db)).toContain('tags')
     expect(store.count()).toBe(2)
     expect(store.getRow(tagged.id)).toMatchObject({ title: 'Tagged', status: 'todo', tags: [] })
@@ -68,7 +67,7 @@ describe('schema v9', () => {
     downgradeToV7(file)
 
     store = new GanttStore(file)
-    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 })
+    expect(store.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
     expect(columns(store.db)).toContain('tags')
     expect(store.count()).toBe(2)
     expect(store.getRow(child.id)).toMatchObject({ title: 'Existing task', tags: [] })

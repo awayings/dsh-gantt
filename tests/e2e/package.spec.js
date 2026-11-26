@@ -26,6 +26,9 @@ const REQUIRED = [
   'src/host/index.js',
   'src/host/store.js',
   'src/host/mcp.js',
+  'src/host/long-run.js',
+  'src/host/knowledge.js',
+  'src/host/store/knowledge.js',
   'src/client/index.js',
   'deploy/gantt-mcp.service',
   'deploy/mcp.env.example',
@@ -83,6 +86,8 @@ describe('release tarball', () => {
       expect(manifest.name).toBe('@local/dsh-gantt')
       expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
       expect(manifest.exports['./client']).toBe('./lib/client.js')
+      // The subpath the gantt-long-run preset declaration mounts.
+      expect(manifest.exports['./long-run']).toBe('./src/host/long-run.js')
 
       // The sidecar half has no DSH runtime dependency: resolving its imports
       // from the tarball alone must work, without this checkout on the path.

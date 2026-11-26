@@ -13,13 +13,14 @@ origin allowlist is involved.
   and `x-content-type-options: nosniff`.
 - The page's **API** button shows the resolved database path and this endpoint
   catalog at runtime (`GET /api/gantt/meta`).
-- The schema is version 9: one working tree in `tasks` (track roots, imported
+- The schema is version 10: one working tree in `tasks` (track roots, imported
   nodes, decomposed and manual tasks), the persisted daily brief report,
   per-conversation `focus` rows, the append-only `task_events` trajectory, the
   `work_sessions` mapping from a task to its dedicated main conversation, the
-  `agents` operator registry, and each task's `tags` label array. The domain
-  model is in [personal-task-system.md](personal-task-system.md); the migration
-  in [compatibility.md](compatibility.md) and
+  `agents` operator registry, each task's `tags` label array, and the
+  `knowledge_entries` store behind the gantt-long-run preset's knowledge pair.
+  The domain model is in [personal-task-system.md](personal-task-system.md);
+  the migration in [compatibility.md](compatibility.md) and
   [development.md](development.md#schema-version-9-one-working-tree-plus-reports-trajectory-work-sessions-agents-and-tags).
 
 Base URL: the origin printed by your own `dsh web` launch, for example

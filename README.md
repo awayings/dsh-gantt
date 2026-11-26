@@ -260,6 +260,22 @@ The package also ships a zero-dependency
 registration, ready-task listing, per-task context, and completion write-back
 against the same SQLite store.
 
+## The gantt-long-run preset
+
+Installing the bundle also declares a second agent preset, **Gantt long-run**
+(`gantt-long-run`), for lightweight dispatch conversations. Its persona is
+complete — the dispatcher's protocol is the whole system prompt, so the host
+task protocol never binds these sessions. Each round: locate the landing task
+in the tree (or decompose/capture a subtask under it), optionally search the
+web for what the judgment needs, save the judgment's evaluation and lesson
+through `gantt_knowledge_save`, then hand execution to a standard-mode
+subagent through the `gantt_execute` delegation tool (`agentPreset: standard`,
+no model-facing override). The knowledge pair is visible only inside this
+preset; every entry lives in the same SQLite database (`knowledge_entries`),
+linked to its landing task and unlinked — never deleted — when that task
+goes. Execution lands in a `standard`-preset subagent with the full tool set
+and the task protocol.
+
 ## Verification
 
 ```sh
@@ -317,7 +333,9 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/clock.js` | task-day date and next-08:00 resolution (`DSH_GANTT_TZ`, default `Asia/Shanghai`) |
 | `src/host/mcp.js`, `bin/gantt-mcp.js` | external-agent MCP server and its CLI (stdio or optional HTTP) |
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
-| `src/host/tools.js` | five assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`), task-reference resolution, and automatic provenance recording |
+| `src/host/tools.js` | six assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`, `gantt_capture`), task-reference resolution, and automatic provenance recording |
+| `src/host/knowledge.js` | the knowledge pair (`gantt_knowledge_save`, `gantt_knowledge_query`) that only the gantt-long-run preset registers |
+| `src/host/long-run.js` | the gantt-long-run preset plugin entry the bundle's `cordis.patch.yml` row mounts |
 | `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), page-state restore (`page-state`: timeline view, work panel), dialogs, styles |
 | `src/shared/vocabulary.js` | status vocabularies used by both halves |
 | `lib/client.js` | build output: the single browser artifact (gitignored) |

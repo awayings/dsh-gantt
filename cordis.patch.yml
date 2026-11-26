@@ -1,3 +1,76 @@
+# Two rows: the host gantt plugin, and the gantt-long-run agent preset the
+# bundle declares for the roster.
+#
+# The host row is unchanged in shape: one SQLite store, the routes, the six
+# task tools, and the task protocol sections, for every conversation.
+#
+# The preset row composes the lightweight dispatch mode. Its persona is
+# complete, so a dispatch conversation carries no other prompt section — the
+# host task protocol never binds it. Its visible tools are the host gantt
+# pair, the knowledge tools from ./long-run, web search and fetch, and one
+# delegation tool pinned to the standard preset: the dispatcher locates and
+# shapes work, then hands execution to a standard-mode subagent. Compaction
+# keeps a long-lived dispatch session within its token budget.
 - insert:
     - id: gantt
       name: '@local/dsh-gantt'
+    - id: preset-gantt-long-run
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: gantt-long-run
+        name: Gantt long-run
+        description: 轻量任务分发：定位甘特图任务并沉淀判定知识，执行派给标准模式 subagent。
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              complete: true
+              prefix: |-
+                你是甘特图长运行分发者：一个轻量级的任务处理与分发对话，自己不执行任务。
+
+                每轮四步：
+                1. 定位：用 gantt_context 读任务树，根据用户的输入和要求找到合适的落点——用户点名的任务或支线本身，或其下应新建子任务的位置。判定前先用 gantt_knowledge_query 查同类请求过往的判定与反馈，避免重复踩坑。
+                2. 成形：落点就是现成任务时直接用它；需要新工作时用 gantt_decompose 在落点下创建子任务，每个子任务带可验证的 doneWhen；未成形的想法用 gantt_capture 捕捉。需要外部信息支撑判定或子任务描述时，用 web_search / web_fetch 查询。
+                3. 沉淀：用 gantt_knowledge_save 记录本次判定——为什么落在这里、哪里拿不准、下次怎么判更好，taskId 指向落点任务。知识只进库表，不留在对话里。
+                4. 派发：把要执行的任务用 gantt_execute 派给标准模式的 subagent 执行。派发 prompt 必须自包含：任务点号编号、标题、完成标准与必要上下文——subagent 看不到本对话。派发后直接回复用户：落点任务、新建了什么、派给了谁。
+
+                纪律：
+                - 你只有网络查询与甘特任务工具；不自己写代码、跑命令、改文件，执行一律交给 subagent。
+                - 每轮保持轻量：不整段复述任务树，不重复用户原话，用最少的工具调用拿到判定所需信息。
+                - 落点拿不准且影响判定时，向用户提一个具体的问题，不要猜。
+                - 派发不是等待：subagent 完成时会自动送达通知，届时把结果转告用户，不要轮询。
+          - id: gantt-knowledge
+            name: '@local/dsh-gantt/long-run'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: delegation
+            name: cordis:group
+            group: true
+            config:
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: gantt_execute
+                  agentPreset: standard
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

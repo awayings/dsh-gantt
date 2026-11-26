@@ -227,7 +227,9 @@ bash install-gantt.sh /path/to/dsh-gantt-<version>.tgz   # in k3s-lab/dsh
 It performs the same PVC and `desired` work, installs the plugin into the web
 profile with `dsh plugin … add file:<tarball>`, and rolls the Deployment
 (`Recreate`, so DSH restarts). Expect a restart of every DSH session; the
-database is on the PVC and survives.
+database is on the PVC and survives. The bundle also declares the
+`gantt-long-run` agent preset; the Loader row appears on the roster after the
+same restart.
 
 ### 4.3 Rollback
 
@@ -244,10 +246,10 @@ delete a tarball you may want to roll back to.
 
 ## 5. Schema contract
 
-The database records its schema in `PRAGMA user_version` (currently **v9**).
+The database records its schema in `PRAGMA user_version` (currently **v10**).
 
 - A build refuses a file written by a newer build instead of writing to it:
-  `refusing to open …: schema v10 is newer than this build supports (v9); run the
+  `refusing to open …: schema v11 is newer than this build supports (v10); run the
   same release for the plugin and gantt-mcp`.
 - Migrations are idempotent and serialized, so the plugin and the sidecar can
   start together after an upgrade without double-migrating.

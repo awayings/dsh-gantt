@@ -82,6 +82,7 @@ Every row in `tasks` is a node of the tree. `kind` says where it came from:
 | `focus` | One focused task per conversation, for the right-rail tab and assistant tools |
 | `task_events` | Append-only task trajectory: action, DSH session, turn, detail, timestamp |
 | `work_sessions` | One content-dedicated main conversation per task: task id, session id, timestamps; the conversation id is unique and the mapping is deleted with its task |
+| `knowledge_entries` | The long-run dispatch layer's judgments and lessons: kind (`lesson`/`feedback`/`note`), title, content, optional task link, tags, provenance; the link is cleared (never the row deleted) when its task goes |
 
 The importer writes the snapshots first, then materializes them into `tasks` in
 the same `BEGIN IMMEDIATE` transaction. A v2 database is backfilled once during
@@ -658,6 +659,40 @@ The plugin declares the `systemPrompt` dependency lazily
 nothing and the tools still work. DSH materializes runtime context as a durable
 snapshot and appends a new snapshot only when the rendered text changes, so an
 unchanged focus does not churn the prompt and the cache prefix stays stable.
+
+## The long-run dispatch layer
+
+The bundle also declares an agent preset, `gantt-long-run`, for lightweight
+dispatch conversations. It exists to keep one concern undisturbed: turning a
+user's words into a located task and a delegated execution, nothing else.
+
+- **Persona.** The preset's persona is complete, so the dispatcher's own
+  protocol is the entire system prompt; the host task-protocol section never
+  binds these sessions, and the dispatcher keeps each round lean by pulling the
+  tree through `gantt_context` instead of carrying injected context.
+- **Tools.** The host's six task tools, `web_search`/`web_fetch`, the knowledge
+  pair, and one delegation tool. There is no shell, filesystem, or editing
+  surface: the dispatcher never executes.
+- **The round.** Locate the landing task (the named task or branch itself, or a
+  new subtask under it via `gantt_decompose`/`gantt_capture`); gather what the
+  judgment needs from the web; evaluate the judgment and save it
+  (`gantt_knowledge_save`, kind `lesson` or `feedback`, linked to the landing
+  task); then delegate execution through `gantt_execute`, whose children are
+  pinned to the `standard` preset — a fresh agent with the full tool set, the
+  task protocol, and a self-contained prompt naming the task's point number
+  and its `doneWhen`.
+- **Knowledge.** Judgments and lessons live in `knowledge_entries`, written
+  through the store with the writing session and turn. A query
+  (`gantt_knowledge_query`) reads them back by keyword, linked task, kind, or
+  tag, newest first. Entries are task-linked, and deleting the task clears the
+  link instead of the row: a lesson outlives the task it was learned on. The
+  pair registers only inside the preset's tools layer, so ordinary
+  conversations never see it.
+
+The preset plugin (`src/host/long-run.js`) opens its own store handle to the
+shared database — WAL and the busy timeout let it sit beside the host plugin's
+connection the same way the gantt-mcp sidecar's does — and it never starts the
+08:00 scheduler, which stays owned by the host plugin.
 
 ## Day plans and the Today page
 

@@ -14,7 +14,7 @@ export const STATUSES = /** @type {TaskStatus[]} */ (STATUS_WORDS)
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_TITLE = 200
-const MAX_DESCRIPTION = 4000
+export const MAX_DESCRIPTION = 4000
 const MAX_REPORT = 4000
 const MAX_AGENT_REF = 100
 const MAX_TAGS = 20

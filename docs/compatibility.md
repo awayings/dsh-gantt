@@ -260,7 +260,9 @@ not been run at that date.
 
 ## 4 · Data model layering and migration
 
-Schema version 9 adds the task `tags` column (a JSON array of manual labels);
+Schema version 10 adds the `knowledge_entries` table behind the gantt-long-run
+preset's knowledge pair; schema version 9 adds the task `tags` column (a JSON
+array of manual labels);
 version 8 adds the task write-back columns `operator_id`, `completed_by_id`, and
 `report` plus the `agents` operator registry; version 7
 widens the task status vocabulary with `cancelled`; version 6 adds the task ⇄
@@ -269,6 +271,15 @@ trajectory action; version 5 had added the append-only task trajectory; version 
 had already unified the plugin's two previous datasets into one working tree. `tracks`/`nodes` remain as import
 snapshots, and the importer materializes them into `tasks` in the same
 transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v9 → v10 upgrade:** the base schema creates `knowledge_entries` (`id` primary
+key, `kind` CHECK `lesson`/`feedback`/`note`, `title`, `content`, `task_id`
+referencing `tasks` with `ON DELETE SET NULL`, `tags` JSON array, `session_id`,
+`turn`, timestamps, indexed by task and kind). No existing row is touched; the
+migration only bumps `PRAGMA user_version` to 10. Deleting a task clears the
+link instead of the row, so a lesson outlives its task. A future `tasks` rebuild
+must again disable foreign keys while preserving ids — the v6 → v7 pattern — so
+the `knowledge_entries.task_id` links keep resolving.
 
 **v8 → v9 upgrade:** the migration appends `tags TEXT NOT NULL DEFAULT '[]'` to
 `tasks` (a JSON array of at most 20 trimmed labels of at most 40 characters
@@ -473,7 +484,7 @@ the task they point at.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 9, twenty-eight endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 10, twenty-eight endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,

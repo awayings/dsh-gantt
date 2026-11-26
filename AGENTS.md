@@ -8,11 +8,13 @@ by a local SQLite database and an authenticated JSON API.
 - Host `src/host/`: `index.js` owns the store lifecycle, the 08:00 scheduler, and
   route/tool/prompt registration; `routes/` holds twenty-eight route specs incl.
   `focus.js`/trajectory, `work.js`, and `agents.js` (plumbing in `http.js`);
-  `store/` owns SQLite, briefs, `task_events`, the agent registry, and the task ⇄
-  work-conversation mapping; `tracker/` parses the tracker markdown; `tree/` holds pure
+  `store/` owns SQLite, briefs, `task_events`, the agent registry, the task ⇄
+  work-conversation mapping, and the long-run knowledge table; `tracker/` parses the tracker markdown; `tree/` holds pure
   tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
   builds the daily report; `tools.js` declares the six assistant tools and records
-  provenance; `mcp.js` is the external-agent JSON-RPC server behind
+  provenance; `knowledge.js` declares the knowledge pair only the gantt-long-run
+  preset registers; `long-run.js` is that preset's plugin entry (declared in
+  `cordis.patch.yml`); `mcp.js` is the external-agent JSON-RPC server behind
   `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
   right-rail `panel` tab and `gantt-work` workbench tab, work-mode navigation,
@@ -27,7 +29,9 @@ by a local SQLite database and an authenticated JSON API.
   live in `tasks`; `tracks`/`nodes` are import snapshots only. `daily_briefs` is
   a morning snapshot; `focus` stores one task per conversation; `work_sessions` maps a task to its
   content-dedicated main conversation; `task_events` is the append-only
-  session/turn trajectory (`create`/`update`/`complete`/`decompose`/`track`). Details in
+  session/turn trajectory (`create`/`update`/`complete`/`decompose`/`track`);
+  `knowledge_entries` is the long-run preset's judgment store, task-linked and
+  unlinked (never deleted) when its task goes. Details in
   `docs/personal-task-system.md`.
 - Harness behavior: read the installed `@deepseek-ai/dsh` package under
   `/data/app/node_modules/@deepseek-ai/` (`README.*`, `lib/`) before deciding
