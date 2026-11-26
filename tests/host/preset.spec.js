@@ -36,6 +36,7 @@ describe('gantt-long-run preset wiring', () => {
     expect(patch).toContain('- id: preset-gantt-long-run')
     expect(patch).toContain("name: '@deepseek-ai/dsh-agent-preset'")
     expect(patch).toContain('id: gantt-long-run')
+    expect(patch).toContain('name: 甘特长城')
     expect(patch).toContain('complete: true')
     expect(patch).toContain('gantt_knowledge_query')
     expect(patch).toContain('gantt_knowledge_save')

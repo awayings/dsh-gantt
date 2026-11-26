@@ -262,7 +262,7 @@ against the same SQLite store.
 
 ## The gantt-long-run preset
 
-Installing the bundle also declares a second agent preset, **Gantt long-run**
+Installing the bundle also declares a second agent preset, **甘特长城**
 (`gantt-long-run`), for lightweight dispatch conversations. Its persona is
 complete — the dispatcher's protocol is the whole system prompt, so the host
 task protocol never binds these sessions. Each round closes the landing

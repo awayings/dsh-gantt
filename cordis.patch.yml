@@ -18,7 +18,7 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: gantt-long-run
-        name: Gantt long-run
+        name: 甘特长城
         description: 轻量任务分发：定位甘特图任务并沉淀判定知识，执行派给标准模式 subagent。
         order: 5
         plugins:
