@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path'
 import { resolveDatabasePath } from './store.js'
 import { resolveTarget, sessionOriginOf } from './tools.js'
 import { inspectCommand, redactCommand } from './remote-guard.js'
-import { SSH_TARGET_PATTERN, appendAudit, defaultIdentityFile, shellQuote, sshForwardArgs } from './remote.js'
+import { SSH_TARGET_PATTERN, appendAudit, defaultSshConfigFile, shellQuote, sshForwardArgs, usableIdentityFile } from './remote.js'
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
 /** @typedef {import('./tools.js').GanttTool} GanttTool */
@@ -190,13 +190,13 @@ async function launchRemote(input) {
     audit({ decision: 'refused', rule: refusal.rule })
     return { ok: false, message: `委派命令被安全守门拒绝（${refusal.rule}）：${refusal.reason}。命令未发出；请让该 Agent 修正其 dispatch 登记后重试。` }
   }
-  const identity = process.env.REMOTE_SSH_IDENTITY || defaultIdentityFile()
+  const identity = usableIdentityFile(process.env.REMOTE_SSH_IDENTITY || '')
   const knownHosts = process.env.REMOTE_KNOWN_HOSTS || join(homedir(), '.ssh', 'known_hosts')
   audit({ decision: 'allowed', rule: '' })
   /** @type {any} */
   let child
   try {
-    child = spawnProcess('ssh', sshForwardArgs({ target, command, identity, knownHosts }), { stdio: ['pipe', 'pipe', 'pipe'] })
+    child = spawnProcess('ssh', sshForwardArgs({ target, command, identity, knownHosts, configFile: defaultSshConfigFile() }), { stdio: ['pipe', 'pipe', 'pipe'] })
   } catch (error) {
     return { ok: false, message: `委派失败：无法启动 ssh（${String( /** @type {any} */ (error)?.message ?? error)}）。` }
   }

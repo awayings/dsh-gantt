@@ -1,10 +1,19 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { appendAudit, defaultIdentityFile, shellQuote, sshForwardArgs, SSH_TARGET_PATTERN } from '../../src/host/remote.js'
+import { appendAudit, defaultIdentityFile, defaultSshConfigFile, shellQuote, sshForwardArgs, SSH_TARGET_PATTERN, usableIdentityFile } from '../../src/host/remote.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
 describe('ssh forward args', () => {
+  it('passes an explicit config file between the ssh options', () => {
+    const args = sshForwardArgs({ target: 'k3s-node', command: 'lo -p', configFile: '/data/home/.ssh/config' })
+    expect(args.slice(0, 8)).toEqual([
+      '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4',
+    ])
+    expect(args.slice(8, 10)).toEqual(['-F', '/data/home/.ssh/config'])
+    expect(args[args.length - 2]).toBe('k3s-node')
+  })
+
   it('builds a batch-mode argv with the target and command last', () => {
     const args = sshForwardArgs({ target: 'k3s-node', command: 'lo -p' })
     expect(args.slice(0, 8)).toEqual([
@@ -43,6 +52,55 @@ describe('shellQuote', () => {
   it('escapes embedded single quotes the POSIX way', () => {
     expect(shellQuote("it's")).toBe("'it'\\''s'")
     expect(shellQuote('a\nb')).toBe("'a\nb'")
+  })
+})
+
+describe('ssh config resolution', () => {
+  it('returns the ambient config file only when it exists', () => {
+    vi.stubEnv('HOME', '/nonexistent-dsh-gantt-home')
+    expect(defaultSshConfigFile()).toBe('')
+    vi.unstubAllEnvs()
+    const home = makeTempDir('dsh-gantt-remote-home-')
+    try {
+      mkdirSync(join(home, '.ssh'), { recursive: true })
+      writeFileSync(join(home, '.ssh', 'config'), 'Host x')
+      vi.stubEnv('HOME', home)
+      expect(defaultSshConfigFile()).toBe(join(home, '.ssh', 'config'))
+      vi.unstubAllEnvs()
+    } finally {
+      removeTempDir(home)
+    }
+  })
+})
+
+describe('usableIdentityFile', () => {
+  it('passes through empty and missing requests', () => {
+    vi.stubEnv('HOME', '/nonexistent-dsh-gantt-home')
+    expect(usableIdentityFile('')).toBe('')
+    vi.unstubAllEnvs()
+    expect(usableIdentityFile('/nonexistent-dsh-gantt-key')).toBe('/nonexistent-dsh-gantt-key')
+  })
+
+  it('keeps an owner-only key and copies a loose one to a 600 temp file', () => {
+    const dir = makeTempDir('dsh-gantt-identity-')
+    try {
+      const tight = join(dir, 'tight')
+      writeFileSync(tight, 'tight-key')
+      chmodSync(tight, 0o600)
+      expect(usableIdentityFile(tight)).toBe(tight)
+
+      const loose = join(dir, 'loose')
+      writeFileSync(loose, 'loose-key-content')
+      chmodSync(loose, 0o660)
+      const copy = usableIdentityFile(loose)
+      expect(copy).toContain('dsh-gantt-key-')
+      expect(statSync(copy).mode & 0o777).toBe(0o600)
+      expect(readFileSync(copy, 'utf8')).toBe('loose-key-content')
+      // A second resolution reuses the copy in place.
+      expect(usableIdentityFile(loose)).toBe(copy)
+    } finally {
+      removeTempDir(dir)
+    }
   })
 })
 

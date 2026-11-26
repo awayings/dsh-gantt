@@ -18,7 +18,7 @@ import { homedir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectCommand, redactCommand } from '../src/host/remote-guard.js'
-import { SSH_TARGET_PATTERN, appendAudit, defaultIdentityFile, sshForwardArgs } from '../src/host/remote.js'
+import { SSH_TARGET_PATTERN, appendAudit, defaultIdentityFile, defaultSshConfigFile, sshForwardArgs, usableIdentityFile } from '../src/host/remote.js'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const USAGE = `Forward a shell command to a remote host over SSH, refusing destructive commands.
@@ -173,7 +173,7 @@ async function run(options) {
   }
   record(options, 'allowed', '')
   const started = Date.now()
-  const child = spawn('ssh', sshForwardArgs(options), {
+  const child = spawn('ssh', sshForwardArgs({ ...options, identity: usableIdentityFile(options.identity), configFile: defaultSshConfigFile() }), {
     stdio: [options.stdin ? 'inherit' : 'ignore', 'inherit', 'inherit'],
   })
   const timer = setTimeout(() => {

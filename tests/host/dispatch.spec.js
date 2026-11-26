@@ -26,6 +26,9 @@ beforeEach(() => {
   dir = makeTempDir('dsh-gantt-dispatch-')
   previousAuditEnv = process.env.REMOTE_AUDIT_LOG
   process.env.REMOTE_AUDIT_LOG = auditPath()
+  // A missing identity passes through unchanged, so no unit run ever copies
+  // the operator's real key.
+  process.env.REMOTE_SSH_IDENTITY = '/nonexistent-dsh-gantt-key'
 })
 
 afterEach(() => {
@@ -33,6 +36,7 @@ afterEach(() => {
   store = undefined
   if (previousAuditEnv === undefined) delete process.env.REMOTE_AUDIT_LOG
   else process.env.REMOTE_AUDIT_LOG = previousAuditEnv
+  delete process.env.REMOTE_SSH_IDENTITY
   removeTempDir(dir)
 })
 
@@ -244,6 +248,22 @@ describe('gantt_delegate', () => {
       expect(readAudit().filter(entry => entry.decision === 'finished').length).toBe(before + 1)
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('resolves the default identity when no env override is set', async () => {
+    seedAgent()
+    delete process.env.REMOTE_SSH_IDENTITY
+    vi.stubEnv('HOME', '/nonexistent-dsh-gantt-home')
+    try {
+      const child = new FakeChild()
+      const pending = delegate({ agent: 'pve-oc' }, child)
+      child.emit('close', 0)
+      const value = await pending
+      expect(value.ok).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+      process.env.REMOTE_SSH_IDENTITY = '/nonexistent-dsh-gantt-key'
     }
   })
 
