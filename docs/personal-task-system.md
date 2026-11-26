@@ -610,7 +610,9 @@ results, and captured ideas straight into the tree.
   to the harness and the conversation.
 
 The route contracts are in [api.md](api.md#focus-one-task),
-[api.md](api.md#task-trajectory), and [api.md](api.md#assistant-tools).
+[api.md](api.md#task-trajectory), and [api.md](api.md#assistant-tools). For how
+these surfaces sit inside one complete model request — alongside AGENTS.md,
+memory, skills, and harness snapshots — see [model-context.md](model-context.md).
 
 ## Task trajectory and protocol context
 
