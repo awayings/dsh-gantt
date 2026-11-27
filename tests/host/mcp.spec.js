@@ -93,7 +93,7 @@ describe('JSON-RPC envelope', () => {
       result: {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'dsh-gantt', version: '1.6.0' },
+        serverInfo: { name: 'dsh-gantt', version: 'unknown' },
         instructions: MCP_INSTRUCTIONS,
       },
     })

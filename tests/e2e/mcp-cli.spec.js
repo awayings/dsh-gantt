@@ -13,6 +13,10 @@ import { GanttStore, SCHEMA_VERSION } from '../../src/host/store.js'
 
 const CLI = path.resolve(import.meta.dirname, '../../bin/gantt-mcp.js')
 const TOKEN = 'e2e-mcp-token'
+// The initialize answer must carry the version of the bytes actually running.
+const manifest = /** @type {{ version: string }} */ (JSON.parse(
+  fs.readFileSync(path.resolve(import.meta.dirname, '../../package.json'), 'utf8'),
+))
 
 let dir
 /** @type {import('node:child_process').ChildProcess[]} */
@@ -128,7 +132,7 @@ describe('gantt-mcp CLI over HTTP', () => {
     expect(init.payload.result).toMatchObject({
       protocolVersion: '2025-06-18',
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: 'dsh-gantt' },
+      serverInfo: { name: 'dsh-gantt', version: manifest.version },
     })
 
     const tools = await rpc(origin, { jsonrpc: '2.0', id: 2, method: 'tools/list' })

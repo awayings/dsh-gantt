@@ -542,11 +542,13 @@ function handleToolCall(store, id, params) {
 
 /**
  * Build one MCP server bound to a store. `handle` returns the JSON-RPC
- * response object, or `null` for a notification.
+ * response object, or `null` for a notification. An omitted `version` answers
+ * `initialize` with "unknown" instead of a frozen literal; the CLI entry
+ * passes the version of its own package manifest.
  * @param {{ store: GanttStore, version?: string }} options
  * @returns {{ handle: (message: unknown) => McpResponse | null }}
  */
-export function createMcpServer({ store, version = '1.6.0' }) {
+export function createMcpServer({ store, version = 'unknown' }) {
   return {
     handle(message) {
       if (!isRecord(message)) return errorResponse(null, -32600, 'invalid request')

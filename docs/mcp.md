@@ -402,7 +402,9 @@ report as its detail is appended under the worker's session key. Returns:
 
 - `initialize` echoes `params.protocolVersion` when it is a string, otherwise
   answers `2025-06-18`; it advertises `capabilities.tools.listChanged: false`,
-  `serverInfo: { name: "dsh-gantt", version: "1.6.0" }`, and a short
+  `serverInfo: { name: "dsh-gantt", version: … }` — the CLI passes the version
+  of its own package manifest, and an embedded server without one answers
+  `"unknown"` — plus a short
   `instructions` string with the worker contract (clients may truncate it; the
   full playbook is `get_worker_guide`).
 - `notifications/initialized` and every other message without an `id` are

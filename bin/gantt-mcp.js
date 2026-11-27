@@ -5,9 +5,16 @@
 // bearer token, so a LAN address cannot expose task writes unauthenticated.
 
 import { createServer } from 'node:http'
+import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { assertHttpBinding, createMcpServer } from '../src/host/mcp.js'
 import { GanttStore, resolveDatabasePath } from '../src/host/store.js'
+
+// `initialize` answers with this, so the version a deployment reports is the
+// release it actually runs; `upgrade-mcp.sh` asserts exactly that.
+const VERSION = /** @type {string} */ (JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+).version)
 
 const USAGE = `Usage: gantt-mcp [options]
 
@@ -121,7 +128,7 @@ let mcp = null
 /** @param {CliOptions} options */
 function startStdio(options) {
   const store = new GanttStore(options.db)
-  mcp = createMcpServer({ store })
+  mcp = createMcpServer({ store, version: VERSION })
   const readline = createInterface({ input: process.stdin, crlfDelay: Infinity })
   let closed = false
   /** @param {number} [code] */
@@ -142,7 +149,7 @@ function startStdio(options) {
 function startHttp(options) {
   assertHttpBinding(options.host, options.token)
   const store = new GanttStore(options.db)
-  const server = createMcpServer({ store })
+  const server = createMcpServer({ store, version: VERSION })
   const http = createServer((request, response) => {
     handleHttp(request, response, server, options.token).catch((error) => {
       sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) })
