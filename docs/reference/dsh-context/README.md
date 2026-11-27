@@ -22,6 +22,7 @@ two disagree.
 | [02-knowledge-layers.md](02-knowledge-layers.md) | `AGENTS.md` instruction chain, memory, and skills |
 | [03-history-and-compaction.md](03-history-and-compaction.md) | History, compaction, and context metering |
 | [04-control-and-extension.md](04-control-and-extension.md) | Who decides what enters context, and where to change it |
+| [05-four-agent-modes.md](05-four-agent-modes.md) | 四种 Web agent preset（standard / ptc / minimal / cordis）的实现区别：提示词、最终上下文组织、工具集、适用特点 |
 | [appendix-file-map.md](appendix-file-map.md) | Package file map and evidence-gathering method |
 
 For this plugin's own documentation, start at [docs/README.md](../../README.md).
