@@ -3,21 +3,20 @@
 // capabilities; this pair gives the dispatcher the other direction. The
 // dispatcher lists the registry (`gantt_agents`) to decide who can take a
 // task, then `gantt_delegate` claims the task's operator field, builds a
-// self-contained brief, and forwards the agent's registered headless launch
-// command over SSH through the same guard and audit trail the manual
-// `scripts/remote-exec.mjs` CLI uses. The tool returns after the launch ack:
-// the remote worker reports results itself through the MCP surface, so the
-// dispatch conversation stays thin and never babysits the connection.
+// self-contained brief, and hands it to the transport the agent's endpoint
+// scheme selects — today SSH through the agent's registered headless command
+// (`dispatch-ssh.js`); a daemon transport, where an agent-side daemon holds
+// its own outbound connection to the gantt server, is planned as a second
+// table entry. The tool returns after the transport's launch ack: the remote
+// worker reports results itself through the MCP surface, so the dispatch
+// conversation stays thin and never babysits a connection.
 
 import { spawn } from 'node:child_process'
-import { GanttError } from './errors.js'
-import { createHash } from 'node:crypto'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { GanttError } from './errors.js'
+import { sshTransport } from './dispatch-ssh.js'
 import { resolveDatabasePath } from './store.js'
 import { resolveTarget, sessionOriginOf } from './tools.js'
-import { inspectCommand, redactCommand } from './remote-guard.js'
-import { SSH_TARGET_PATTERN, appendAudit, defaultSshConfigFile, shellQuote, sshForwardArgs, usableIdentityFile } from './remote.js'
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
 /** @typedef {import('./tools.js').GanttTool} GanttTool */
@@ -28,14 +27,6 @@ export const DISPATCH_TOOL_NAMES = {
   agents: 'gantt_agents',
   delegate: 'gantt_delegate',
 }
-
-/** How long a dispatch waits for an early exit before it detaches. Just above
- * the ssh connect timeout, so an unreachable host or a refused key surfaces in
- * the tool result instead of surfacing later in the audit log only. */
-const ACK_WINDOW_MS = 12_000
-
-/** Characters of remote output/stderr kept for the tool result. */
-const OUTPUT_CAP = 2000
 
 /** Characters of one agent's free-form details rendered in the registry list. */
 const DETAILS_EXCERPT_CHARS = 240
@@ -50,29 +41,59 @@ export const DELEGATE_GOALS = ['execute', 'decompose']
 const GOAL_LABELS = { execute: '执行', decompose: '拆解' }
 
 /**
- * The ssh target an agent's registered endpoint spells: `ssh://user@host` or
- * `ssh://<alias>`. Anything else cannot receive a remote dispatch.
- * @param {unknown} endpoint
- * @returns {string | null}
+ * The dispatch transports, keyed by the endpoint scheme a registered agent
+ * spells. A transport resolves one registration into launch inputs and
+ * forwards one brief; the delegate tool never talks to ssh directly, so the
+ * planned daemon transport lands here without touching the tool.
+ * @type {Record<string, import('./dispatch-ssh.js').DispatchTransport>}
  */
-export function parseSshEndpoint(endpoint) {
-  if (typeof endpoint !== 'string') return null
-  const trimmed = endpoint.trim()
-  if (!trimmed.startsWith('ssh://')) return null
-  const target = trimmed.slice('ssh://'.length)
-  return SSH_TARGET_PATTERN.test(target) ? target : null
+const DISPATCH_TRANSPORTS = { ssh: sshTransport }
+
+/**
+ * The endpoint scheme a registration spells: `ssh`, `daemon`, …; '' when the
+ * endpoint names no scheme at all. The store guarantees endpoint is a string.
+ * @param {string} endpoint
+ * @returns {string}
+ */
+function schemeOf(endpoint) {
+  const match = endpoint.trim().match(/^([a-z][a-z0-9+.-]*):\/\//)
+  return match === null ? '' : match[1]
 }
 
 /**
- * The first `dispatch:` line of an agent's details: the headless command that
- * starts one run of it on its own host.
- * @param {unknown} details
- * @returns {string | null}
+ * Resolve one registration into its transport and launch inputs. A scheme
+ * with no transport yet names what exists today, so the model can route
+ * elsewhere instead of guessing.
+ * @param {AgentRow} agent
+ * @returns {{ transport: import('./dispatch-ssh.js').DispatchTransport, input: Record<string, unknown> }}
  */
-export function dispatchCommandOf(details) {
-  if (typeof details !== 'string') return null
-  const match = details.match(/^dispatch:[ \t]*(\S.*?)[ \t]*$/m)
-  return match === null ? null : match[1]
+function resolveDispatch(agent) {
+  const scheme = schemeOf(agent.endpoint)
+  const transport = DISPATCH_TRANSPORTS[scheme]
+  if (transport === undefined) {
+    const known = Object.keys(DISPATCH_TRANSPORTS).join('、')
+    const hint = scheme === ''
+      ? `agent ${agent.name} 未登记可接收远程派发的 endpoint（当前支持 ${Object.keys(DISPATCH_TRANSPORTS).map(key => `${key}://`).join(' 或 ')}）；请改用 gantt_execute 或让该 Agent 补登记。`
+      : `agent ${agent.name} 的 endpoint 方案 ${scheme} 暂无投递通道（当前支持 ${known}；daemon 直连形态在规划中）；请改用 gantt_execute 或让该 Agent 换用 ${known}://。`
+    throw new GanttError(hint)
+  }
+  return { transport, input: /** @type {Record<string, unknown>} */ (transport.resolve(agent)) }
+}
+
+/**
+ * The dispatch eligibility line for one registration: what the transport that
+ * claims its scheme would launch, or why it cannot.
+ * @param {AgentRow} agent
+ * @returns {string}
+ */
+function dispatchSummary(agent) {
+  const transport = DISPATCH_TRANSPORTS[schemeOf(agent.endpoint)]
+  if (transport === undefined) return '不可远程委派（endpoint 无可用投递通道或登记不完整）'
+  try {
+    return `可远程委派：${transport.describe(agent)}`
+  } catch {
+    return '不可远程委派（endpoint 无可用投递通道或登记不完整）'
+  }
 }
 
 /**
@@ -115,17 +136,19 @@ function detailsAside(details) {
 function requireAgentByName(store, value) {
   if (typeof value !== 'string' || value.trim() === '') throw new GanttError('agent is required')
   const name = value.trim()
-  const found = store.listAgents({ limit: 100 }).find(agent => agent.name === name)
+  const registered = store.listAgents({ limit: 100 })
+  const found = registered.find(agent => agent.name === name)
   if (found !== undefined) return found
-  const known = store.listAgents({ limit: 100 }).map(agent => agent.name)
-  const hint = known.length === 0 ? '（注册表为空）' : `已注册：${known.join('、')}`
+  const hint = registered.length === 0 ? '（注册表为空）' : `已注册：${registered.map(agent => agent.name).join('、')}`
   throw new GanttError(`agent ${name} was not found; ${hint}`)
 }
 
 /**
  * The self-contained brief handed to the remote worker: the task with its
  * verbatim execution notes, the goal, and how to report back. The worker
- * cannot see the store's context, so the brief stands alone.
+ * cannot see the store's context, so the brief stands alone — and it stays
+ * transport-agnostic: ssh substitutes it into a command line, a daemon will
+ * carry it over its own connection.
  * @param {any} task
  * @param {AgentRow} agent
  * @param {'execute' | 'decompose'} goal
@@ -151,17 +174,6 @@ export function buildDelegateBrief(task, agent, goal, note) {
 }
 
 /**
- * Cut remote output to the result cap.
- * @param {string} current
- * @param {unknown} chunk
- * @returns {string}
- */
-function appendCapped(current, chunk) {
-  if (current.length >= OUTPUT_CAP) return current
-  return (current + String(chunk)).slice(0, OUTPUT_CAP)
-}
-
-/**
  * The audit log a dispatch appends to: the env override, else beside the task
  * database so the trail persists with the store instead of the checkout.
  * @returns {string}
@@ -171,98 +183,25 @@ export function defaultAuditLog() {
   return join(dirname(resolveDatabasePath()), 'remote-exec.log')
 }
 
-/**
- * One dispatch attempt through ssh: guard, audit, ack window, detach.
- * @param {{ target: string, command: string, brief: string, inline: boolean, agent: string,
- *   taskId: string, auditLog: string, spawnProcess: typeof spawn, ackWindowMs: number }} input
- * @returns {Promise<{ ok: boolean, message: string }>}
- */
-async function launchRemote(input) {
-  const { target, command, brief, inline, agent, taskId, auditLog, spawnProcess, ackWindowMs } = input
-  const refusal = inspectCommand(command)
-  const redacted = redactCommand(command)
-  const sha256 = createHash('sha256').update(command).digest('hex')
-  /** Append one audit entry pre-filled with the dispatch identity.
-   * @param {Record<string, unknown>} entry
-   * @returns {void} */
-  const audit = entry => appendAudit(auditLog, { ts: new Date().toISOString(), target, agent, taskId, sha256, command: redacted, ...entry })
-  if (refusal !== null) {
-    audit({ decision: 'refused', rule: refusal.rule })
-    return { ok: false, message: `委派命令被安全守门拒绝（${refusal.rule}）：${refusal.reason}。命令未发出；请让该 Agent 修正其 dispatch 登记后重试。` }
-  }
-  const identity = usableIdentityFile(process.env.REMOTE_SSH_IDENTITY || '')
-  const knownHosts = process.env.REMOTE_KNOWN_HOSTS || join(homedir(), '.ssh', 'known_hosts')
-  audit({ decision: 'allowed', rule: '' })
-  /** @type {any} */
-  let child
-  try {
-    child = spawnProcess('ssh', sshForwardArgs({ target, command, identity, knownHosts, configFile: defaultSshConfigFile() }), { stdio: ['pipe', 'pipe', 'pipe'] })
-  } catch (error) {
-    return { ok: false, message: `委派失败：无法启动 ssh（${String( /** @type {any} */ (error)?.message ?? error)}）。` }
-  }
-  child.stdin?.end(inline ? '' : brief)
-  /** @type {string} */
-  let out = ''
-  /** @type {string} */
-  let errOut = ''
-  child.stdout?.on('data', (/** @type {unknown} */ chunk) => { out = appendCapped(out, chunk) })
-  child.stderr?.on('data', (/** @type {unknown} */ chunk) => { errOut = appendCapped(errOut, chunk) })
-  const started = Date.now()
-  const ack = await new Promise((/** @param {(value: any) => void} */ resolve) => {
-    let settled = false
-    const finish = (/** @type {any} */ value) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(value)
-    }
-    const timer = setTimeout(() => finish({ state: 'running' }), ackWindowMs)
-    child.on('error', (/** @type {any} */ error) => finish({ state: 'spawn-error', message: String(error?.message ?? error) }))
-    child.on('close', (/** @type {number | null} */ code) => finish({ state: 'closed', code }))
-  })
-  if (ack.state === 'running') {
-    // Detach: the remote keeps running and reports through the store, so the
-    // dispatcher's process must not hold a live handle to it.
-    child.on('close', (/** @type {number | null} */ code) => {
-      audit({ decision: 'finished', rule: '', exit: code, duration_ms: Date.now() - started })
-    })
-    child.unref?.()
-    child.stdout?.unref?.()
-    child.stderr?.unref?.()
-    return { ok: true, message: '已发出并仍在远端运行；结果由该 Agent 经 MCP 自上报，稍后用 gantt_context 查看任务轨迹。' }
-  }
-  audit({ decision: 'finished', rule: '', exit: ack.state === 'closed' ? ack.code : null, duration_ms: Date.now() - started })
-  if (ack.state === 'spawn-error') return { ok: false, message: `委派失败：无法连接（${ack.message}）。` }
-  if (ack.code === 0) {
-    const excerpt = `${out}${errOut}`.trim()
-    return { ok: true, message: `远端命令已返回（退出码 0）。${excerpt === '' ? '' : `输出片段：${excerpt.slice(0, OUTPUT_CAP)}`}` }
-  }
-  const excerpt = errOut.trim() === '' ? out.trim() : errOut.trim()
-  return {
-    ok: false,
-    message: `委派失败：远端命令退出码 ${ack.code === null ? '未知' : String(ack.code)}。${excerpt === '' ? '' : `远端输出：${excerpt.slice(0, OUTPUT_CAP)}`}请检查该 Agent 的 dispatch 登记与目标可达性。`,
-  }
-}
-
 /** Options that let host tests drive the delegate tool without a live ssh.
  * @typedef {{ spawnProcess?: typeof spawn, ackWindowMs?: number, auditLog?: string }} DispatchOptions */
 
 /**
  * Build the delegation tools. Kept pure so host tests can call each tool
- * with a stubbed spawn instead of a live ssh. The process spawn, the ack
- * window, and the audit log resolve once here, at build time.
+ * with a stubbed spawn instead of a live ssh. The process spawn and the audit
+ * log resolve once here, at build time; the ack window keeps its default
+ * inside the ssh transport.
  * @param {GanttStore} store
  * @param {DispatchOptions} [options]
  * @returns {GanttTool[]}
  */
 export function dispatchToolDefinitions(store, options = {}) {
   const spawnProcess = options.spawnProcess ?? spawn
-  const ackWindowMs = options.ackWindowMs ?? ACK_WINDOW_MS
   const auditLog = options.auditLog ?? defaultAuditLog()
   return [
     {
       name: DISPATCH_TOOL_NAMES.agents,
-      description: '列出 MCP 注册的外部 Agent 及其能力（capabilities）、ssh endpoint 与无头启动命令（dispatch）。委派前先看它：任务归属于哪个 Agent 的能力、谁能接，由这里判断。',
+      description: '列出 MCP 注册的外部 Agent 及其能力（capabilities）、可远程委派的投递登记（endpoint 方案 + dispatch 命令）。委派前先看它：任务归属于哪个 Agent 的能力、谁能接，由这里判断。',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -282,7 +221,7 @@ export function dispatchToolDefinitions(store, options = {}) {
       },
       async execute(args) {
         const agents = store.listAgents({ q: args.q, limit: args.limit })
-        if (agents.length === 0) return { ok: true, markdown: '（尚无注册 Agent；远端 Agent 需先经 gantt MCP 的 register_agent 登记能力与 dispatch 命令。）' }
+        if (agents.length === 0) return { ok: true, markdown: '（尚无注册 Agent；远端 Agent 需先经 gantt MCP 的 register_agent 登记能力与投递登记。）' }
         const lines = [`# 注册 Agent（${agents.length} 个）`]
         for (const agent of agents) {
           const role = agent.role === '' ? '无角色' : agent.role
@@ -290,10 +229,7 @@ export function dispatchToolDefinitions(store, options = {}) {
           lines.push(`- **${agent.name}**（${agent.type} · ${role}）— ${description}`)
           const capabilities = capabilitiesOf(agent.details)
           if (capabilities !== '') lines.push(`  能力：${capabilities}`)
-          const target = parseSshEndpoint(agent.endpoint)
-          const dispatch = dispatchCommandOf(agent.details)
-          if (target !== null && dispatch !== null) lines.push(`  可远程委派：ssh ${target} · ${dispatch}`)
-          else lines.push('  不可远程委派（缺 ssh endpoint 或 dispatch 登记）')
+          lines.push(`  ${dispatchSummary(agent)}`)
           const aside = detailsAside(agent.details)
           if (aside !== '') lines.push(`  ${aside.split(/\r?\n/).join('\n  ')}`)
         }
@@ -302,7 +238,7 @@ export function dispatchToolDefinitions(store, options = {}) {
     },
     {
       name: DISPATCH_TOOL_NAMES.delegate,
-      description: '把一个甘特任务委派给注册的远程 Agent：以其登记的无头命令经 SSH 启动它，任务简报（点号编号、标题、完成标准、执行说明、补充要求）自包含发出。goal=execute 让它执行并自上报，goal=decompose 让它拆解（领域知识在它那边时用这个）。操作人会记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树。',
+      description: '把一个甘特任务委派给注册的远程 Agent：按其 endpoint 方案选择投递通道（当前为 SSH——以它登记的无头命令在远端启动它），任务简报（点号编号、标题、完成标准、执行说明、补充要求）自包含发出。goal=execute 让它执行并自上报，goal=decompose 让它拆解（领域知识在它那边时用这个）。操作人会记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树。',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -330,29 +266,18 @@ export function dispatchToolDefinitions(store, options = {}) {
         const goal = args.goal === undefined || args.goal === null ? 'execute' : /** @type {'execute' | 'decompose'} */ (args.goal)
         if (!DELEGATE_GOALS.includes(goal)) throw new GanttError(`goal must be one of ${DELEGATE_GOALS.join(', ')}`)
         const note = typeof args.note === 'string' ? args.note.trim().slice(0, MAX_NOTE_CHARS) : ''
-        const target = parseSshEndpoint(agent.endpoint)
-        if (target === null) {
-          throw new GanttError(`agent ${agent.name} 未登记可用的 ssh endpoint（register_agent 的 endpoint 需为 ssh://user@host 或 ssh://别名），无法远程委派；请改用 gantt_execute 或让该 Agent 补登记。`)
-        }
-        const registered = dispatchCommandOf(agent.details)
-        if (registered === null) {
-          throw new GanttError(`agent ${agent.name} 未登记 dispatch 命令（register_agent 的 details 里需要一行 dispatch: <无头启动命令>），无法远程委派；请改用 gantt_execute 或让该 Agent 补登记。`)
-        }
+        const { transport, input } = resolveDispatch(agent)
         const brief = buildDelegateBrief(task, agent, goal, note)
-        const inline = registered.includes('{prompt}')
-        const command = inline ? registered.replaceAll('{prompt}', shellQuote(brief)) : registered
         const origin = sessionOriginOf(exec)
         const label = task.ref === '' ? task.number : task.ref
-        const result = await launchRemote({
-          target,
-          command,
+        const result = await transport.launch({
+          ...input,
           brief,
-          inline,
           agent: agent.name,
           taskId,
           auditLog,
           spawnProcess,
-          ackWindowMs,
+          ackWindowMs: options.ackWindowMs,
         })
         if (!result.ok) return result
         // The dispatch reached the remote; record the claim and the round.
@@ -360,7 +285,7 @@ export function dispatchToolDefinitions(store, options = {}) {
         const claimed = row.operatorId === ''
         if (claimed) store.update(taskId, { operatorId: agent.id }, origin === undefined ? undefined : { ...origin, summary: `委派给 ${agent.name}（${GOAL_LABELS[goal]}）` })
         if (origin !== undefined) {
-          store.recordTrack({ taskId, sessionId: origin.sessionId, turn: origin.turn, detail: `delegated ${GOAL_LABELS[goal]} to ${agent.name} via ssh ${target}` })
+          store.recordTrack({ taskId, sessionId: origin.sessionId, turn: origin.turn, detail: `delegated ${GOAL_LABELS[goal]} to ${agent.name} over ${transport.id}` })
         }
         const claimNote = claimed ? `操作人已记为 ${agent.name}。` : '任务已有操作人，未改动。'
         return { ok: true, message: `已把 ${label} ${task.title} 委派给 ${agent.name}（${GOAL_LABELS[goal]}）：${result.message}${claimNote}` }

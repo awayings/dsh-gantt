@@ -2,7 +2,8 @@ import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildDelegateBrief, capabilitiesOf, defaultAuditLog, DISPATCH_TOOL_NAMES, dispatchCommandOf, dispatchToolDefinitions, parseSshEndpoint, registerDispatchTools } from '../../src/host/dispatch.js'
+import { buildDelegateBrief, capabilitiesOf, defaultAuditLog, DISPATCH_TOOL_NAMES, dispatchToolDefinitions, registerDispatchTools } from '../../src/host/dispatch.js'
+import { dispatchCommandOf, parseSshEndpoint } from '../../src/host/dispatch-ssh.js'
 import { GanttStore } from '../../src/host/store.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
@@ -142,12 +143,15 @@ describe('gantt_agents', () => {
     seedAgent()
     store.registerAgent({ name: 'plain-human', type: 'human', role: 'reviewer', description: 'reads reports', details: 'lives on the sofa' })
     store.registerAgent({ name: 'terse', type: 'ai-agent', details: 'x'.repeat(300) })
+    store.registerAgent({ name: 'half-registered', type: 'ai-agent', endpoint: 'ssh://k3s-node', details: 'capabilities: coding' })
+    store.registerAgent({ name: 'future-daemon', type: 'ai-agent', endpoint: 'daemon://pve', details: 'capabilities: coding' })
     const value = /** @type {any} */ (await toolIn(dispatchToolDefinitions(store), DISPATCH_TOOL_NAMES.agents).execute({}, {}))
     expect(value.markdown).toContain('**pve-oc**（ai-agent · remote coder）— oc headless runner')
     expect(value.markdown).toContain('能力：coding, decompose')
     expect(value.markdown).toContain('可远程委派：ssh k3s-node · lo -p')
     expect(value.markdown).toContain('**plain-human**（human · reviewer）— reads reports')
-    expect(value.markdown).toContain('不可远程委派（缺 ssh endpoint 或 dispatch 登记）')
+    expect(value.markdown).toContain('不可远程委派（endpoint 无可用投递通道或登记不完整）')
+    expect(value.markdown).toContain('可远程委派：ssh k3s-node · lo -p')
     expect(value.markdown).toContain('lives on the sofa')
     expect(value.markdown).toContain('**terse**（ai-agent · 无角色）— （无描述）')
     expect(value.markdown).toContain('…')
@@ -267,6 +271,19 @@ describe('gantt_delegate', () => {
     }
   })
 
+  it('uses the transport ack default when no window is given', async () => {
+    seedAgent()
+    let spawned = /** @type {any} */ (null)
+    const tools = dispatchToolDefinitions(store, { spawnProcess: () => { spawned = new FakeChild(); return spawned } })
+    const entry = toolIn(tools, DISPATCH_TOOL_NAMES.delegate)
+    const pending = entry.execute({ agent: 'pve-oc' }, { agent: { session: { id: 'session-a' } } })
+    await Promise.resolve()
+    spawned.emit('close', 0)
+    const value = /** @type {any} */ (await pending)
+    expect(value.ok).toBe(true)
+    expect(value.message).toContain('退出码 0')
+  })
+
   it('tolerates a child without pipes and unref handles', async () => {
     const { task, agent } = seedAgent()
     const bare = new EventEmitter()
@@ -349,9 +366,18 @@ describe('gantt_delegate', () => {
   it('refuses delegation to an agent without endpoint or dispatch registration', async () => {
     const { agent } = seedAgent()
     store.registerAgent({ id: agent.id, name: 'pve-oc', details: 'capabilities: coding', endpoint: '' })
-    await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('ssh endpoint')
+    await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('未登记可接收远程派发的 endpoint')
+    store.registerAgent({ id: agent.id, name: 'pve-oc', details: 'capabilities: coding', endpoint: 'ssh://bad host' })
+    await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('不是可用的 ssh 目标')
     store.registerAgent({ id: agent.id, name: 'pve-oc', details: 'capabilities: coding', endpoint: 'ssh://k3s-node' })
     await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('dispatch 命令')
+  })
+
+  it('rejects an endpoint scheme with no transport yet', async () => {
+    store.create({ title: 'Lonely task' })
+    store.registerAgent({ name: 'pve-daemon', type: 'ai-agent', details: 'capabilities: coding', endpoint: 'daemon://pve' })
+    await expect(delegate({ id: '1', agent: 'pve-daemon' }, new FakeChild())).rejects.toThrow('endpoint 方案 daemon 暂无投递通道')
+    await expect(delegate({ id: '1', agent: 'pve-daemon' }, new FakeChild())).rejects.toThrow('daemon 直连形态在规划中')
   })
 
   it('names the registered agents when the requested one is unknown', async () => {

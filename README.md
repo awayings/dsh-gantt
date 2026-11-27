@@ -353,7 +353,8 @@ one concern per file, and every source file stays under 1000 lines.
 | `src/host/daily/` | daily 该动 report: windows, role budgets, fairness, report rendering |
 | `src/host/tools.js` | six assistant tools (`gantt_context`, `gantt_decompose`, `gantt_update_task`, `gantt_track`, `gantt_create_task`, `gantt_capture`), task-reference resolution, and automatic provenance recording |
 | `src/host/knowledge.js` | the knowledge pair (`gantt_knowledge_save`, `gantt_knowledge_query`) that only the gantt-long-run preset registers |
-| `src/host/dispatch.js` | the delegation pair (`gantt_agents`, `gantt_delegate`) that only the gantt-long-run preset registers: registry listing and guarded SSH dispatch to a registered agent's headless command |
+| `src/host/dispatch.js` | the delegation pair (`gantt_agents`, `gantt_delegate`) that only the gantt-long-run preset registers: the endpoint-scheme transport table (SSH today; a daemon transport that connects back to the server is planned), registry listing, and the self-contained brief |
+| `src/host/dispatch-ssh.js` | the SSH dispatch transport: resolves an agent's `ssh://` endpoint and `dispatch:` command, and forwards one brief over SSH behind the shared guard and audit trail |
 | `src/host/remote.js`, `src/host/remote-guard.js` | shared SSH forwarding mechanics and the destructive-command safety gate, used by `dispatch.js` and the manual `scripts/remote-exec.mjs` CLI |
 | `src/host/long-run.js` | the gantt-long-run preset plugin entry the bundle's `cordis.patch.yml` row mounts |
 | `src/client/` | browser ESM modules: plugin entry, pages (`gantt`, `today`, right-rail `panel`, in-page/right-rail `workbench`), work-mode navigation, session activity (`session-status`), new-window handoff (`session-window`), active-page restore (`panel-session`), page-state restore (`page-state`: timeline view, work panel), dialogs, styles |
