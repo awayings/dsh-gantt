@@ -11,7 +11,7 @@ by a local SQLite database and an authenticated JSON API.
   `store/` owns SQLite, briefs, `task_events`, the agent registry, the task ⇄
   work-conversation mapping, the long-run knowledge table, and the
   dispatch-notice ledger; `tracker/` parses the tracker markdown; `tree/` holds pure
-  tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
+  tree/brief/context/chain/overview helpers; `clock.js` resolves task-day dates; `daily/`
   builds the daily report; `tools.js` declares the six assistant tools and records
   provenance; `knowledge.js` declares the knowledge pair only the gantt-long-run
   preset registers; `dispatch.js` declares the preset's delegation pair

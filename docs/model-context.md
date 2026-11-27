@@ -42,7 +42,8 @@ Two consequences matter for this plugin:
 
 The `gantt_context` tool is the mid-round read. It renders the same chain and
 detail with a stats header and a longer trajectory window; with no focus it
-falls back to the whole-tree context document capped at 6000 characters. See
+falls back to the two-level whole-tree overview, and its `id` parameter drills
+one level below any parent task. See
 [work-context.md](work-context.md#gantt_context-result) for the exact layout.
 
 ## Round timeline, end to end
@@ -121,7 +122,7 @@ The runtime context and the tool result deliberately share renderers:
 focus + tasks ────┤
                   └─ contextMarkdown (src/host/tools.js) ──────→ gantt_context result
                                     │
-                                    └─ (no focus) whole-tree context, 6000-char cap
+                                    └─ (no focus) two-level tree overview; `id` drills one level down
 ```
 
 Both call `renderFocusChain`, `renderFocusDetail`, and `renderTrajectory` from

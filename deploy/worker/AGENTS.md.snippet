@@ -22,7 +22,8 @@ shell 不读 rc 文件，裸名命令常不在 PATH（远端退出码 127），�
 "any" | "and"` 可按人工标签过滤，返回任务带 `tags`）拉取任务，然后对你选中的
 任务读 `get_task_context` —— 先读到它的祖先链路和背景，再动手写。只知道概念、
 不知道编号时，先 `search_tasks {q}` 全树定位（大小写不敏感子串匹配 `title` /
-`description` / `doneWhen`，跨支线、含已完成，返回点号编号与链路）。
+`description` / `doneWhen`，跨支线、含已完成，返回点号编号与链路）。没有关键
+词时用 `get_tree_overview` 看全树两层概览，`parentId` 逐层下钻。
 
 **循环。** register -> 拉取 -> 读上下文 -> 干活 -> `decompose_task`（1–100 个子
 任务、最多 4 层、每个子任务都要有可验证的 `doneWhen`），或用 `create_task` 建同级

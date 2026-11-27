@@ -53,6 +53,9 @@ describe('gantt assistant tools', () => {
     }
     const update = /** @type {any} */ (tool(tools, TOOL_NAMES.update))
     expect(update.parameters.properties.description.type).toBe('string')
+    const context = /** @type {any} */ (tool(tools, TOOL_NAMES.context))
+    expect(Object.keys(context.parameters.properties).sort()).toEqual(['full', 'id'])
+    expect(context.description).toContain('下钻')
     const decompose = /** @type {any} */ (tool(tools, TOOL_NAMES.decompose))
     expect(decompose.parameters.properties.children.items.properties.description.type).toBe('string')
     const capture = /** @type {any} */ (tool(tools, TOOL_NAMES.capture))
@@ -82,12 +85,56 @@ describe('gantt assistant tools', () => {
     expect(context.output.render({}, value)).toEqual([{ type: 'text', text: value.markdown }])
   })
 
-  it('falls back to the whole tree when the conversation has no focus', async () => {
+  it('falls back to the two-level overview when the conversation has no focus', async () => {
+    const { track, node, task } = focusTask()
     store.create({ title: 'Loose task' })
     const context = toolDefinitions(store).find(entry => entry.name === TOOL_NAMES.context)
     const value = /** @type {any} */ (await context.execute({}, { agent: { session: { id: 'session-b' } } }))
     expect(value.markdown).toContain('## 当前会话没有聚焦任务')
+    expect(value.markdown).toContain('任务树概览')
+    expect(value.markdown).toContain(track.title)
+    expect(value.markdown).toContain(node.title)
     expect(value.markdown).toContain('Loose task')
+    expect(value.markdown).not.toContain(task.title)
+  })
+
+  it('drills down one level under the parent named by id', async () => {
+    const { track, node, task } = focusTask()
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const exec = { agent: { session: { id: 'session-a' } } }
+    const byNumber = /** @type {any} */ (await context.execute({ id: track.number }, exec))
+    expect(byNumber.markdown).toContain(`# ${track.number} ${track.title}（支线 · 待办）的下一层`)
+    expect(byNumber.markdown).toContain(node.title)
+    expect(byNumber.markdown).not.toContain(task.title)
+    expect(byNumber.markdown).toContain('再查一层即可')
+    const byRef = /** @type {any} */ (await context.execute({ id: 'T1' }, exec))
+    expect(byRef.markdown).toBe(byNumber.markdown)
+    const deeper = /** @type {any} */ (await context.execute({ id: node.number }, exec))
+    expect(deeper.markdown).toContain(`# ${node.number} ${node.title}（任务 · 待办）的下一层`)
+    expect(deeper.markdown).toContain(task.title)
+  })
+
+  it('rejects a drill-down parent that does not resolve', async () => {
+    focusTask()
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const exec = { agent: { session: { id: 'session-a' } } }
+    await expectToolError(context.execute({ id: 'missing' }, exec), 'task missing was not found', 404)
+  })
+
+  it('keeps the unchanged shortcut off drill-down reads', async () => {
+    const { node } = focusTask()
+    const context = tool(toolDefinitions(store), TOOL_NAMES.context)
+    const exec = { agent: { session: { id: 'session-a' } } }
+    await context.execute({}, exec)
+    const shortcut = /** @type {any} */ (await context.execute({}, exec))
+    expect(shortcut.markdown).toContain('与上次读取一致')
+    const drill = /** @type {any} */ (await context.execute({ id: node.number }, exec))
+    expect(drill.markdown).toContain('的下一层')
+    expect(drill.markdown).not.toContain('与上次读取一致')
+    const again = /** @type {any} */ (await context.execute({}, exec))
+    expect(again.markdown).toContain('与上次读取一致')
+    const blank = /** @type {any} */ (await context.execute({ id: '   ' }, exec))
+    expect(blank.markdown).toContain('与上次读取一致')
   })
 
   it('tolerates a tool run without an agent session', async () => {

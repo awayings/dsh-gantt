@@ -105,10 +105,14 @@ request-scoped data would churn the prompt and break the cache prefix.
 
 `contextMarkdown` adds a one-line stats header (`# 甘特图任务上下文（今天 …）`,
 task counts) before the chain, detail, and trajectory. Without a focus it falls
-back to `## 当前会话没有聚焦任务` plus the whole-tree context document capped at
-6000 characters, so a conversation without a task still gets useful context.
-The tool is the fallback for models that need the current state mid-round; the
-runtime context is the always-present snapshot.
+back to `## 当前会话没有聚焦任务` plus the two-level whole-tree overview
+(`GanttStore.treeOverview()`, rendered by `renderTreeOverview` in
+`src/host/tree/overview.js`): every track with its direct children, each
+drillable row marked with a `· N 个子任务` suffix. Passing `id` (internal id,
+point number, or ref) renders the one level below that parent instead, so a
+conversation without a task still gets the whole picture and can walk down
+level by level. The tool is the fallback for models that need the current
+state mid-round; the runtime context is the always-present snapshot.
 
 ## `get_task_context` result
 

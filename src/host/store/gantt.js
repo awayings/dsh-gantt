@@ -11,6 +11,7 @@ import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, agentNameMap, mergeAgentField
 import { buildDailyReport, computeDailyBrief, dailyBrief, persistDailyBrief, previousDailyBriefs, readDailyBrief } from './brief.js'
 import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
+import { treeOverview } from './overview.js'
 import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
 import { startScheduler } from './scheduler.js'
 import { searchTasks } from './search.js'
@@ -923,6 +924,15 @@ export class GanttStore {
    * @returns {{ q: string, total: number, tasks: SearchTask[] }} */
   searchTasks(input = {}) {
     return searchTasks(this, input)
+  }
+
+  /** The layered tree overview: every root with its direct children (two
+   * levels), or the one level below `parentId` — an internal id the tool
+   * layers resolve from a point number or ref before calling.
+   * @param {string | null} [parentId]
+   * @returns {{ parentId: string | null, markdown: string, chars: number }} */
+  treeOverview(parentId = null) {
+    return treeOverview(this, parentId)
   }
 
   /** Export the unified tree plus one day plan as a stable markdown context document.
