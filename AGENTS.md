@@ -86,6 +86,9 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   `README.md` is maintained in Chinese; `docs/` pages stay English unless a
   task rewrites them. UI copy: `en` + `zh` dictionaries complete and in parity,
   every string through `t()`.
+- After a large feature lands, check `README.md`'s major modules — database
+  (data source), JSON API, model tools, flow features (preset, gates) — for
+  updates the change requires.
 - JSDoc on exported types/functions; prose comments only for non-obvious
   platform constraints (e.g. the artifact revision rule), never line narration.
 - Temp files only in `.tmp` (gitignored); delete them after use.
