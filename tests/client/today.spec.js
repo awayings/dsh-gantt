@@ -117,7 +117,7 @@ describe('registration and locale dictionaries', () => {
   it('registers the Today sidebar entry and the matching keyed main page', () => {
     const app = setupApp()
     const sidebar = app.todaySidebar()
-    expect(sidebar.def).toMatchObject({ name: 'sidebar.panellist', id: 'today', order: 21 })
+    expect(sidebar.def).toMatchObject({ name: 'sidebar.panellist', id: 'today', order: 19 })
     expect(sidebar.def.label()).toBe('Today')
     expect(app.todayPage().def).toEqual({ name: 'main', key: 'today' })
     expect(app.page().def).toEqual({ name: 'main', key: 'gantt' })

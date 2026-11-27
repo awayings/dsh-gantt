@@ -59,10 +59,13 @@ export const plugin = {
       name: 'main',
       key: 'gantt',
     }, () => h(GanttPage, { ctx })))
+    // 19, not 20: dsh-context's overview entry also claims order 20, and the
+    // Today row must sit directly above the gantt row, with no tie that another
+    // panel could interleave.
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
       name: 'sidebar.panellist',
       id: 'today',
-      order: 21,
+      order: 19,
       label: () => t('nav.today'),
     }, TodayGlyph))
     ctx.slots.inject('main', () => ctx.slots.register({
