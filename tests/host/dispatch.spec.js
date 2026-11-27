@@ -145,6 +145,7 @@ describe('gantt_agents', () => {
     store.registerAgent({ name: 'terse', type: 'ai-agent', details: 'x'.repeat(300) })
     store.registerAgent({ name: 'half-registered', type: 'ai-agent', endpoint: 'ssh://k3s-node', details: 'capabilities: coding' })
     store.registerAgent({ name: 'future-daemon', type: 'ai-agent', endpoint: 'daemon://pve', details: 'capabilities: coding' })
+    store.registerAgent({ name: 'dsh-local', type: 'ai-agent', endpoint: 'local://dsh', details: 'capabilities: coding, shell' })
     const value = /** @type {any} */ (await toolIn(dispatchToolDefinitions(store), DISPATCH_TOOL_NAMES.agents).execute({}, {}))
     expect(value.markdown).toContain('**pve-oc**（ai-agent · remote coder）— oc headless runner')
     expect(value.markdown).toContain('能力：coding, decompose')
@@ -152,6 +153,7 @@ describe('gantt_agents', () => {
     expect(value.markdown).toContain('**plain-human**（human · reviewer）— reads reports')
     expect(value.markdown).toContain('不可远程委派（endpoint 无可用投递通道或登记不完整）')
     expect(value.markdown).toContain('可远程委派：ssh k3s-node · lo -p')
+    expect(value.markdown).toContain('本机节点：执行走 gantt_execute（标准模式 subagent）。')
     expect(value.markdown).toContain('lives on the sofa')
     expect(value.markdown).toContain('**terse**（ai-agent · 无角色）— （无描述）')
     expect(value.markdown).toContain('…')
@@ -371,6 +373,12 @@ describe('gantt_delegate', () => {
     await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('不是可用的 ssh 目标')
     store.registerAgent({ id: agent.id, name: 'pve-oc', details: 'capabilities: coding', endpoint: 'ssh://k3s-node' })
     await expect(delegate({ agent: 'pve-oc' }, new FakeChild())).rejects.toThrow('dispatch 命令')
+  })
+
+  it('redirects a local node registration to gantt_execute', async () => {
+    store.create({ title: 'Lonely task' })
+    store.registerAgent({ name: 'dsh-local', type: 'ai-agent', details: 'capabilities: coding, shell', endpoint: 'local://dsh' })
+    await expect(delegate({ id: '1', agent: 'dsh-local' }, new FakeChild())).rejects.toThrow('是本机节点（local://）；本机执行请用 gantt_execute')
   })
 
   it('rejects an endpoint scheme with no transport yet', async () => {

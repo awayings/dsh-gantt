@@ -49,9 +49,17 @@ const GOAL_LABELS = { execute: '执行', decompose: '拆解' }
  */
 const DISPATCH_TRANSPORTS = { ssh: sshTransport }
 
+/** The endpoint scheme that marks the DSH host itself: work for it runs as a
+ * local standard-mode subagent through `gantt_execute`, so this tool redirects
+ * instead of launching. The host can register itself as a node this way
+ * (endpoint `local://dsh`) to make its own capabilities visible in
+ * `gantt_agents`. */
+const LOCAL_SCHEME = 'local'
+
 /**
- * The endpoint scheme a registration spells: `ssh`, `daemon`, …; '' when the
- * endpoint names no scheme at all. The store guarantees endpoint is a string.
+ * The endpoint scheme a registration spells: `ssh`, `local`, `daemon`, …; ''
+ * when the endpoint names no scheme at all. The store guarantees endpoint is a
+ * string.
  * @param {string} endpoint
  * @returns {string}
  */
@@ -69,6 +77,9 @@ function schemeOf(endpoint) {
  */
 function resolveDispatch(agent) {
   const scheme = schemeOf(agent.endpoint)
+  if (scheme === LOCAL_SCHEME) {
+    throw new GanttError(`agent ${agent.name} 是本机节点（local://）；本机执行请用 gantt_execute 派给标准模式的 subagent，不要用 gantt_delegate。`)
+  }
   const transport = DISPATCH_TRANSPORTS[scheme]
   if (transport === undefined) {
     const known = Object.keys(DISPATCH_TRANSPORTS).join('、')
@@ -87,7 +98,9 @@ function resolveDispatch(agent) {
  * @returns {string}
  */
 function dispatchSummary(agent) {
-  const transport = DISPATCH_TRANSPORTS[schemeOf(agent.endpoint)]
+  const scheme = schemeOf(agent.endpoint)
+  if (scheme === LOCAL_SCHEME) return '本机节点：执行走 gantt_execute（标准模式 subagent）。'
+  const transport = DISPATCH_TRANSPORTS[scheme]
   if (transport === undefined) return '不可远程委派（endpoint 无可用投递通道或登记不完整）'
   try {
     return `可远程委派：${transport.describe(agent)}`
