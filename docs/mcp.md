@@ -118,9 +118,10 @@ The CLI resolves the database exactly like the host plugin:
 3. `$DSH_HOME/gantt/tasks.db`, where `DSH_HOME` defaults to `~/.dsh`.
 
 Use a disposable file (`DSH_GANTT_DB=/tmp/gantt-mcp.db`) for experiments so the
-real `$DSH_HOME/gantt/tasks.db` is never touched. The schema is upgraded to v9
+real `$DSH_HOME/gantt/tasks.db` is never touched. The schema is upgraded to v11
 on open, including the `agents` table, the task operator/completer/report
-columns, and the `tags` label column.
+columns, the `tags` label column, the `knowledge_entries` table, and the
+`dispatch_notices` ledger.
 
 ## Tools
 
@@ -165,6 +166,14 @@ follow from that: an unregistered `agentName` is an error (`agent <name> was not
 found; call register_agent first`), and a call that passes neither `agentId` nor
 `agentName` writes anonymously under the `mcp:manual` context key — register
 first.
+
+When the task was delegated through the dispatcher's `gantt_delegate`, a
+`report_completion` — or an `update_task` whose status or progress lands the
+task in `done`, `blocked`, or `cancelled` — also completes the armed
+`dispatch_notices` row, and the DSH host steers one lightweight message (point
+number and status, never the report) into the conversation that delegated the
+task. The worker does nothing extra: the write-back it already makes is the
+signal, and the task tree stays the only state authority.
 
 ### `register_agent`
 
@@ -446,5 +455,5 @@ DSH session cookie. See [api.md](api.md) for the HTTP shapes and
 - **`-32700` on every line** — the client is sending batched or
   `Content-Length`-framed JSON. Send one newline-delimited object per line.
 - **The schema is old** — reopen the database with the new build; `--db` is
-  upgraded to v9 on open. The real `$DSH_HOME/gantt/tasks.db` is never modified
+  upgraded to v11 on open. The real `$DSH_HOME/gantt/tasks.db` is never modified
   by the test suite.

@@ -129,7 +129,7 @@ async function launchSshDispatch(input) {
     child.unref?.()
     child.stdout?.unref?.()
     child.stderr?.unref?.()
-    return { ok: true, message: '已发出并仍在远端运行；结果由该 Agent 经 MCP 自上报，稍后用 gantt_context 查看任务轨迹。' }
+    return { ok: true, message: '已发出并仍在远端运行；结果由该 Agent 经 MCP 自上报，状态落库后本会话会自动收到一条轻量通知（点号+状态），无需主动轮询。' }
   }
   audit({ decision: 'finished', rule: '', exit: ack.state === 'closed' ? ack.code : null, duration_ms: Date.now() - started })
   if (ack.state === 'spawn-error') return { ok: false, message: `委派失败：无法连接（${ack.message}）。` }

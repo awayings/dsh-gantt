@@ -3,6 +3,7 @@ import {
   assertHttpBinding, createMcpServer, MCP_INSTRUCTIONS, MCP_PROTOCOL_VERSION, MCP_TOOLS, WORKER_GUIDE,
 } from '../../src/host/mcp.js'
 import { GanttStore } from '../../src/host/store.js'
+import { armDispatchNotice, pendingDispatchNotices } from '../../src/host/store/notify.js'
 
 let store
 let server
@@ -432,6 +433,65 @@ describe('write tools', () => {
     }))
     expect(byId.task).toMatchObject({ status: 'in_progress', progress: 10 })
     expect(byId.event).toMatchObject({ sessionId: `agent:${agent.name}` })
+  })
+
+  it('completes the armed dispatch notice on a completion report', () => {
+    const agent = registerWorker('remote')
+    const task = store.create({ title: 'Task' })
+    armDispatchNotice(store, task.id, 'session-dispatch')
+    const value = toolJson(call('report_completion', {
+      taskId: task.id, agentName: agent.name, report: 'done and verified',
+    }))
+    expect(value.ok).toBe(true)
+    expect(pendingDispatchNotices(store)).toEqual([
+      expect.objectContaining({ taskId: task.id, sessionId: 'session-dispatch', status: 'done', agentName: 'remote' }),
+    ])
+  })
+
+  it('completes the armed notice when update_task lands a notice status', () => {
+    const agent = registerWorker('remote')
+    const done = store.create({ title: 'Done case' })
+    armDispatchNotice(store, done.id, 'session-dispatch')
+    toolJson(call('update_task', { taskId: done.id, status: 'done', summary: 'shipped', agentName: agent.name }))
+    // A progress-only write that derives `done` also notifies.
+    const derived = store.create({ title: 'Derived case' })
+    armDispatchNotice(store, derived.id, 'session-dispatch')
+    toolJson(call('update_task', { taskId: derived.id, progress: 100, agentName: agent.name }))
+    const blocked = store.create({ title: 'Blocked case' })
+    armDispatchNotice(store, blocked.id, 'session-dispatch')
+    toolJson(call('update_task', { taskId: blocked.id, status: 'blocked', summary: 'needs a decision', agentName: agent.name }))
+    const cancelled = store.create({ title: 'Cancelled case' })
+    armDispatchNotice(store, cancelled.id, 'session-dispatch')
+    toolJson(call('update_task', { taskId: cancelled.id, status: 'cancelled', agentName: agent.name }))
+    const pending = pendingDispatchNotices(store)
+    expect(pending.map(notice => [notice.taskId, notice.status])).toEqual([
+      [done.id, 'done'], [derived.id, 'done'], [blocked.id, 'blocked'], [cancelled.id, 'cancelled'],
+    ])
+    expect(pending.every(notice => notice.agentName === 'remote' && notice.sessionId === 'session-dispatch')).toBe(true)
+  })
+
+  it('leaves the armed notice untouched for silent statuses and unarmed tasks', () => {
+    const agent = registerWorker('remote')
+    const started = store.create({ title: 'Started case' })
+    armDispatchNotice(store, started.id, 'session-dispatch')
+    toolJson(call('update_task', { taskId: started.id, status: 'in_progress', agentName: agent.name }))
+    expect(pendingDispatchNotices(store)).toEqual([])
+    // A title-only edit applies neither status nor progress.
+    toolJson(call('update_task', { taskId: started.id, title: 'Renamed', agentName: agent.name }))
+    expect(pendingDispatchNotices(store)).toEqual([])
+
+    const unarmed = store.create({ title: 'Unarmed case' })
+    toolJson(call('report_completion', { taskId: unarmed.id, agentName: agent.name, report: 'done' }))
+    expect(pendingDispatchNotices(store)).toEqual([])
+  })
+
+  it('completes an armed notice for an anonymous status write under the manual key', () => {
+    const task = store.create({ title: 'Anonymous case' })
+    armDispatchNotice(store, task.id, 'session-dispatch')
+    const value = toolJson(call('update_task', { taskId: task.id, status: 'done', summary: 'manual close' }))
+    expect(value.ok).toBe(true)
+    const [notice] = pendingDispatchNotices(store)
+    expect(notice).toMatchObject({ taskId: task.id, sessionId: 'session-dispatch', status: 'done', agentName: '' })
   })
 
   it('refuses an unknown agent name and an anonymous completion', () => {

@@ -187,6 +187,28 @@ not been run at that date.
     `gantt.workMode` key is read once into the new record and removed on the
     next write. A missing, blocked, malformed, or unknown-version record falls
     back to the page defaults instead of failing the page.
+14. **Dispatch notices steer through the `agents` service (host).** The
+    completion notice for a delegated remote task is delivered inside the DSH
+    host process: `ctx.inject(['agents'], …)` resolves the live-agent registry
+    the scheduler itself uses (`dsh: dsh-schedule/src/index.ts:224` —
+    `static inject = ['agents', 'sessions', …]`; the same registry backs
+    scheduled reminders' in-process notices, `dsh:
+    dsh-schedule/src/index.ts:698-720`). `agents.get(sessionId)` returns the
+    live Agent of a resident conversation or `undefined` for one not
+    activated in this process; `agent.steer(message)` submits steering for the
+    nearest step and wakes an idle agent (`dsh:
+    dsh-agent/src/runtime-types.ts:252-261`). The steered message is a frozen
+    literal `{ id, role: 'user', content, source }` with the plugin producer
+    source `{ kind: 'dsh-gantt', form: 'relay' }`, built without importing
+    `@deepseek-ai/dsh-llm`: the package's `createUserMessage` is
+    `deepFreeze(structuredClone({ …input, role: 'user', id }))` (`dsh:
+    dsh-llm/src/message.ts:246-254`), so a locally built frozen literal is
+    shape-identical, and the source map is merge-extensible by design — "user
+    messages carry any producer's kind, and consumers fall through unknown
+    kinds" (`dsh: dsh-llm/src/message.ts:112-116`). A host without the
+    `agents` service never resolves the injection: the drainer is absent and
+    armed notices simply wait in SQLite, exactly like the optional
+    `systemPrompt`/`tools` seams.
 
 ## 3 · Rules
 
@@ -260,7 +282,9 @@ not been run at that date.
 
 ## 4 · Data model layering and migration
 
-Schema version 10 adds the `knowledge_entries` table behind the gantt-long-run
+Schema version 11 adds the `dispatch_notices` ledger behind the remote
+completion notice; schema version 10 adds the `knowledge_entries` table behind
+the gantt-long-run
 preset's knowledge pair; schema version 9 adds the task `tags` column (a JSON
 array of manual labels);
 version 8 adds the task write-back columns `operator_id`, `completed_by_id`, and
@@ -271,6 +295,20 @@ trajectory action; version 5 had added the append-only task trajectory; version 
 had already unified the plugin's two previous datasets into one working tree. `tracks`/`nodes` remain as import
 snapshots, and the importer materializes them into `tasks` in the same
 transaction; the domain model is in `docs/personal-task-system.md`.
+
+**v10 → v11 upgrade:** the base schema creates `dispatch_notices` (`id` primary
+key, `task_id` referencing `tasks` with `ON DELETE CASCADE`, `session_id`,
+`status` defaulting to the empty arm marker, `agent_name`, `created_at`,
+nullable `completed_at`/`delivered_at`, `outcome` checking `steered`/`expired`,
+indexed on pending rows). The table is created by the unconditional
+`CREATE_SCHEMA` pass at open; the migration only bumps `PRAGMA user_version`
+to 11 and touches no existing row. A deleted task cascades its notices away;
+the task tree and `task_events` remain the state authority, so a lost or
+duplicated notice degrades to the pre-notice behavior (the dispatcher reads
+the trajectory) instead of corrupting any state. The plugin and `gantt-mcp`
+must upgrade together — `openDatabase` refuses a schema newer than the build —
+which is the same release-tarball contract [deployment.md](deployment.md)
+already documents.
 
 **v9 → v10 upgrade:** the base schema creates `knowledge_entries` (`id` primary
 key, `kind` CHECK `lesson`/`feedback`/`note`, `title`, `content`, `task_id`
@@ -458,9 +496,9 @@ the task they point at.
 - **Check — behavior and coverage:** `pnpm run check` (lint + typecheck +
   coverage + e2e; per-file thresholds in `vitest.config.ts`, the end-to-end
   suite in `tests/e2e/`).
-- **Check — schema migration:** open a copy of a v2, v3, v4, v5, v6, v7, or v8
-  database with the current build and assert `GET /api/gantt/meta` returns
-  `schemaVersion: 9`.
+- **Check — schema migration:** open a copy of a v2, v3, v4, v5, v6, v7, v8,
+  v9, or v10 database with the current build and assert `GET /api/gantt/meta`
+  returns `schemaVersion: 11`.
   A v2 copy must materialize the imported tree once (track/node counts match the
   snapshots, `(kind, ref)` rows do not duplicate); a v3 copy must keep `tasks`
   unchanged and only gain `daily_briefs`; a v4 copy must keep the tree and
@@ -469,11 +507,19 @@ the task they point at.
   `track` action; a v6 copy must keep every row while gaining the `cancelled`
   status, the write-back columns, and the `tags` column; a v7 copy must keep
   every row while gaining the three write-back columns, the `agents` table, and
-  the `tags` column; a v8 copy must keep every row and gain only `tags`. All also
+  the `tags` column; a v8 copy must keep every row and gain only `tags`; a v9
+  copy must keep every row and gain only `knowledge_entries`; a v10 copy must
+  keep every row and gain only `dispatch_notices`. All also
   gain the additive `focus` table. Then read `/api/gantt/brief` and assert the report is
   computed and cached for today, `/api/gantt/focus?sessionId=…` returns
   `taskId: null` on a fresh database, and `/api/gantt/trajectory` returns an
   empty `events` array before any assistant-tool write.
+- **Check — dispatch notices:** with a disposable profile and a fake
+  `agents` registry, delegate a task (`gantt_delegate`), confirm the armed row
+  in `dispatch_notices`, complete it through the MCP surface
+  (`report_completion`), and confirm the drainer steers one message into the
+  dispatching conversation and marks the row `steered`; a conversation that is
+  not resident stays pending and the notice expires after the cutoff.
 - **Check — task-day clock:** with the host in UTC, assert the `today` fields in
   `/tree`, `/day`, and `/brief` match the `Asia/Shanghai` date (not the UTC
   date late in the UTC evening), then restart with `DSH_GANTT_TZ=UTC` and
@@ -484,7 +530,7 @@ the task they point at.
 - **Check — install and host API:** the disposable-profile procedure in
   `docs/development.md` (`DSH_HOME=/tmp/…`,
   `dsh plugin --profile web add <abs path>`, `dsh web --no-open`, then
-  `/api/gantt/meta` (schema version 10, twenty-eight endpoints), `/api/gantt/seed`,
+  `/api/gantt/meta` (schema version 11, twenty-eight endpoints), `/api/gantt/seed`,
   `/api/gantt/tree` (including `brief` and `dailyBrief`), `/api/gantt/plan/import`
   with a fixture directory, `/api/gantt/day` (including `brief`),
   `/api/gantt/task/decompose`, `/api/gantt/task/schedule`,

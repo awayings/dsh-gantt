@@ -9,6 +9,7 @@ import { installPrompt } from './prompt.js'
 import { registerRoutes } from './routes/index.js'
 import { createSessionTitles } from './session-titles.js'
 import { registerTools } from './tools.js'
+import { startNotifyDrainer } from './notify.js'
 
 /** @typedef {import('./routes/http.js').GanttContext} GanttContext */
 /** @typedef {import('./routes/http.js').GanttEndpoint} GanttEndpoint */
@@ -44,6 +45,21 @@ export function apply(ctx) {
     /** @param {GanttContext} toolsCtx */
     const onTools = toolsCtx => registerTools(toolsCtx, store, titles)
     ctx.inject(['tools'], onTools)
+    // The dispatch-notice drain rides the live-agent registry: it steers one
+    // lightweight message into the conversation that delegated a task when the
+    // remote worker writes a status back through the MCP surface. A host
+    // without the agents service (headless, unit harnesses) simply drains
+    // nothing; the notices stay armed in SQLite.
+    /** @param {GanttContext} agentsCtx */
+    const onAgents = (agentsCtx) => {
+      // A Cordis context always carries the getter; the cast only silences the
+      // typedef's optional marker for the call below.
+      const get = /** @type {(name: string) => unknown} */ (agentsCtx.get)
+      const agents = /** @type {import('./notify.js').AgentsFace | undefined} */ (get('agents'))
+      if (typeof agents?.get !== 'function') return
+      ctx.effect(() => startNotifyDrainer(store, agents), 'gantt: steer dispatch notices into their conversations')
+    }
+    ctx.inject(['agents'], onAgents)
   } else {
     registerTools(ctx, store, titles)
   }

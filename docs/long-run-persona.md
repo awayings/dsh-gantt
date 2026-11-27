@@ -57,9 +57,15 @@ Facts the persona assumes but does not restate:
   lists what each agent registered (`capabilities:`, `ssh://` endpoint,
   `dispatch:` headless command); `gantt_delegate` forwards the brief through
   that command over SSH, behind the same guard and audit log as
-  `scripts/remote-exec.mjs`. The tool claims the task's operator and returns
-  after the launch ack — results arrive as MCP writes from the worker, visible
-  in the task's trajectory, never through the dispatch conversation.
+  `scripts/remote-exec.mjs`. The tool claims the task's operator, arms one
+  `dispatch_notices` row for the dispatching conversation, and returns
+  after the launch ack — results still arrive as MCP writes from the worker
+  (the task tree and its trajectory stay the state authority), and a
+  completion (`report_completion`) or a done/blocked/cancelled `update_task`
+  additionally steers one lightweight message into this conversation: the
+  point number and the status, never the report. The dispatcher relays by
+  reading the trajectory (`gantt_context`) when the notice wakes it, so it
+  never polls on its own.
 - **The closing `summary` is not the title.** `gantt_update_task`'s `summary`
   lands in `task_events` (the append-only trajectory: session, turn, detail);
   the task's title changes only when someone edits the title. This is why the
