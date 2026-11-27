@@ -25,7 +25,7 @@ the same version can never diverge:
 
 | Unit | Entry point in the tarball | Runs as |
 | --- | --- | --- |
-| Plugin (host half + browser bundle) | `package.json`, `src/host/`, `lib/client.js`, `cordis.patch.yml` | DSH process, installed into `DSH_HOME/profiles/<profile>` |
+| Plugin (host half + browser bundle) | `package.json`, `src/host/`, `lib/client.js`, `cordis.patch.yml`, `skills/` (the packaged dispatch manual) | DSH process, installed into `DSH_HOME/profiles/<profile>` |
 | MCP server | `bin/gantt-mcp.js` | its own container (or a local stdio client) |
 | Deployment assets | `deploy/` | templates only; nothing auto-applies |
 

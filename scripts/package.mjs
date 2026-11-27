@@ -3,12 +3,12 @@
 // Release packaging: one tarball, two deployment units.
 //
 // The artifact is this private package packed from the checkout: the DSH plugin
-// bundle (src/, lib/client.js, cordis.patch.yml, icon.svg) and the MCP sidecar
-// CLI (bin/gantt-mcp.js) ship together, `deploy/` carries the systemd unit and
-// environment template an operator installs beside it, and `docs/` lets the
-// installed copy open its own deployment page. A release publishes this tarball
-// plus its SHA256SUMS, and the release workflow attaches both to the GitHub
-// Release.
+// bundle (src/, skills/, lib/client.js, cordis.patch.yml, icon.svg) and the MCP
+// sidecar CLI (bin/gantt-mcp.js) ship together, `deploy/` carries the systemd
+// unit and environment template an operator installs beside it, and `docs/`
+// lets the installed copy open its own deployment page. A release publishes
+// this tarball plus its SHA256SUMS, and the release workflow attaches both to
+// the GitHub Release.
 //
 //   pnpm run package
 //
@@ -49,6 +49,7 @@ const REQUIRED = [
   'deploy/k3s/README.md',
   'docs/deployment.md',
   'docs/mcp.md',
+  'skills/gantt-dispatch-flow/SKILL.md',
 ]
 
 // Dev-only trees that must never reach an operator's machine.

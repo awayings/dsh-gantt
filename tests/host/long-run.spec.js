@@ -20,6 +20,21 @@ class FakeToolsService {
   }
 }
 
+/** A skills service whose registerProvider reads its own state the same way. */
+class FakeSkillsService {
+  constructor() {
+    this.providers = []
+  }
+
+  registerProvider(create) {
+    const provider = create({ invalidate() {}, signal: undefined })
+    this.providers.push(provider)
+    return () => {
+      this.providers.splice(this.providers.indexOf(provider), 1)
+    }
+  }
+}
+
 let dir
 let previousDb
 
@@ -38,16 +53,17 @@ afterEach(() => {
 describe('gantt/long-run preset plugin', () => {
   it('declares the plugin shape', () => {
     expect(name).toBe('gantt/long-run')
-    expect(inject).toEqual(['tools'])
+    expect(inject).toEqual(['tools', 'skills'])
     expect(typeof apply).toBe('function')
   })
 
   it('registers the knowledge and dispatch tools over its own store handle and closes it on dispose', async () => {
     const service = new FakeToolsService()
+    const skills = new FakeSkillsService()
     /** @type {Array<() => void>} */
     const effects = []
     const ctx = {
-      get: contextName => (contextName === 'tools' ? service : undefined),
+      get: contextName => (contextName === 'tools' ? service : contextName === 'skills' ? skills : undefined),
       effect: (fn) => {
         effects.push(fn())
       },
@@ -59,12 +75,17 @@ describe('gantt/long-run preset plugin', () => {
       DISPATCH_TOOL_NAMES.agents,
       DISPATCH_TOOL_NAMES.delegate,
     ])
+    // The dispatch manual's bundled skill provider registers on the same scope.
+    expect(skills.providers.map(provider => provider.name)).toEqual(['gantt-dispatch-skill'])
     // The handle behind the registration is a real store on the shared schema.
     const save = /** @type {any} */ (service.layers[0])
     const value = await save.execute({ title: 'A', content: 'B' }, {})
     expect(value.ok).toBe(true)
-    // Effects: the store close first, then the two tools disposers.
-    expect(effects).toHaveLength(3)
+    // Effects: the store close first, then the two tools disposers, then the
+    // skill provider disposer.
+    expect(effects).toHaveLength(4)
+    effects[3]()
+    expect(skills.providers).toEqual([])
     effects[2]()
     effects[1]()
     expect(service.layers).toEqual([])

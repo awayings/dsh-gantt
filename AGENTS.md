@@ -18,7 +18,11 @@ by a local SQLite database and an authenticated JSON API.
   whose ssh entry (`dispatch-ssh.js`) rides `remote.js`/`remote-guard.js` (the
   shared guarded-SSH mechanics the manual `scripts/remote-exec.mjs` CLI also
   uses; a daemon transport that connects back to the server is planned);
-  `long-run.js` is that preset's plugin entry (declared in
+  `dispatch-skill.js` registers the packaged dispatch manual
+  (`skills/gantt-dispatch-flow/SKILL.md`) as a bundled skill in the same preset
+  layer, so the manual ships with the plugin tarball instead of per-host
+  copies and a same-named local skill outranks it; `long-run.js` is that
+  preset's plugin entry (declared in
   `cordis.patch.yml`); `mcp.js` is the external-agent JSON-RPC server behind
   `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.
 - Client `src/client/`: ESM modules (plugin entry, Gantt/Today pages, the
