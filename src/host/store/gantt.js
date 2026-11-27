@@ -13,7 +13,8 @@ import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
 import { PLAN_SLOTS, clockValue, getPlanBlock, normalizePlanDraft, readDayPlan, replacePlan, setBlockStatus, upsertPlanBlocks, writeTaskBlock } from './plan.js'
 import { startScheduler } from './scheduler.js'
-import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeAgentRef, normalizeDescription, normalizeExtras, normalizeKind, normalizeParent, normalizeProgress, normalizeRef, normalizeReport, normalizeStatus, normalizeTags, normalizeTitle, oneOf, parseTagsJson, statusFromProgress, textField, textValue } from './tasks.js'
+import { searchTasks } from './search.js'
+import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MATERIALIZED, UPDATE_TASK, EVENT_ACTIONS, EVENT_SELECT, INSERT_EVENT, assertDate, assertRange, defaultProgress, normalizeAgentRef, normalizeDescription, normalizeExtras, normalizeKind, normalizeLimit, normalizeParent, normalizeProgress, normalizeRef, normalizeReport, normalizeStatus, normalizeTags, normalizeTitle, oneOf, parseTagsJson, statusFromProgress, textField, textValue } from './tasks.js'
 
 /** @typedef {import('./agents.js').AgentFilter} AgentFilter */
 /** @typedef {import('./agents.js').AgentInput} AgentInput */
@@ -68,6 +69,8 @@ import { INSERT_TASK, SEED_TASKS, STATUSES, TASK_SELECT, TEXT_FIELDS, UPDATE_MAT
 /** A compact task row returned by the ready list. @typedef {{ id: string, number: string,
  * ref: string, title: string, status: TaskStatus, description: string, doneWhen: string,
  * tags: string[], trackId: string, trackName: string }} ReadyTask */
+/** The whole-tree keyword search query. @typedef {import('./search.js').SearchTasksInput} SearchTasksInput */
+/** One keyword-search result row. @typedef {import('./search.js').SearchTask} SearchTask */
 /** A compact task row returned beside the task-context markdown. @typedef {{ id: string,
  * number: string, ref: string, title: string, status: TaskStatus, progress: number,
  * doneWhen: string }} ContextTask */
@@ -912,6 +915,16 @@ export class GanttStore {
     }
   }
 
+  /** The whole-tree keyword search: every task whose title, description, or
+   * doneWhen contains the keyword — case-insensitive substring — across every
+   * track and depth, completed work included. Rows are grouped by track in
+   * rendered order; `total` counts every match while `tasks` honors `limit`.
+   * @param {SearchTasksInput} [input]
+   * @returns {{ q: string, total: number, tasks: SearchTask[] }} */
+  searchTasks(input = {}) {
+    return searchTasks(this, input)
+  }
+
   /** Export the unified tree plus one day plan as a stable markdown context document.
    * @param {ContextOptions} [input]
    * @returns {{ ok: boolean, date: string, markdown: string, chars: number, truncated: boolean,
@@ -931,17 +944,6 @@ function normalizeSessionId(value) {
   if (session === '') throw new GanttError('sessionId is required')
   if (session.length > 200) throw new GanttError('sessionId must be at most 200 characters')
   return session
-}
-
-/** Validate a trajectory page size; omitted means the documented default.
- * @param {unknown} value
- * @returns {number}
- */
-function normalizeLimit(value) {
-  if (value === undefined || value === null || value === '') return 20
-  const limit = typeof value === 'string' ? Number(value) : value
-  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new GanttError('limit must be an integer from 1 to 100')
-  return limit
 }
 
 /** Validate the durable turn index of a conversation write.

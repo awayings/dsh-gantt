@@ -33,7 +33,7 @@ export function assertHttpBinding(host, token) {
  */
 export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: conversations and turns gain time and relation dimensions in a Gantt tree. This server is pull-only — nothing is dispatched to you.
 
-Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
+Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: search_tasks {q} when you know a concept but not its point number — it matches title, description, and doneWhen across every track and depth, done work included, and each hit carries its number and ancestor chain; list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
 Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
 
@@ -52,7 +52,10 @@ pulling from it; nothing is ever pushed to you.
    tag "next" for the first executable pick per track, "todo" for every pending
    leaf. Add tags: ["ops"] to keep only tasks carrying those manual labels;
    mode "any" (default) needs one of them, "and" needs all. Pick one task (a
-   human may also hand you the point number).
+   human may also hand you the point number). When you know the concept but
+   not the number, search_tasks {q} first: it matches title, description, and
+   doneWhen across every track and depth — completed work included — and every
+   hit carries its point number, matched fields, and ancestor chain.
 3. get_task_context {taskId} — always before writing. The chain, the detail, and
    the completion report are the context a decomposition needs; a title alone is
    never enough.
@@ -135,7 +138,7 @@ moment it is dispatched.
   is missing (HTTP 401) or the client renders an empty tool list while tools
   still work. Verify by calling get_worker_guide.
 - "task ... was not found": the id is stale or belongs to another store; re-read
-  list_ready_tasks instead of guessing.
+  list_ready_tasks or search_tasks by keyword instead of guessing.
 - "agent ... was not found": register_agent first, or pass the exact name.`
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
@@ -190,6 +193,19 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
         mode: { type: 'string', enum: ['any', 'and'], description: 'Tag match: any (default) keeps a task carrying one of the tags, and keeps only tasks carrying all of them.' },
         limit: { type: 'integer', minimum: 1, maximum: 100 },
       },
+    },
+  },
+  {
+    name: 'search_tasks',
+    description: 'Locate tasks by keyword across the whole tree: every track, every depth, done and cancelled work included. Case-insensitive substring match over title, description, and doneWhen; each hit carries its point number, matched fields, and ancestor chain, so a concept you only remember by name can be found and then read with get_task_context.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        q: { type: 'string', description: 'Keyword, 1-200 characters after trimming; matched as a case-insensitive substring over title, description, and doneWhen.' },
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      required: ['q'],
     },
   },
   {
@@ -465,6 +481,9 @@ function callTool(store, name, args) {
   }
   if (name === 'list_ready_tasks') {
     return { ok: true, ...store.readyTasks({ tag: args.tag, limit: args.limit, tags: args.tags, mode: args.mode }) }
+  }
+  if (name === 'search_tasks') {
+    return { ok: true, ...store.searchTasks({ q: args.q, limit: args.limit }) }
   }
   if (name === 'get_task_context') {
     return { ok: true, ...store.taskContext(resolveTaskId(store, args.taskId)) }

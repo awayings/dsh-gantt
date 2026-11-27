@@ -30,7 +30,9 @@ agent id。
 `list_ready_tasks`（`tag` 取 `ready` | `next` | `todo`，默认 `ready`；可用
 `tags: [...]` + `mode: "any" | "and"` 按人工标签过滤，返回的每条任务带 `tags`），
 再对你选中的任务调用 `get_task_context`。写任何东西之前，先读完它的祖先链路、
-字段、关联和轨迹。
+字段、关联和轨迹。只知道概念、不知道编号时，先 `search_tasks {q}` 全树定位：
+关键词对 `title` / `description` / `doneWhen` 大小写不敏感子串匹配，跨支线、
+含已完成；每条命中带点号编号、命中字段与祖先链路。
 
 **循环。**
 
@@ -53,7 +55,8 @@ agent id。
 - 每个任务工具上的 `taskId` 都接受内部 UUID、点号编号（`1.8.1`）或外部 ref
   （`node:1.8.1`）。
 - 不要编造 id：只对 server 返回的或人给你的 id 动手；未知 id 会回
-  `task ... was not found`，重新解析即可。
+  `task ... was not found`，用 `list_ready_tasks` 或按关键词 `search_tasks`
+  重新定位即可。
 - 链路不明确：问人；没人能回答时，`update_task` 设 `status: "blocked"`，并在
   `summary` 里写清阻塞条件。
 - 工具失败会作为 `isError: true` 的内容返回 —— 读它返回的文本。

@@ -123,6 +123,16 @@ export function normalizeProgress(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new GanttError('progress must be a number from 0 to 100')
   return Math.max(0, Math.min(100, Math.round(value)))
 }
+/** Validate a row page size; omitted means the documented default.
+ * @param {unknown} value
+ * @returns {number}
+ */
+export function normalizeLimit(value) {
+  if (value === undefined || value === null || value === '') return 20
+  const limit = typeof value === 'string' ? Number(value) : value
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new GanttError('limit must be an integer from 1 to 100')
+  return limit
+}
 /** @param {unknown} value @returns {string | null} */
 export function normalizeParent(value) {
   if (value === undefined || value === null || value === '') return null

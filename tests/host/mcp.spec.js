@@ -32,8 +32,9 @@ describe('MCP metadata', () => {
   it('publishes the protocol version and every tool schema', () => {
     expect(MCP_PROTOCOL_VERSION).toBe('2025-06-18')
     expect(MCP_TOOLS.map(tool => tool.name)).toEqual([
-      'register_agent', 'list_agents', 'list_ready_tasks', 'get_task_context', 'create_task',
-      'decompose_task', 'update_task', 'track_task', 'report_completion', 'get_worker_guide',
+      'register_agent', 'list_agents', 'list_ready_tasks', 'search_tasks', 'get_task_context',
+      'create_task', 'decompose_task', 'update_task', 'track_task', 'report_completion',
+      'get_worker_guide',
     ])
     expect(new Set(MCP_TOOLS.map(tool => tool.name)).size).toBe(MCP_TOOLS.length)
     for (const tool of MCP_TOOLS) {
@@ -41,13 +42,19 @@ describe('MCP metadata', () => {
       expect(tool.inputSchema.type).toBe('object')
     }
     expect(MCP_TOOLS[0].inputSchema.required).toEqual(['name', 'type'])
-    expect(MCP_TOOLS[8].inputSchema.required).toEqual(['taskId', 'report'])
+    const report = /** @type {any} */ (MCP_TOOLS.find(tool => tool.name === 'report_completion'))
+    expect(report.inputSchema.required).toEqual(['taskId', 'report'])
     const ready = /** @type {any} */ (MCP_TOOLS.find(tool => tool.name === 'list_ready_tasks'))
     expect(ready.description).toMatch(/manual task tags/)
     expect(ready.inputSchema.properties.tag).toMatchObject({ enum: ['ready', 'next', 'todo'] })
     expect(ready.inputSchema.properties.tags).toMatchObject({ type: 'array', items: { type: 'string' } })
     expect(ready.inputSchema.properties.mode).toMatchObject({ type: 'string', enum: ['any', 'and'] })
+    const search = /** @type {any} */ (MCP_TOOLS.find(tool => tool.name === 'search_tasks'))
+    expect(search.inputSchema.required).toEqual(['q'])
+    expect(search.inputSchema.properties.q.type).toBe('string')
+    expect(search.inputSchema.properties.limit).toMatchObject({ type: 'integer', minimum: 1, maximum: 100 })
     expect(MCP_INSTRUCTIONS).toMatch(/register_agent/)
+    expect(MCP_INSTRUCTIONS).toMatch(/search_tasks/)
     expect(MCP_INSTRUCTIONS).toMatch(/dispatch:/)
     expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
     expect(WORKER_GUIDE).toMatch(/## Loop/)
@@ -255,6 +262,46 @@ describe('tools/call', () => {
     ]) {
       expect(call(args).result).toEqual({ content: [{ type: 'text', text: message }], isError: true })
     }
+  })
+
+  it('searches the whole tree by keyword and validates the query', () => {
+    const invest = store.create({ title: '投资系统', kind: 'track', ref: 'track:1' })
+    const strategy = store.create({ title: '长期策略', parentId: invest.id })
+    const dip = store.create({ title: '冰点抄底', parentId: strategy.id })
+    store.create({ title: '历史复盘', description: '复盘两次冰点的买入窗口。', status: 'done', parentId: invest.id })
+    const call = args => rpc({
+      jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'search_tasks', arguments: args },
+    })
+
+    const found = toolJson(call({ q: '冰点' }))
+    expect(found.ok).toBe(true)
+    expect(found.q).toBe('冰点')
+    expect(found.total).toBe(2)
+    expect(found.tasks.map(task => [task.number, task.matchedFields, task.status])).toEqual([
+      ['1.1.1', ['title'], 'todo'],
+      ['1.2', ['description'], 'done'],
+    ])
+    expect(found.tasks[0].chain).toEqual([
+      { number: '1', title: '投资系统' },
+      { number: '1.1', title: '长期策略' },
+    ])
+    expect(found.tasks[0].trackName).toBe('投资系统')
+
+    const context = toolJson(rpc({
+      jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'get_task_context', arguments: { taskId: found.tasks[0].number } },
+    }))
+    expect(context.taskId).toBe(dip.id)
+
+    const capped = toolJson(call({ q: ' 冰点 ', limit: 1 }))
+    expect(capped.q).toBe('冰点')
+    expect(capped.total).toBe(2)
+    expect(capped.tasks).toHaveLength(1)
+
+    expect(call({}).result).toEqual({ content: [{ type: 'text', text: 'q is required' }], isError: true })
+    expect(call({ q: 7 }).result.isError).toBe(true)
+    expect(call({ q: '冰点', limit: 101 }).result).toEqual({
+      content: [{ type: 'text', text: 'limit must be an integer from 1 to 100' }], isError: true,
+    })
   })
 
   it('converts a thrown non-Error value into isError text', () => {

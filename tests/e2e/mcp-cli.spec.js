@@ -137,8 +137,9 @@ describe('gantt-mcp CLI over HTTP', () => {
 
     const tools = await rpc(origin, { jsonrpc: '2.0', id: 2, method: 'tools/list' })
     expect(tools.payload.result.tools.map(tool => tool.name)).toEqual([
-      'register_agent', 'list_agents', 'list_ready_tasks', 'get_task_context', 'create_task',
-      'decompose_task', 'update_task', 'track_task', 'report_completion', 'get_worker_guide',
+      'register_agent', 'list_agents', 'list_ready_tasks', 'search_tasks', 'get_task_context',
+      'create_task', 'decompose_task', 'update_task', 'track_task', 'report_completion',
+      'get_worker_guide',
     ])
 
     const notification = await fetch(`${origin}/mcp`, {
@@ -200,7 +201,7 @@ describe('gantt-mcp CLI over stdio', () => {
     for (let attempt = 0; attempt < 100 && responses.length < expected; attempt += 1) await sleep(100)
     expect(responses.map(response => response.id)).toEqual([1, 2])
     expect(responses[0].result.serverInfo.name).toBe('dsh-gantt')
-    expect(responses[1].result.tools).toHaveLength(10)
+    expect(responses[1].result.tools).toHaveLength(11)
     expect(cli.errors).toEqual([])
   })
 })

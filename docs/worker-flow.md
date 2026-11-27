@@ -19,7 +19,8 @@ complements [mcp.md](mcp.md) and [deployment.md](deployment.md).
 
 Nothing pushes work to a worker. The server has no queue, no assignment, no
 outbound call, and no notification; that surface is deliberately not
-implemented. A worker pulls: `list_ready_tasks` for executable work,
+implemented. A worker pulls: `search_tasks` to locate a task by keyword when
+only the concept is known, `list_ready_tasks` for executable work,
 `get_task_context` for one task's background, `list_agents` for the peers it
 shares the tree with, and writes the result back. A human naming a task by
 point number or id is the only other entry point.
@@ -147,7 +148,9 @@ Steps 1-2 happen once per worker, 3-8 once per task, and step 9 closes a round.
    manual labels with `tags: ["投资"]` and `mode: "any" | "and"` (default
    `any`); the ready class and the tag filter combine. Rows carry `id`, `number`
    (`1.8.1`), `ref`, title, status, description, `doneWhen`, `tags`, and the
-   track.
+   track. When only a concept or a name is remembered, `search_tasks {q}`
+   matches `title`/`description`/`doneWhen` across the whole tree — done work
+   included — and each hit carries `number`, `matchedFields`, and `chain`.
 4. **Read before you write.** `get_task_context` for the picked task: ancestor
    chain, fields, links, earlier report, recent trajectory.
 5. **Work** in your own environment; the store never runs your code.
@@ -185,7 +188,8 @@ Steps 1-2 happen once per worker, 3-8 once per task, and step 9 closes a round.
   human reviewing the Gantt then has to guess which change belonged to which
   task.
 - **Never invent task ids.** Act only on ids from `list_ready_tasks`,
-  `get_task_context`, a decomposition you just created, or a human message. An
+  `search_tasks`, `get_task_context`, a decomposition you just created, or a
+  human message. An
   unknown id returns `task ... was not found`; resolve it again instead of
   guessing a neighbour.
 - **Ambiguity goes to the human.** Nobody routes you a question, so ask; if

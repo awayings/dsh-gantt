@@ -9,7 +9,7 @@ store.
 
 The server has no runtime dependency and no protocol SDK: it is a hand-written
 JSON-RPC 2.0 implementation over newline-delimited stdio (the default) or an
-optional HTTP transport. There is no MCP `resources`/`prompts` surface; the ten
+optional HTTP transport. There is no MCP `resources`/`prompts` surface; the eleven
 tools below are the contract. The worker-side workflow that uses them — pull
 loop, when to decompose, how a round is closed — is in
 [worker-flow.md](worker-flow.md) and is also served by the `get_worker_guide`
@@ -145,6 +145,7 @@ as text; they never crash the server.
 | `register_agent` | Register or update this tool as a human/AI operator |
 | `list_agents` | List operators with optional filters |
 | `list_ready_tasks` | Pull ready / next / todo work, optionally by manual tag |
+| `search_tasks` | Locate tasks by keyword across the whole tree, done work included |
 | `get_task_context` | Read one task's stable markdown context |
 | `create_task` | Create a child task, or the next sibling of a task |
 | `decompose_task` | Split one task into 1–100 child tasks |
@@ -153,7 +154,7 @@ as text; they never crash the server.
 | `report_completion` | Write the operator, completer, report, status, and progress back |
 | `get_worker_guide` | Read the full worker playbook |
 
-All ten tools return `{ "ok": true, … }` on success and `isError` content on a
+All eleven tools return `{ "ok": true, … }` on success and `isError` content on a
 validation failure. `taskId` / `parentId` / `afterTaskId` accept three forms:
 the internal UUID, the rendered point number (`1.8.1`), or an external ref.
 `agentId` / `agentName` resolve the same registered operator, so a worker never
@@ -261,6 +262,53 @@ Rows are grouped by track in rendered tree order, then in document order:
   ]
 }
 ```
+
+### `search_tasks`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `q` | yes | Keyword, 1–200 characters after trimming |
+| `limit` | no | Integer 1–100, default 20 |
+
+A case-insensitive substring match over `title`, `description`, and `doneWhen`
+across the whole rendered tree — every track, every depth, every kind, done
+and cancelled work included. It is the locator for a task you only remember by
+concept: each hit carries its point number, the fields that matched, and the
+ancestor chain, so the next call is `get_task_context` with the number.
+
+```json
+{
+  "ok": true,
+  "q": "冰点",
+  "total": 2,
+  "tasks": [
+    {
+      "id": "0f0c1c2e-…",
+      "number": "1.12.1",
+      "ref": "",
+      "title": "冰点抄底",
+      "kind": "task",
+      "status": "todo",
+      "description": "",
+      "doneWhen": "",
+      "matchedFields": ["title"],
+      "chain": [
+        { "number": "1", "title": "投资系统" },
+        { "number": "1.12", "title": "长期策略" }
+      ],
+      "trackId": "…",
+      "trackName": "投资系统"
+    }
+  ]
+}
+```
+
+Rows are grouped by track in rendered tree order, then in document order.
+`total` counts every match; `tasks` is capped by `limit`, so a capped page
+still reports how much of the tree matched. `matchedFields` lists the fields
+that carried the keyword, in `title`/`description`/`doneWhen` order; `chain`
+is the ancestor path from the track root down to the parent, and the matched
+task's own `number` is the locator every task tool accepts.
 
 ### `get_task_context`
 
@@ -412,7 +460,7 @@ report as its detail is appended under the worker's session key. Returns:
   full playbook is `get_worker_guide`).
 - `notifications/initialized` and every other message without an `id` are
   ignored.
-- `ping` returns `{}`; `tools/list` returns the ten tool schemas verbatim.
+- `ping` returns `{}`; `tools/list` returns the eleven tool schemas verbatim.
 - Unknown methods are JSON-RPC error `-32601`; a non-object message or a
   missing/blank `method` is `-32600` with `id: null` when the request has no
   usable id.
