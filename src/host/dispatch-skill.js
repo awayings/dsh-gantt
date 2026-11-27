@@ -3,9 +3,13 @@
 // serves it from the gantt-long-run preset's own skills layer: installing the
 // package is the whole distribution step — no per-host copy into a skills
 // directory — while the base composition's `dsh-tool-skill` consumer surfaces
-// the catalog entry and the `skill` tool loads the body on demand. The
-// packaged candidate carries the bundled rank, so a user or project copy of
-// the same name always outranks the shipped manual. The packaged file stays
+// the catalog entry and the `skill` tool loads the body on demand. Only the
+// gantt-long-run preset composes the plugin that registers this provider
+// (`long-run.js`, the preset row's gantt-knowledge mount), so standard
+// conversations and every other preset never list the manual; the host plugin
+// never touches the skills seam. The packaged candidate carries the bundled
+// rank, so a user or project copy of the same name always outranks the
+// shipped manual. The packaged file stays
 // the single source of both halves: its frontmatter supplies the catalog
 // metadata, and the served body is that file with the frontmatter stripped,
 // the same normalization the filesystem provider applies to local skills.

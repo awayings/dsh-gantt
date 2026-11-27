@@ -314,7 +314,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 - **远程 Agent**：`gantt_agents` 列出 MCP 注册的操作者及各自能力；`gantt_delegate` 认领任务的操作者，把简报经其登记的 `dispatch:` 命令走 SSH 转发——与 `scripts/remote-exec.mjs` 同一守卫与审计日志——拿到启动 ack 即返回，远端 worker 自己经 gantt MCP 面上报结果。
 - **本地兜底**：`gantt_execute` 委派工具派给标准模式 subagent（`agentPreset: standard`，无模型可见覆盖），执行落在带全量工具集与任务协议的 subagent 上。
 
-领域知识在远端时，也可让远程 Agent 只拆解（`goal=decompose`）。派发简报——用户原话、30 字内路由注记、相关链接——存进子任务的 `description`，工作台按 markdown 渲染；prompt 引用它，因为无论 spawned executor 还是远端 worker 都读不到任务树。知识对与派发对只在本 preset 可见；每条知识存同一 SQLite 库（`knowledge_entries`），关联落点任务，任务没了也只解绑、永不删行。分发者每轮操作手册以技能形式随包分发（`skills/gantt-dispatch-flow/SKILL.md`，`src/host/dispatch-skill.js` 注册为 bundled skill）：安装插件即得、无需每台机拷贝，用户或项目里的同名技能优先于包内版。派单者原样转达收尾报告、对 executor 交回的东西重新定位。persona 镜像在 [docs/long-run-persona.md](docs/long-run-persona.md) 供阅读，`tests/host/preset.spec.js` 逐字节 pin 住。
+领域知识在远端时，也可让远程 Agent 只拆解（`goal=decompose`）。派发简报——用户原话、30 字内路由注记、相关链接——存进子任务的 `description`，工作台按 markdown 渲染；prompt 引用它，因为无论 spawned executor 还是远端 worker 都读不到任务树。知识对与派发对只在本 preset 可见；每条知识存同一 SQLite 库（`knowledge_entries`），关联落点任务，任务没了也只解绑、永不删行。分发者每轮操作手册以技能形式随包分发（`skills/gantt-dispatch-flow/SKILL.md`，`src/host/dispatch-skill.js` 注册为 bundled skill）：只在甘特长城会话的技能目录出现，标准会话与其他 preset 一律不列出；安装插件即得、无需每台机拷贝，用户或项目里的同名技能优先于包内版。派单者原样转达收尾报告、对 executor 交回的东西重新定位。persona 镜像在 [docs/long-run-persona.md](docs/long-run-persona.md) 供阅读，`tests/host/preset.spec.js` 逐字节 pin 住。
 
 ## 验证与质量门禁
 
