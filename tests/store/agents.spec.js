@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AGENT_TYPES, GanttStore } from '../../src/host/store.js'
-import { normalizeAgentFields, normalizeAgentFilter } from '../../src/host/store/agents.js'
+import { mergeAgentFields, normalizeAgentFields, normalizeAgentFilter } from '../../src/host/store/agents.js'
 import { expectGanttError, expectIsoTimestamp } from '../helpers/gantt.js'
 
 let store
@@ -65,6 +65,57 @@ describe('agent field normalization', () => {
   })
 })
 
+describe('mergeAgentFields', () => {
+  /** @type {import('../../src/host/store/agents.js').AgentRow} */
+  const existing = {
+    id: 'a1',
+    name: 'Codex',
+    type: 'human',
+    role: 'dev',
+    description: 'writes code',
+    details: 'capabilities: coding\ndispatch: nohup lo -p',
+    endpoint: 'ssh://mac',
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  it('keeps every field the input omits', () => {
+    expect(mergeAgentFields(existing, { name: 'Codex', type: null })).toEqual({
+      name: 'Codex',
+      type: 'human',
+      role: 'dev',
+      description: 'writes code',
+      details: 'capabilities: coding\ndispatch: nohup lo -p',
+      endpoint: 'ssh://mac',
+    })
+  })
+
+  it('overwrites provided fields and keeps null ones', () => {
+    expect(mergeAgentFields(existing, {
+      name: ' Codex  2 ',
+      type: 'ai-agent',
+      role: null,
+      description: 'reviews code',
+      details: '',
+      endpoint: ' ssh://mac ',
+    })).toEqual({
+      name: 'Codex 2',
+      type: 'ai-agent',
+      role: 'dev',
+      description: 'reviews code',
+      details: '',
+      endpoint: 'ssh://mac',
+    })
+  })
+
+  it('validates the provided fields exactly like a fresh registration', () => {
+    expectGanttError(() => mergeAgentFields(existing, {}), 'name is required')
+    expectGanttError(() => mergeAgentFields(existing, { name: 'Codex', role: 7 }), 'role must be a string')
+    expectGanttError(() => mergeAgentFields(existing, { name: 'Codex', type: 'robot' }), `type must be one of ${AGENT_TYPES.join(', ')}`)
+    expectGanttError(() => mergeAgentFields(existing, { name: 'x'.repeat(101) }), 'name must be at most 100 characters')
+  })
+})
+
 describe('registerAgent', () => {
   it('inserts by name and ignores an unknown id', () => {
     const agent = store.registerAgent({ id: 'missing', name: 'Codex', type: 'ai-agent', role: 'dev' })
@@ -80,6 +131,44 @@ describe('registerAgent', () => {
     const second = store.registerAgent({ name: 'Codex', type: 'human', role: 'reviewer', description: 'changed' })
     expect(second).toMatchObject({ id: first.id, type: 'human', role: 'reviewer', description: 'changed', createdAt: first.createdAt })
     expect(store.listAgents()).toHaveLength(1)
+  })
+
+  it('keeps the stored dispatch contract a re-registration omits', () => {
+    store.registerAgent({
+      name: 'claude-code-http',
+      type: 'ai-agent',
+      role: 'implementer',
+      description: 'Claude Code on k3s-node over HTTP MCP via lo',
+      details: 'capabilities: coding, shell, linux, k3s\ndispatch: export PATH=$HOME/.local/bin:$PATH; nohup lo -p',
+      endpoint: 'ssh://k3s-node',
+    })
+    // The installer evidence call re-registers identity only; the endpoint and
+    // the dispatch details must survive it.
+    const kept = store.registerAgent({ name: 'claude-code-http', type: 'ai-agent', role: 'implementer' })
+    expect(kept).toMatchObject({
+      description: 'Claude Code on k3s-node over HTTP MCP via lo',
+      details: 'capabilities: coding, shell, linux, k3s\ndispatch: export PATH=$HOME/.local/bin:$PATH; nohup lo -p',
+      endpoint: 'ssh://k3s-node',
+    })
+    expect(store.listAgents()).toHaveLength(1)
+    // A provided field, empty string included, still overwrites.
+    const cleared = store.registerAgent({ name: 'claude-code-http', details: '', endpoint: '' })
+    expect(cleared).toMatchObject({ details: '', endpoint: '', role: 'implementer' })
+    // Null counts as omitted for every field.
+    const nulled = store.registerAgent({ name: 'claude-code-http', role: null, description: null, details: null, endpoint: null })
+    expect(nulled).toMatchObject({ role: 'implementer', details: '', endpoint: '' })
+  })
+
+  it('keeps the stored type and endpoint when the id path omits them', () => {
+    const agent = store.registerAgent({ name: 'Human', type: 'human', endpoint: 'ssh://k3s-node' })
+    const reregistered = store.registerAgent({ id: agent.id, name: 'Human', role: 'ops' })
+    expect(reregistered).toMatchObject({ id: agent.id, type: 'human', role: 'ops', endpoint: 'ssh://k3s-node' })
+    expectGanttError(
+      () => store.registerAgent({ id: agent.id, name: 'Human', type: 'robot' }),
+      `type must be one of ${AGENT_TYPES.join(', ')}`,
+    )
+    expectGanttError(() => store.registerAgent({ id: agent.id, name: 'Human', role: 7 }), 'role must be a string')
+    expect(store.getAgent(agent.id)).toMatchObject({ type: 'human', endpoint: 'ssh://k3s-node' })
   })
 
   it('updates by id and checks the unique name', () => {

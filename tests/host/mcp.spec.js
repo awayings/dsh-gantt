@@ -169,6 +169,46 @@ describe('tools/call', () => {
     expect(listed.agents.map(row => row.id)).toEqual([agent.id])
   })
 
+  it('keeps the dispatch contract when a minimal register re-registers identity', () => {
+    const full = toolJson(rpc({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'register_agent',
+        arguments: {
+          name: 'claude-code-http',
+          type: 'ai-agent',
+          role: 'implementer',
+          description: 'Claude Code on k3s-node over HTTP MCP via lo',
+          details: 'capabilities: coding\ndispatch: export PATH=$HOME/.local/bin:$PATH; nohup lo -p',
+          endpoint: 'ssh://k3s-node',
+        },
+      },
+    })).agent
+    // An installer's evidence call re-registers only the identity fields; the
+    // endpoint and the dispatch details must survive it.
+    const minimal = toolJson(rpc({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'register_agent',
+        arguments: {
+          name: 'claude-code-http',
+          type: 'ai-agent',
+          role: 'implementer',
+          description: 'Claude Code on k3s-node over HTTP MCP via lo',
+        },
+      },
+    })).agent
+    expect(minimal.id).toBe(full.id)
+    expect(minimal).toMatchObject({
+      details: 'capabilities: coding\ndispatch: export PATH=$HOME/.local/bin:$PATH; nohup lo -p',
+      endpoint: 'ssh://k3s-node',
+    })
+  })
+
   it('lists ready tasks and returns task context', () => {
     const task = store.create({ title: 'Ready task' })
     const ready = toolJson(rpc({

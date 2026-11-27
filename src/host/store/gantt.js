@@ -7,7 +7,7 @@ import { GanttError } from '../errors.js'
 import { DECOMPOSE_MAX_DEPTH, LINK_TYPES, TASK_KINDS, addDays, buildTree, computeBrief, deriveSummaryStatus, flattenTree, materializeTracker, matchesTagFilter, normalizeTagMode, parseLinks, parseLinksJson, slotForStart, summarize, todayIso } from '../tree.js'
 import { collectReadyTasks } from '../tree/ready.js'
 import { renderTaskContext } from '../tree/task-context.js'
-import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, agentNameMap, normalizeAgentFields, normalizeAgentFilter } from './agents.js'
+import { AGENT_SELECT, INSERT_AGENT, UPDATE_AGENT, agentNameMap, mergeAgentFields, normalizeAgentFields, normalizeAgentFilter, normalizeAgentName } from './agents.js'
 import { buildDailyReport, computeDailyBrief, dailyBrief, persistDailyBrief, previousDailyBriefs, readDailyBrief } from './brief.js'
 import { contextDocument } from './context.js'
 import { SCHEMA_VERSION, migrateDatabase, openDatabase, resolveDatabasePath } from './db.js'
@@ -763,15 +763,18 @@ export class GanttStore {
 
   /** Register or update an external operator. An existing id updates that row;
    * otherwise the name is the upsert key, so re-registering the same tool is
-   * idempotent.
+   * idempotent. Fields the call omits keep their stored values, so a minimal
+   * identity re-register never wipes the dispatch contract; providing a field,
+   * empty string included, overwrites it.
    * @param {AgentInput} [input]
    * @returns {AgentRow} */
   registerAgent(input = {}) {
     const id = typeof input.id === 'string' ? input.id.trim() : ''
-    const fields = normalizeAgentFields(input)
+    const name = normalizeAgentName(input)
     const now = new Date().toISOString()
     const existing = id === '' ? null : this.getAgent(id)
     if (existing !== null) {
+      const fields = mergeAgentFields(existing, input)
       const owner = /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE name = ?`).get(fields.name) ?? null)
       if (owner !== null && owner.id !== existing.id) throw new GanttError(`agent name ${fields.name} already exists`, 409)
       this.db.prepare(UPDATE_AGENT).run(
@@ -780,14 +783,16 @@ export class GanttStore {
       )
       return /** @type {AgentRow} */ (this.getAgent(existing.id))
     }
-    const byName = /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE name = ?`).get(fields.name) ?? null)
+    const byName = /** @type {AgentRow | null} */ (this.db.prepare(`${AGENT_SELECT} WHERE name = ?`).get(name) ?? null)
     if (byName !== null) {
+      const fields = mergeAgentFields(byName, input)
       this.db.prepare(UPDATE_AGENT).run(
         fields.name, fields.type, fields.role, fields.description, fields.details,
         fields.endpoint, now, byName.id,
       )
       return /** @type {AgentRow} */ (this.getAgent(byName.id))
     }
+    const fields = normalizeAgentFields(input)
     const created = randomUUID()
     this.db.prepare(INSERT_AGENT).run(
       created, fields.name, fields.type, fields.role, fields.description, fields.details,

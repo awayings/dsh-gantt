@@ -87,6 +87,10 @@ describe('POST /api/gantt/agents', () => {
     const id = first.payload.agent.id
     const second = await invoke(routes, ROUTES.registerAgent, { name: 'Codex', type: 'human', role: 'reviewer' })
     expect(second.payload.agent).toMatchObject({ id, type: 'human', role: 'reviewer' })
+    // Fields the body omits keep their stored values.
+    expect(second.payload.agent).toMatchObject({
+      description: 'writes code', details: 'details', endpoint: 'http://127.0.0.1:9000',
+    })
     expect((await invoke(routes, ROUTES.agents)).payload.agents).toHaveLength(1)
   })
 

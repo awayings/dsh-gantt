@@ -148,7 +148,7 @@ moment it is dispatched.
 export const MCP_TOOLS = /** @type {McpTool[]} */ ([
   {
     name: 'register_agent',
-    description: 'Register or update this coding tool as an operator. Re-registering the same name updates that agent and keeps its id; pass the returned name (or id) to later calls.',
+    description: 'Register or update this coding tool as an operator. Re-registering the same name updates that agent and keeps its id; fields you omit keep their stored values, so an identity re-register never clears the dispatch contract (endpoint, details). Pass the returned name (or id) to later calls.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

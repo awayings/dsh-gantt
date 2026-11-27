@@ -46,25 +46,75 @@ function textField(value, field) {
 }
 
 /**
+ * The registration name, shared by insert and update: required, trimmed,
+ * whitespace-collapsed, at most {@link MAX_AGENT_NAME} characters.
+ * @param {AgentInput} input
+ * @returns {string}
+ */
+export function normalizeAgentName(input) {
+  if (typeof input.name !== 'string') throw new GanttError('name is required')
+  const name = input.name.trim().replace(/\s+/g, ' ')
+  if (name === '') throw new GanttError('name is required')
+  if ([...name].length > MAX_AGENT_NAME) throw new GanttError(`name must be at most ${MAX_AGENT_NAME} characters`)
+  return name
+}
+
+/**
+ * The registration type: the `ai-agent` default when the call omits it, else
+ * one of {@link AGENT_TYPES}.
+ * @param {unknown} value
+ * @returns {'human' | 'ai-agent'}
+ */
+function normalizeType(value) {
+  if (value === undefined || value === null) return 'ai-agent'
+  const type = AGENT_TYPES.find(candidate => candidate === value)
+  if (type === undefined) throw new GanttError(`type must be one of ${AGENT_TYPES.join(', ')}`)
+  return type
+}
+
+/**
  * Validate and normalize one agent registration. The name is required and
  * unique within the store; the type defaults to `ai-agent`.
  * @param {AgentInput} [input]
  * @returns {AgentFields}
  */
 export function normalizeAgentFields(input = {}) {
-  if (typeof input.name !== 'string') throw new GanttError('name is required')
-  const name = input.name.trim().replace(/\s+/g, ' ')
-  if (name === '') throw new GanttError('name is required')
-  if ([...name].length > MAX_AGENT_NAME) throw new GanttError(`name must be at most ${MAX_AGENT_NAME} characters`)
-  const type = input.type === undefined || input.type === null ? 'ai-agent' : AGENT_TYPES.find(candidate => candidate === input.type)
-  if (type === undefined) throw new GanttError(`type must be one of ${AGENT_TYPES.join(', ')}`)
   return {
-    name,
-    type,
+    name: normalizeAgentName(input),
+    type: normalizeType(input.type),
     role: textField(input.role, 'role'),
     description: textField(input.description, 'description'),
     details: textField(input.details, 'details'),
     endpoint: textField(input.endpoint, 'endpoint'),
+  }
+}
+
+/**
+ * The fields of one agent re-registration: a field the call omits (undefined
+ * or null) keeps its stored value, so an identity-only re-register — an
+ * installer's evidence call passes just name/type/role/description — cannot
+ * wipe the dispatch contract (details, endpoint) an earlier fuller
+ * registration recorded. Providing a field, empty string included, still
+ * overwrites, so intentionally clearing a field keeps working.
+ * @param {AgentRow} existing
+ * @param {AgentInput} [input]
+ * @returns {AgentFields}
+ */
+export function mergeAgentFields(existing, input = {}) {
+  /**
+   * One stored-text field: the fallback when the call omits it, validated and
+   * trimmed when it provides one.
+   * @param {unknown} value @param {string} field @param {string} fallback
+   * @returns {string}
+   */
+  const pick = (value, field, fallback) => (value === undefined || value === null ? fallback : textField(value, field))
+  return {
+    name: normalizeAgentName(input),
+    type: input.type === undefined || input.type === null ? existing.type : normalizeType(input.type),
+    role: pick(input.role, 'role', existing.role),
+    description: pick(input.description, 'description', existing.description),
+    details: pick(input.details, 'details', existing.details),
+    endpoint: pick(input.endpoint, 'endpoint', existing.endpoint),
   }
 }
 

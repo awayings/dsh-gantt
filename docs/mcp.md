@@ -170,7 +170,10 @@ first.
 
 Registration is idempotent by `name`: registering the same name again updates
 that row and returns the same `id`. Passing an existing `id` updates by id; an
-unknown `id` falls back to the name upsert. Names are unique.
+unknown `id` falls back to the name upsert. Names are unique. A field the call
+omits keeps its stored value — a minimal identity re-register cannot wipe the
+dispatch contract an earlier registration recorded — while a provided field,
+empty string included, overwrites.
 
 | Parameter | Required | Notes |
 | --- | --- | --- |
