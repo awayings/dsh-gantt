@@ -9,7 +9,8 @@ by a local SQLite database and an authenticated JSON API.
   route/tool/prompt registration; `routes/` holds twenty-eight route specs incl.
   `focus.js`/trajectory, `work.js`, and `agents.js` (plumbing in `http.js`);
   `store/` owns SQLite, briefs, `task_events`, the agent registry, the task ⇄
-  work-conversation mapping, and the long-run knowledge table; `tracker/` parses the tracker markdown; `tree/` holds pure
+  work-conversation mapping, the long-run knowledge table, and the
+  dispatch-notice ledger; `tracker/` parses the tracker markdown; `tree/` holds pure
   tree/brief/context/chain helpers; `clock.js` resolves task-day dates; `daily/`
   builds the daily report; `tools.js` declares the six assistant tools and records
   provenance; `knowledge.js` declares the knowledge pair only the gantt-long-run
@@ -18,6 +19,8 @@ by a local SQLite database and an authenticated JSON API.
   whose ssh entry (`dispatch-ssh.js`) rides `remote.js`/`remote-guard.js` (the
   shared guarded-SSH mechanics the manual `scripts/remote-exec.mjs` CLI also
   uses; a daemon transport that connects back to the server is planned);
+  `notify.js` drains completed dispatch notices by steering the delegating
+  conversation through the live `agents` service;
   `long-run.js` is that preset's plugin entry (declared in
   `cordis.patch.yml`); `mcp.js` is the external-agent JSON-RPC server behind
   `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.

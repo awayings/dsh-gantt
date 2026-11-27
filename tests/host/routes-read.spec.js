@@ -68,7 +68,43 @@ describe('route registration', () => {
         connection: { fetch: { register: () => {} } },
       }
       apply(ctx)
-      expect(injected).toEqual([['systemPrompt'], ['tools']])
+      expect(injected).toEqual([['systemPrompt'], ['tools'], ['agents']])
+      // No agents service: the base registrations only — the notice drainer
+      // is simply absent.
+      expect(disposers).toHaveLength(5)
+      disposeAll(disposers)
+    } finally {
+      if (saved === undefined) delete process.env.DSH_GANTT_DB
+      else process.env.DSH_GANTT_DB = saved
+    }
+  })
+
+  it('starts the notice drainer when the agents service is present', () => {
+    const saved = process.env.DSH_GANTT_DB
+    process.env.DSH_GANTT_DB = ':memory:'
+    try {
+      const disposers = []
+      const ctx = {
+        effect(fn) {
+          const dispose = fn()
+          disposers.push(dispose)
+          return dispose
+        },
+        inject(deps, callback) {
+          callback(ctx)
+        },
+        get(name) {
+          if (name === 'tools') return { register: () => () => {} }
+          if (name === 'agents') return { get: () => undefined }
+          return undefined
+        },
+        systemPrompt: { section: () => () => {}, context: () => () => {} },
+        connection: { fetch: { register: () => {} } },
+      }
+      apply(ctx)
+      // One more effect than the no-agents case: the notice drainer's disposer.
+      expect(disposers).toHaveLength(6)
+      expect(typeof disposers[5]).toBe('function')
       disposeAll(disposers)
     } finally {
       if (saved === undefined) delete process.env.DSH_GANTT_DB

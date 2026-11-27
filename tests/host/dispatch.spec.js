@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildDelegateBrief, capabilitiesOf, defaultAuditLog, DISPATCH_TOOL_NAMES, dispatchToolDefinitions, registerDispatchTools } from '../../src/host/dispatch.js'
 import { dispatchCommandOf, parseSshEndpoint } from '../../src/host/dispatch-ssh.js'
 import { GanttStore } from '../../src/host/store.js'
+import { pendingDispatchNotices } from '../../src/host/store/notify.js'
 import { makeTempDir, removeTempDir } from '../helpers/gantt.js'
 
 /** A fake ssh child: collects stdin, emits data/close/error on demand. */
@@ -189,6 +190,26 @@ describe('gantt_delegate', () => {
     expect(store.trajectory({ taskId: task.id, limit: 8 }).some(event => event.detail.includes('delegated 执行 to pve-oc'))).toBe(true)
     expect(value.message).toContain('已把 1.1 Run the probe 委派给 pve-oc（执行）')
     expect(value.message).toContain('操作人已记为 pve-oc')
+    expect(value.message).toContain('轻量状态通知')
+  })
+
+  it('arms a dispatch notice for the delegating session', async () => {
+    const { task, agent } = seedAgent()
+    const child = new FakeChild()
+    const value = await delegate({ agent: agent.name }, child)
+    expect(value.ok).toBe(true)
+    // Armed, not completed: nothing is pending delivery yet.
+    expect(pendingDispatchNotices(store)).toEqual([])
+    const rows = store.db.prepare('SELECT task_id AS taskId, session_id AS sessionId, status, delivered_at AS deliveredAt FROM dispatch_notices').all()
+    expect(rows).toEqual([{ taskId: task.id, sessionId: 'session-a', status: '', deliveredAt: null }])
+  })
+
+  it('arms nothing when the delegation has no calling conversation', async () => {
+    const { task, agent } = seedAgent()
+    const child = new FakeChild()
+    const value = await delegateTool(child).execute({ id: task.id, agent: agent.name }, {})
+    expect(/** @type {any} */ (value).ok).toBe(true)
+    expect(store.db.prepare('SELECT COUNT(*) AS count FROM dispatch_notices').get().count).toBe(0)
   })
 
   it('substitutes {prompt} inline instead of piping stdin', async () => {

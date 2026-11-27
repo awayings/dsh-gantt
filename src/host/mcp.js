@@ -1,9 +1,13 @@
 // Minimal hand-written MCP (Model Context Protocol) server logic. It speaks
 // JSON-RPC 2.0 over newline-delimited stdio or a single POST body, exposes the
 // external-agent tools (the same read/write surface the in-process assistant
-// tools have), and never depends on a protocol SDK.
+// tools have), and never depends on a protocol SDK. A status write-back on a
+// task delegated through `gantt_delegate` also completes the armed
+// dispatch-notice row, so the dispatching conversation hears without polling
+// (the host plugin drains the notices).
 
 import { GanttError } from './errors.js'
+import { NOTICE_STATUSES, completeDispatchNotice } from './store/notify.js'
 import { resolveTaskId } from './tools.js'
 
 /** The MCP revision this server implements. */
@@ -509,7 +513,18 @@ function callTool(store, name, args) {
     if (Object.keys(patch).length === 0) throw new GanttError('nothing to update')
     // Claim an unowned task; never steal one that already names an operator.
     if (agent !== null && store.requireRow(taskId).operatorId === '') patch.operatorId = agent.id
-    return { ok: true, task: store.update(taskId, patch, originOf(args, agent, args.summary)) }
+    const task = store.update(taskId, patch, originOf(args, agent, args.summary))
+    // A status/progress write that lands the task in a terminal or attention
+    // state completes the armed dispatch notice, so the conversation that
+    // delegated this task hears about the write-back without polling. Silent
+    // when the task was never delegated through the tool.
+    if (patch.status !== undefined || patch.progress !== undefined) {
+      const status = store.requireRow(taskId).status
+      if (NOTICE_STATUSES.includes(status)) {
+        completeDispatchNotice(store, taskId, { status, agentName: agent === null ? '' : agent.name })
+      }
+    }
+    return { ok: true, task }
   }
   if (name === 'track_task') {
     const agent = resolveAgent(store, args)
@@ -528,10 +543,11 @@ function callTool(store, name, args) {
   if (name === 'report_completion') {
     const agent = resolveAgent(store, args)
     if (agent === null) throw new GanttError('agentId or agentName is required')
-    return {
+    const taskId = resolveTaskId(store, args.taskId)
+    const result = {
       ok: true,
       ...store.reportCompletion({
-        taskId: resolveTaskId(store, args.taskId),
+        taskId,
         agentId: agent.id,
         report: args.report,
         status: args.status,
@@ -539,6 +555,12 @@ function callTool(store, name, args) {
         session: sessionKey(args, agent),
       }),
     }
+    // The completion report always completes the armed dispatch notice: the
+    // conversation that delegated this task is steered with the resulting
+    // status, whatever vocabulary the report carried. Silent when the task was
+    // never delegated through the tool.
+    completeDispatchNotice(store, taskId, { status: store.requireRow(taskId).status, agentName: agent.name })
+    return result
   }
   if (name === 'get_worker_guide') {
     return { ok: true, markdown: WORKER_GUIDE }

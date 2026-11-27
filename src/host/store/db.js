@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite'
 /** @typedef {import('../tree.js').SnapshotNode} SnapshotNode */
 /** @typedef {import('../tree.js').SnapshotTrack} SnapshotTrack */
 
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 /** Columns added by schema v3, v4, v8, and v9; the migration appends whichever is missing. @type {Record<string, string>} */
 const TASK_EXTRA_COLUMNS = { kind: "TEXT NOT NULL DEFAULT 'task'", ref: "TEXT NOT NULL DEFAULT ''", state: "TEXT NOT NULL DEFAULT ''", lane: "TEXT NOT NULL DEFAULT ''", dep: "TEXT NOT NULL DEFAULT ''", done_when: "TEXT NOT NULL DEFAULT ''", landing: "TEXT NOT NULL DEFAULT ''", estimate: "TEXT NOT NULL DEFAULT ''", category: "TEXT NOT NULL DEFAULT ''", inspiration: "TEXT NOT NULL DEFAULT ''", links: "TEXT NOT NULL DEFAULT '[]'", tags: "TEXT NOT NULL DEFAULT '[]'", source: "TEXT NOT NULL DEFAULT 'manual'", operator_id: "TEXT NOT NULL DEFAULT ''", completed_by_id: "TEXT NOT NULL DEFAULT ''", report: "TEXT NOT NULL DEFAULT ''" }
@@ -95,6 +95,18 @@ const CREATE_SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS idx_knowledge_task ON knowledge_entries(task_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_knowledge_kind ON knowledge_entries(kind, created_at);
+  CREATE TABLE IF NOT EXISTS dispatch_notices (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '' CHECK (status IN ('', 'todo', 'in_progress', 'blocked', 'done', 'cancelled')),
+    agent_name TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    delivered_at TEXT,
+    outcome TEXT NOT NULL DEFAULT '' CHECK (outcome IN ('', 'steered', 'expired'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_dispatch_notices_pending ON dispatch_notices(delivered_at, created_at);
 `
 
 /**

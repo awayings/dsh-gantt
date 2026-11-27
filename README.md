@@ -111,7 +111,7 @@ DSH_GANTT_DB=/absolute/path/to/tasks.db DSH_GANTT_TZ=Asia/Shanghai dsh web
 
 ### Schema 版本与表角色
 
-Schema 首次激活时创建、打开时原地升级，当前版本 **10**：v9 给 `tasks` 加 `tags` 标签列，v10 加 `knowledge_entries` 知识表；更早的库（v1–v9）在打开时逐步迁上来（迁移与一次性回填见 [docs/compatibility.md](docs/compatibility.md)）。日期是任务日时区的 `YYYY-MM-DD`；任务状态 ∈ `todo` / `in_progress` / `blocked` / `done` / `cancelled`；计划块状态 ∈ `todo` / `in_progress` / `done` / `skipped`。
+Schema 首次激活时创建、打开时原地升级，当前版本 **11**：v9 给 `tasks` 加 `tags` 标签列，v10 加 `knowledge_entries` 知识表，v11 加 `dispatch_notices` 远程完成通知账本；更早的库（v1–v10）在打开时逐步迁上来（迁移与一次性回填见 [docs/compatibility.md](docs/compatibility.md)）。日期是任务日时区的 `YYYY-MM-DD`；任务状态 ∈ `todo` / `in_progress` / `blocked` / `done` / `cancelled`；计划块状态 ∈ `todo` / `in_progress` / `done` / `skipped`。
 
 `tasks` 是唯一工作树：`kind='track'` 的六条导入支线做根、`kind='node'` 的导入 Hermes 节点、`kind='task'` 的手工与拆解任务。每行带 tracker 的 `ref` / `state` / `lane` / `dep` / `done_when` / `landing` / `estimate` / `category` / `inspiration`，插件的 `links` / `tags`，以及外部执行写回列 `operator_id` / `completed_by_id` / `report`；导入行 `(kind, ref)` 唯一，重导即 upsert，撞键 409。
 
@@ -127,6 +127,7 @@ Schema 首次激活时创建、打开时原地升级，当前版本 **10**：v9 
 | `work_sessions` | 任务 ⇄ 内容专用主会话 的映射：会话 id 唯一 |
 | `agents` | 外部操作者注册表（human / ai-agent） |
 | `knowledge_entries` | 长跑派单层的判定与经验：kind、标题、正文、可选任务关联、标签、溯源 |
+| `dispatch_notices` | 远程完成通知账本：委派时挂账（任务 + 分发会话），MCP 写回状态时补全，host 定时排空并 steer 进分发会话；任务树仍是唯一状态权威 |
 
 导入器先写快照层，再在同一个 `BEGIN IMMEDIATE` 事务里物化进 `tasks`，两层保持同步。导入是显式、幂等的拉取——默认读 `/data/home/clawd/projects/task-tracker`（`DSH_GANTT_TRACKER_DIR` 覆盖）的 markdown 工作区（`SCHEDULE.md`、`TREE.md`、`daily/*.md`），无 watcher、不回写。领域模型与完整性检查见 [docs/personal-task-system.md](docs/personal-task-system.md)。
 
@@ -256,7 +257,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 | 工具 | 说明 |
 | --- | --- |
 | `gantt_agents` | 列出 MCP 注册的外部 Agent 及其能力、可远程派发的 endpoint 方案与 dispatch 命令；委派前先看它定归属与接单人 |
-| `gantt_delegate` | 把甘特任务委派给注册远程 Agent：按 endpoint 方案选投递通道（当前为 SSH——以它登记的无头命令在远端启动它），自包含简报（点号编号、标题、完成标准、执行说明、补充要求）发出。`goal=execute` 执行并自上报，`goal=decompose` 只拆解（领域知识在远端时用这个）；操作人记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树 |
+| `gantt_delegate` | 把甘特任务委派给注册远程 Agent：按 endpoint 方案选投递通道（当前为 SSH——以它登记的无头命令在远端启动它），自包含简报（点号编号、标题、完成标准、执行说明、补充要求）发出。`goal=execute` 执行并自上报，`goal=decompose` 只拆解（领域知识在远端时用这个）；操作人记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树，`execute` 派发在 done/blocked/cancelled 落库时本会话自动收到一条轻量状态通知（点号+状态，不含报告） |
 
 执行兜底 `gantt_execute`：由 DSH 内置 `@deepseek-ai/dsh-tool-subagent` 提供的委派工具（`cordis.patch.yml` 配置 `toolName: gantt_execute`、`agentPreset: standard`，无模型可见覆盖）——没有能力匹配的远程 Agent 时，执行落在带全量工具集与任务协议的标准模式 subagent 上。
 
@@ -311,7 +312,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 
 安装本 bundle 同时声明第二个 agent preset——**甘特长城**（`gantt-long-run`），用于轻量派单会话。它的 persona 是完整的：派单协议本身就是整个系统提示词，host 任务协议不绑定这些会话。每轮把落点判定收口成三种之一（用户点名的挂现有任务、落点下新建子任务、或直接回答），可选 web 搜索补判定素材，经 `gantt_knowledge_save` 存判定的评价与教训，然后把执行交给能做的人：
 
-- **远程 Agent**：`gantt_agents` 列出 MCP 注册的操作者及各自能力；`gantt_delegate` 认领任务的操作者，把简报经其登记的 `dispatch:` 命令走 SSH 转发——与 `scripts/remote-exec.mjs` 同一守卫与审计日志——拿到启动 ack 即返回，远端 worker 自己经 gantt MCP 面上报结果。
+- **远程 Agent**：`gantt_agents` 列出 MCP 注册的操作者及各自能力；`gantt_delegate` 认领任务的操作者，把简报经其登记的 `dispatch:` 命令走 SSH 转发——与 `scripts/remote-exec.mjs` 同一守卫与审计日志——拿到启动 ack 即返回，远端 worker 自己经 gantt MCP 面上报结果。`report_completion` 或 done/blocked/cancelled 的 `update_task` 落库时，插件在本进程内把一条轻量通知（点号+状态，不含报告正文）steer 进分发会话：分发会话无需等下一轮 `gantt_context` 才看到变化，醒来后照旧读轨迹转告用户；状态权威始终在任务树与轨迹里。
 - **本地兜底**：`gantt_execute` 委派工具派给标准模式 subagent（`agentPreset: standard`，无模型可见覆盖），执行落在带全量工具集与任务协议的 subagent 上。
 
 领域知识在远端时，也可让远程 Agent 只拆解（`goal=decompose`）。派发简报——用户原话、30 字内路由注记、相关链接——存进子任务的 `description`，工作台按 markdown 渲染；prompt 引用它，因为无论 spawned executor 还是远端 worker 都读不到任务树。知识对与派发对只在本 preset 可见；每条知识存同一 SQLite 库（`knowledge_entries`），关联落点任务，任务没了也只解绑、永不删行。派单者原样转达收尾报告、对 executor 交回的东西重新定位。persona 镜像在 [docs/long-run-persona.md](docs/long-run-persona.md) 供阅读，`tests/host/preset.spec.js` 逐字节 pin 住。
@@ -357,7 +358,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 | `src/host/index.js` | 插件入口：store 生命周期、08:00 调度器、路由 / 助手工具 / prompt 注册 |
 | `src/host/prompt.js` | 任务协议节（四工具收尾要求）与会话聚焦上下文注入 |
 | `src/host/routes/` | 28 条 `/api/gantt/*` 路由 spec 按资源分文件（含 `focus.js`、轨迹读取、`work.js`、`agents.js`）；`http.js` 共享管道 |
-| `src/host/store/` | SQLite schema 与迁移（`db.js`）、任务/树写入、轨迹 `task_events`、Agent 注册表、任务⇄工作会话映射、知识表（`knowledge.js`）、08:00 调度器（`scheduler.js`）、简报持久化、上下文文档 |
+| `src/host/store/` | SQLite schema 与迁移（`db.js`）、任务/树写入、轨迹 `task_events`、Agent 注册表、任务⇄工作会话映射、知识表（`knowledge.js`）、通知账本（`notify.js`）、08:00 调度器（`scheduler.js`）、简报持久化、上下文文档 |
 | `src/host/store.js` / `tree.js` / `tracker.js` / `daily.js` | 四个纯 re-export 门面，为测试保持公共面稳定 |
 | `src/host/errors.js` | `GanttError`：带 HTTP 状态码的错误类型 |
 | `src/host/work.js` | 专用会话的工作目录（`DSH_GANTT_WORK_CWD`） |
@@ -368,7 +369,8 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 | `src/host/daily/` | 每日该动报告：窗口、角色预算、公平性、报告渲染 |
 | `src/host/tools.js` | 六件套助手工具、任务引用解析（内部 id / 点号 id / 编号）、自动溯源记录 |
 | `src/host/knowledge.js` | preset 专属知识对（`gantt_knowledge_save` / `gantt_knowledge_query`） |
-| `src/host/dispatch.js` | preset 专属派发对（`gantt_agents` / `gantt_delegate`）：endpoint 方案 transport 表（当前 SSH；daemon 直连在规划）、注册列表、自包含简报 |
+| `src/host/dispatch.js` | preset 专属派发对（`gantt_agents` / `gantt_delegate`）：endpoint 方案 transport 表（当前 SSH；daemon 直连在规划）、注册列表、自包含简报、委派挂账通知 |
+| `src/host/notify.js` | 远程完成通知排空：定时把补全的 `dispatch_notices` 以一条轻量消息 steer 进分发会话（`agents` 服务，at-least-once + 过期清扫） |
 | `src/host/dispatch-ssh.js` | SSH 派发 transport：解析 Agent 的 `ssh://` endpoint 与 `dispatch:` 命令，守卫下转发一条简报 |
 | `src/host/remote.js` / `remote-guard.js` | 共享 SSH 转发机制与破坏性命令安全门，`dispatch.js` 与手工 `scripts/remote-exec.mjs` CLI 同用 |
 | `src/host/long-run.js` | 甘特长城 preset 的插件入口（`cordis.patch.yml` 行挂载） |

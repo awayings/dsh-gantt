@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { GanttError } from './errors.js'
 import { sshTransport } from './dispatch-ssh.js'
+import { armDispatchNotice } from './store/notify.js'
 import { resolveDatabasePath } from './store.js'
 import { resolveTarget, sessionOriginOf } from './tools.js'
 
@@ -251,7 +252,7 @@ export function dispatchToolDefinitions(store, options = {}) {
     },
     {
       name: DISPATCH_TOOL_NAMES.delegate,
-      description: '把一个甘特任务委派给注册的远程 Agent：按其 endpoint 方案选择投递通道（当前为 SSH——以它登记的无头命令在远端启动它），任务简报（点号编号、标题、完成标准、执行说明、补充要求）自包含发出。goal=execute 让它执行并自上报，goal=decompose 让它拆解（领域知识在它那边时用这个）。操作人会记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树。',
+      description: '把一个甘特任务委派给注册的远程 Agent：按其 endpoint 方案选择投递通道（当前为 SSH——以它登记的无头命令在远端启动它），任务简报（点号编号、标题、完成标准、执行说明、补充要求）自包含发出。goal=execute 让它执行并自上报，goal=decompose 让它拆解（领域知识在它那边时用这个）。操作人会记为该 Agent；派发不等结果，远端完成后经 MCP 写回任务树，execute 派发在完成/受阻（done/blocked/cancelled）落库时本会话自动收到一条轻量状态通知（点号+状态，不含报告）。',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -299,9 +300,17 @@ export function dispatchToolDefinitions(store, options = {}) {
         if (claimed) store.update(taskId, { operatorId: agent.id }, origin === undefined ? undefined : { ...origin, summary: `委派给 ${agent.name}（${GOAL_LABELS[goal]}）` })
         if (origin !== undefined) {
           store.recordTrack({ taskId, sessionId: origin.sessionId, turn: origin.turn, detail: `delegated ${GOAL_LABELS[goal]} to ${agent.name} over ${transport.id}` })
+          // Arm the completion notice: when the remote worker writes a
+          // done/blocked/cancelled status back through the MCP surface, this
+          // conversation gets one lightweight steered message instead of
+          // waiting for its next gantt_context read.
+          armDispatchNotice(store, taskId, origin.sessionId)
         }
         const claimNote = claimed ? `操作人已记为 ${agent.name}。` : '任务已有操作人，未改动。'
-        return { ok: true, message: `已把 ${label} ${task.title} 委派给 ${agent.name}（${GOAL_LABELS[goal]}）：${result.message}${claimNote}` }
+        const notifyNote = origin !== undefined && goal === 'execute'
+          ? '它完成或受阻（done/blocked/cancelled）写回时，本会话会自动收到一条轻量状态通知，转告用户前用 gantt_context 读汇报原文。'
+          : `它写回后${goal === 'decompose' ? '用 gantt_context 查看拆解结果' : '经 gantt_context 查看任务轨迹'}。`
+        return { ok: true, message: `已把 ${label} ${task.title} 委派给 ${agent.name}（${GOAL_LABELS[goal]}）：${result.message}${claimNote}${notifyNote}` }
       },
     },
   ]
