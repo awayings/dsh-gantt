@@ -82,8 +82,10 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   artifact → real HTTP → real SQLite; small, behavior only). Narrowest run
   first: `pnpm exec vitest run tests/<area>/<file>.spec.js -t "<case>"`.
   Cover hostile input and validation failures.
-- English only in code, comments, tests, docs, and commits. UI copy: `en` + `zh`
-  dictionaries complete and in parity, every string through `t()`.
+- English only in code, comments, tests, and commits. Docs may be Chinese:
+  `README.md` is maintained in Chinese; `docs/` pages stay English unless a
+  task rewrites them. UI copy: `en` + `zh` dictionaries complete and in parity,
+  every string through `t()`.
 - JSDoc on exported types/functions; prose comments only for non-obvious
   platform constraints (e.g. the artifact revision rule), never line narration.
 - Temp files only in `.tmp` (gitignored); delete them after use.
@@ -117,6 +119,7 @@ No pull requests: work commits straight to `main`, gated by two local hooks.
   The deployed profile pins the release tarball (`file:`), so this checkout is
   not live there: re-link with `pnpm run deploy` before iterating and repackage
   to ship (`docs/development.md`, "Iterating against a pinned deployment").
-- `docs/` is lowercase, English, links kept valid. Details — setup, test layout,
-  manual checklist, acceptance pass, API — in `docs/development.md`,
-  `docs/api.md`, `docs/compatibility.md`.
+- `docs/` is lowercase, links kept valid; language per Rules (Chinese
+  `README.md`, English `docs/` pages unless a task rewrites them). Details —
+  setup, test layout, manual checklist, acceptance pass, API — in
+  `docs/development.md`, `docs/api.md`, `docs/compatibility.md`.

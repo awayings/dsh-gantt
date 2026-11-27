@@ -2,13 +2,14 @@
 
 `dsh-gantt` is a DeepSeek Harness Web UI plugin: a hierarchical task tree, a
 personal day plan, a deterministic daily 该动 brief, and an authenticated JSON
-API, backed by SQLite. The host half is seven ESM modules under `src/host/`; the
+API, backed by SQLite. The host half is ESM under `src/host/`, organized by
+resource (`routes/`, `store/`, `tree/`, `tracker/`, `daily/`); the
 browser half is ESM under `src/client/` bundled into the single `lib/client.js`
 artifact. The
 Gantt page and the Today page render one unified tree
 imported from an external task-tracker workspace; the Gantt page adds one
 label row that mixes the predefined views (unfinished / active / frontier /
-next / today / done) with manual `#tags` as a union filter, and a native
+next / today / done / inspiration) with manual `#tags` as a union filter, and a native
 conversation gets a right-rail **甘特** tab
 plus host assistant tools for focused-task context, decomposition, and automatic
 session/turn provenance. Start with the [README](../README.md) for installation
