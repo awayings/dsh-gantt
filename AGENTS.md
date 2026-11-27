@@ -21,6 +21,10 @@ by a local SQLite database and an authenticated JSON API.
   uses; a daemon transport that connects back to the server is planned);
   `notify.js` drains completed dispatch notices by steering the delegating
   conversation through the live `agents` service;
+  `dispatch-skill.js` registers the packaged dispatch manual
+  (`skills/gantt-dispatch-flow/SKILL.md`) as a bundled skill in the same preset
+  layer, so the manual ships with the plugin tarball, only gantt-long-run
+  conversations ever list it, and a same-named local skill outranks it;
   `long-run.js` is that preset's plugin entry (declared in
   `cordis.patch.yml`); `mcp.js` is the external-agent JSON-RPC server behind
   `bin/gantt-mcp.js`. Four facades keep the public surface stable for tests.

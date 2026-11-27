@@ -1,14 +1,15 @@
 // The gantt-long-run preset plugin, mounted by the bundle's preset
 // declaration. It exists on the preset plane: the host gantt plugin keeps the
 // tree, the routes, the scheduler, and the six task tools for every
-// conversation, while this plugin registers the knowledge pair and the
-// delegation pair only inside the dispatch composition, so a standard
-// conversation never sees them. The store handle is a second SQLite
-// connection to the shared database — WAL plus the busy timeout let it sit
-// beside the host plugin's connection, the same way the gantt-mcp sidecar's
-// does — and it opens without the 08:00 scheduler, which stays owned by the
-// host.
+// conversation, while this plugin registers the knowledge pair, the delegation
+// pair, and the packaged dispatch manual's bundled skill only inside the
+// dispatch composition, so a standard conversation never sees them. The store
+// handle is a second SQLite connection to the shared database — WAL plus the
+// busy timeout let it sit beside the host plugin's connection, the same way
+// the gantt-mcp sidecar's does — and it opens without the 08:00 scheduler,
+// which stays owned by the host.
 
+import { registerDispatchSkill } from './dispatch-skill.js'
 import { registerDispatchTools } from './dispatch.js'
 import { registerKnowledgeTools } from './knowledge.js'
 import { GanttStore, resolveDatabasePath } from './store.js'
@@ -16,12 +17,12 @@ import { GanttStore, resolveDatabasePath } from './store.js'
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'gantt/long-run'
 
-/** The preset composition always provides the tools service before apply. */
-export const inject = ['tools']
+/** The preset composition always provides the tools and skills services before apply. */
+export const inject = ['tools', 'skills']
 
 /**
- * Open the shared store and register the preset's tools in this preset's
- * tools layer; the fiber disposer closes the handle.
+ * Open the shared store and register the preset's tools and bundled skill in
+ * this preset's layers; the fiber disposer closes the handle.
  * @param {{ get?: (name: string) => unknown, effect: (fn: () => () => void, hint?: string) => unknown }} ctx
  * @returns {void}
  */
@@ -30,4 +31,5 @@ export function apply(ctx) {
   ctx.effect(() => () => store.close(), 'gantt long-run: close the knowledge store')
   registerKnowledgeTools(ctx, store)
   registerDispatchTools(ctx, store)
+  registerDispatchSkill(ctx)
 }

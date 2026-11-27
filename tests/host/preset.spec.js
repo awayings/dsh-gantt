@@ -61,6 +61,16 @@ describe('gantt-long-run preset wiring', () => {
     expect(patch).not.toContain('preset-standard')
   })
 
+  it('scopes the dispatch manual skill to the preset composition only', () => {
+    // A second long-run mount or a host-level registration would leak the
+    // manual into every conversation, so pin both sides of that contract.
+    const mounts = patch.match(/@local\/dsh-gantt\/long-run/g) ?? []
+    expect(mounts).toHaveLength(1)
+    const hostEntry = fs.readFileSync(path.join(ROOT, 'src/host/index.js'), 'utf8')
+    expect(hostEntry).not.toContain('dispatch-skill')
+    expect(hostEntry).not.toContain('registerProvider')
+  })
+
   it('mirrors the shipped persona in docs/long-run-persona.md', () => {
     const persona = personaPrefix()
     expect(persona).toContain('你是甘特长城分发者')
