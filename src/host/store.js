@@ -18,6 +18,8 @@ export { DEFAULT_WORK_CWD, resolveWorkCwd } from './work.js'
 /** @typedef {import('./store/gantt.js').ContextTask} ContextTask */
 /** @typedef {import('./store/gantt.js').ReadyTask} ReadyTask */
 /** @typedef {import('./store/gantt.js').ReadyTasksInput} ReadyTasksInput */
+/** @typedef {import('./store/search.js').SearchTask} SearchTask */
+/** @typedef {import('./store/search.js').SearchTasksInput} SearchTasksInput */
 /** @typedef {import('./store/gantt.js').ReportCompletionInput} ReportCompletionInput */
 /** @typedef {import('./tree/ready.js').ReadyTag} ReadyTag */
 /** @typedef {import('./store/plan.js').BlockDraft} BlockDraft */
