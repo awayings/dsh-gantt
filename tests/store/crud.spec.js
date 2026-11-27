@@ -32,6 +32,20 @@ describe('create defaults and explicit fields', () => {
     expectIsoTimestamp(task.updatedAt)
   })
 
+  it('defaults a new child to the later of today and the parent\'s start', () => {
+    const today = todayIso()
+    const past = store.create({ title: 'Past', startDate: addDays(today, -10), endDate: addDays(today, -5) })
+    const underPast = store.create({ title: 'Under past', parentId: past.id })
+    expect(underPast.startDate).toBe(today)
+    expect(underPast.endDate).toBe(addDays(today, 3))
+    const future = store.create({ title: 'Future', startDate: addDays(today, 10), endDate: addDays(today, 40) })
+    const underFuture = store.create({ title: 'Under future', parentId: future.id })
+    expect(underFuture.startDate).toBe(addDays(today, 10))
+    expect(underFuture.endDate).toBe(addDays(today, 13))
+    const explicit = store.create({ title: 'Explicit', parentId: future.id, startDate: addDays(today, 12), endDate: addDays(today, 14) })
+    expect(explicit.startDate).toBe(addDays(today, 12))
+  })
+
   it('honors every explicit field and derives progress from status', () => {
     const parent = store.create({
       title: 'Parent',

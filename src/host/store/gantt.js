@@ -287,11 +287,11 @@ export class GanttStore {
   /** @param {TaskInput} [input] @returns {TaskNode | null} */
   create(input = {}) {
     const parentId = normalizeParent(input.parentId)
-    if (parentId !== null) this.requireRow(parentId)
+    const parent = parentId === null ? null : this.requireRow(parentId)
     const kind = normalizeKind(input.kind)
     const ref = normalizeRef(input.ref)
     if (ref !== '') this.assertRefFree(kind, ref)
-    const fields = this.normalizeCreateFields(input)
+    const fields = this.normalizeCreateFields(input, parent === null ? null : parent.startDate)
     const id = this.transaction(() => {
       const created = this.insertTask({ parentId, ...fields, sortOrder: this.nextSortOrder(parentId), kind, ref, state: '', source: 'manual' })
       this.recomputeAncestors(parentId)
@@ -301,16 +301,20 @@ export class GanttStore {
   }
 
   /** Validate the task fields shared by {@link create} and {@link createSibling}.
-   * @param {TaskInput} input @returns {{ title: string, description: string, status: TaskStatus,
+   * @param {TaskInput} input
+   * @param {string | null} [parentStartDate] The chosen parent's own start date;
+   * an omitted startDate defaults to the later of today and it.
+   * @returns {{ title: string, description: string, status: TaskStatus,
    * progress: number, startDate: string, endDate: string, lane: string, dep: string, doneWhen: string,
    * landing: string, estimate: string, category: string, inspiration: string, links: TaskLink[],
    * tags: string[], operatorId: string, completedById: string, report: string }} */
-  normalizeCreateFields(input) {
+  normalizeCreateFields(input, parentStartDate = null) {
     const title = normalizeTitle(input.title)
     const description = normalizeDescription(input.description)
     const status = normalizeStatus(input.status ?? 'todo')
     const progress = input.progress === undefined ? defaultProgress(status) : normalizeProgress(input.progress)
-    const startDate = assertDate(input.startDate ?? todayIso(), 'startDate')
+    const today = todayIso()
+    const startDate = assertDate(input.startDate ?? (parentStartDate !== null && parentStartDate > today ? parentStartDate : today), 'startDate')
     const endDate = assertDate(input.endDate ?? addDays(startDate, 3), 'endDate')
     assertRange(startDate, endDate)
     return {
@@ -336,9 +340,9 @@ export class GanttStore {
    * @returns {TaskNode} */
   createSibling(referenceId, input = {}, origin) {
     const reference = this.requireRow(referenceId)
-    const fields = this.normalizeCreateFields(input)
-    const referenceLabel = taskLabel(/** @type {TaskNode} */ (this.getNode(reference.id)))
     const parentId = reference.parentId
+    const fields = this.normalizeCreateFields(input, parentId === null ? null : this.requireRow(parentId).startDate)
+    const referenceLabel = taskLabel(/** @type {TaskNode} */ (this.getNode(reference.id)))
     const id = this.transaction(() => {
       const sortOrder = reference.sortOrder + 1
       this.db.prepare('UPDATE tasks SET sort_order = sort_order + 1 WHERE parent_id IS ? AND sort_order >= ?').run(parentId, sortOrder)

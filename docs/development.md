@@ -169,8 +169,9 @@ travel into `dragSteps`/`dragRange` with window-level listeners, and
 `pages/gantt.js` holds the preview state and the single commit. A pointer
 travel shorter than half a cell stays a click and still opens the edit dialog;
 the click that ends a real drag is swallowed. New tasks created from the dialog
-start on the creation day (the tree payload's `today`), not on the parent's
-range.
+default to the later of the creation day (the tree payload's `today`) and the
+chosen parent's own start date — a parent switch keeps re-defaulting the range
+until the user edits a date manually.
 
 ## Quality gate commands
 

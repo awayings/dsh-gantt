@@ -289,7 +289,7 @@ newest recorded events. Unknown ids are `isError` text `task … was not found`.
 | `inspiration` | no | Source of the idea, kept verbatim; a new todo with this and no doneWhen renders unshaped |
 | `category` | no | Optional category |
 | `status` | no | Status vocabulary; default `todo` |
-| `startDate` / `endDate` | no | `YYYY-MM-DD`; default today and start + 3 days |
+| `startDate` / `endDate` | no | `YYYY-MM-DD`; default the later of today and the parent task's start, then + 3 days |
 | `agentName` | no | Registered agent recorded as `operatorId` when the task has none |
 | `session` | no | The worker's own conversation/run id, recorded in the trajectory |
 

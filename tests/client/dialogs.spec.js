@@ -108,7 +108,7 @@ describe('create dialog', () => {
     const fields = openCreate(view)
 
     expect(dialogTitle(view.container)).toBe('New task')
-    // A new task starts on the task-day today, not on a parent range.
+    // A root create has no parent, so the default is the task-day today.
     expect(fields.start.value).toBe('2026-11-18')
     expect(fields.end.value).toBe('2026-11-21')
     click(fields.submit)
@@ -143,14 +143,14 @@ describe('create dialog', () => {
     expect(calls.filter(call => call.path === TREE)).toHaveLength(2)
   })
 
-  it('creates a subtask on the creation day, not the parent range, with form-state transitions', async () => {
+  it('creates a subtask on the creation day under an already-started parent, with form-state transitions', async () => {
     const { calls, view } = await renderPage({})
     click(q(row(view.container, '1 Release 2.0'), '.gantt-add-child'))
 
     const fields = form(view)
     expect(dialogTitle(view.container)).toBe('New task')
     expect(fields.parent.value).toBe('p1')
-    // The parent spans 11-05 -> 11-20; a new child still starts today.
+    // The parent began 11-05, before today; the later of the two is today.
     expect(fields.start.value).toBe('2026-11-18')
     expect(fields.end.value).toBe('2026-11-21')
 
@@ -198,6 +198,53 @@ describe('create dialog', () => {
       progress: 25,
       tags: [],
     })
+  })
+
+  it('defaults a new subtask to the parent\'s start when the parent begins later', async () => {
+    const { calls, view } = await renderPage({})
+    click(q(row(view.container, '3 Later'), '.gantt-add-child'))
+
+    const fields = form(view)
+    // The parent starts 2027-09-01, after today: the default follows the
+    // parent's window instead of the creation day.
+    expect(fields.parent.value).toBe('p3')
+    expect(fields.start.value).toBe('2027-09-01')
+    expect(fields.end.value).toBe('2027-09-04')
+
+    setField(fields.title, 'Future child')
+    click(fields.submit)
+    await flush()
+
+    expect(requestBody(calls.find(call => call.path === TASKS))).toMatchObject({
+      parentId: 'p3',
+      startDate: '2027-09-01',
+      endDate: '2027-09-04',
+    })
+  })
+
+  it('re-defaults the range when the chosen parent changes, until a date is edited', async () => {
+    const { view } = await renderPage({})
+    const fields = openCreate(view)
+    expect(fields.start.value).toBe('2026-11-18')
+    expect(fields.end.value).toBe('2026-11-21')
+
+    setField(fields.parent, 'p3', 'change')
+    expect(fields.start.value).toBe('2027-09-01')
+    expect(fields.end.value).toBe('2027-09-04')
+    // The already-started parent takes the creation day again.
+    setField(fields.parent, 'p2', 'change')
+    expect(fields.start.value).toBe('2026-11-18')
+    expect(fields.end.value).toBe('2026-11-21')
+    // So does dropping back to no parent.
+    setField(fields.parent, '', 'change')
+    expect(fields.start.value).toBe('2026-11-18')
+
+    // One manual date edit locks the range; later switches leave it alone.
+    setField(fields.start, '2026-11-25')
+    expect(fields.end.value).toBe('2026-11-25')
+    setField(fields.parent, 'p3', 'change')
+    expect(fields.start.value).toBe('2026-11-25')
+    expect(fields.end.value).toBe('2026-11-25')
   })
 
   it('posts the completion standard and source words, trimmed', async () => {
@@ -267,6 +314,17 @@ describe('create dialog', () => {
 })
 
 describe('edit dialog', () => {
+  it('keeps an edited task\'s own dates when the parent changes', async () => {
+    const { view } = await renderPage({})
+    const fields = openEditor(view, '1.1 Write spec')
+    await flush()
+
+    setField(fields.parent, 'p2', 'change')
+    // Only a create re-defaults the range; an edit reopens the task's dates.
+    expect(fields.start.value).toBe('2026-11-09')
+    expect(fields.end.value).toBe('2026-11-12')
+  })
+
   it('edits and saves a leaf task with its own fields', async () => {
     const { calls, view } = await renderPage({})
     const fields = openEditor(view, '1.1 Write spec')

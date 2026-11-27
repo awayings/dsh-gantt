@@ -211,7 +211,7 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
         inspiration: { type: 'string', description: 'Optional source of inspiration, kept verbatim. A new todo with this and no doneWhen renders as an unshaped idea until shaped.' },
         category: { type: 'string', description: 'Optional category.' },
         status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'], description: 'Defaults to todo.' },
-        startDate: { type: 'string', description: 'Optional YYYY-MM-DD; defaults to today.' },
+        startDate: { type: 'string', description: 'Optional YYYY-MM-DD; defaults to the later of today and the parent task\'s start date.' },
         endDate: { type: 'string', description: 'Optional YYYY-MM-DD; defaults to the start date plus three days.' },
         agentName: { type: 'string', description: 'Your registered agent name, recorded as the operator.' },
         session: { type: 'string', description: 'Optional id of your own conversation or run, recorded in the trajectory.' },

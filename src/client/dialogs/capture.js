@@ -6,7 +6,8 @@ import { h } from '../dom.js'
 /** Capture one unshaped idea into the tree. Deliberately lighter than create:
  * a one-line title plus the words that sparked it (required — those words are
  * what mark the row as an idea) — no completion standard and no dates (the
- * server parks today→+3 as placeholders), because shaping is a later,
+ * server parks a placeholder range, the later of today and the parent's start
+ * plus three days), because shaping is a later,
  * deliberate step done from the row once the idea is picked up. */
 export function CaptureDialog({ parentOptions, defaultParent, t, onClose, onSaved }) {
   const [title, setTitle] = useState('')

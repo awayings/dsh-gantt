@@ -57,12 +57,14 @@ export function briefTimeRange(window) {
   return [window.startTime, window.endTime].filter(Boolean).join('–') || '--:--'
 }
 
-/** Parent picker options with depth, in tree order. */
+/** Parent picker options with depth, in tree order. `startDate` lets the create
+ * dialog default a new task's start to the parent's own start when it begins
+ * later than today. */
 export function taskOptions(nodes) {
   const output = []
   const walk = (list, depth) => {
     for (const node of list) {
-      output.push({ id: node.id, label: `${rowNumber(node)} ${node.title}`, depth })
+      output.push({ id: node.id, label: `${rowNumber(node)} ${node.title}`, depth, startDate: node.startDate })
       walk(node.children, depth + 1)
     }
   }

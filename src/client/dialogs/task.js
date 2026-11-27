@@ -24,12 +24,20 @@ function writebackRow(field, label, value, multiline = false) {
   )
 }
 
+/** Default start for a new task: the creation day, or the chosen parent's own
+ * start when the parent begins later than that day. */
+function defaultCreateStart(now, parentStart) {
+  return typeof parentStart === 'string' && parentStart > now ? parentStart : now
+}
+
 /** Create or edit task dialog. */
 export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, today, t, onClose, onSaved, onSplit }) {
   const hasChildren = Boolean(task && task.hasChildren)
-  // A new task starts on its creation day, even under a parent whose range began
-  // earlier; only an edit reopens the task's own dates.
-  const initialStart = mode === 'create' ? today ?? todayIso() : task?.startDate
+  const now = today ?? todayIso()
+  // A new task defaults to the later of today and its parent's start, so it
+  // never lands before the parent's window; only an edit reopens the task's
+  // own dates.
+  const initialStart = mode === 'create' ? defaultCreateStart(now, parentTask?.startDate) : task?.startDate
   const initialEnd = mode === 'create' ? addDays(initialStart, 3) : task?.endDate
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
@@ -38,6 +46,9 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
   const [parent, setParent] = useState(task?.parentId ?? parentTask?.id ?? '')
   const [startDate, setStartDate] = useState(initialStart)
   const [endDate, setEndDate] = useState(initialEnd)
+  // Until the user edits a date, a create keeps re-defaulting the range when
+  // the chosen parent changes; after that the dates are the user's.
+  const [datesLocked, setDatesLocked] = useState(false)
   const [status, setStatus] = useState(task?.status ?? 'todo')
   const [progress, setProgress] = useState(task?.progress ?? 0)
   // The dialog owns the tag list until Save; a create starts empty and an edit
@@ -139,6 +150,14 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
     } finally {
       setSaving(false)
     }
+  }
+  const changeParent = (next) => {
+    setParent(next)
+    if (mode !== 'create' || datesLocked) return
+    const chosen = parentOptions.find(option => option.id === next)
+    const nextStart = defaultCreateStart(now, chosen?.startDate)
+    setStartDate(nextStart)
+    setEndDate(addDays(nextStart, 3))
   }
   const changeStatus = (next) => {
     setStatus(next)
@@ -250,7 +269,7 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
       h('select', {
         className: 'gantt-select',
         value: parent,
-        onChange: event => setParent(event.target.value),
+        onChange: event => changeParent(event.target.value),
       },
       h('option', { value: '' }, t('field.parentNone')),
       parentChoices.map(option => h('option', {
@@ -267,6 +286,7 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
         disabled: hasChildren,
         onChange: (event) => {
           const next = event.target.value
+          setDatesLocked(true)
           setStartDate(next)
           if (next > endDate) setEndDate(next)
         },
@@ -279,7 +299,10 @@ export function TaskDialog({ mode, task, parentTask, parentOptions, allTags, tod
         value: endDate,
         disabled: hasChildren,
         min: startDate,
-        onChange: event => setEndDate(event.target.value),
+        onChange: (event) => {
+          setDatesLocked(true)
+          setEndDate(event.target.value)
+        },
       }),
     ),
     h(Field, { label: t('field.status') },

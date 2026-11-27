@@ -875,7 +875,8 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/tasks \
 ```
 
 - `title` is required; `parentId` must reference an existing task or be `null`.
-- Dates default to today through today + 3 days; `endDate` defaults to
+- `startDate` defaults to the later of today and the parent task's own start
+  date (plain today without a parent); `endDate` defaults to
   `startDate + 3 days`.
 - `status` defaults to `todo`; `progress` defaults from the status
   (`done` → 100, `todo` → 0, `blocked` → 0, `in_progress` → 50).
@@ -1445,7 +1446,7 @@ Create a task as the immediate next sibling of the reference task.
 | `doneWhen` | no | Verifiable completion standard |
 | `description` | no | Optional note |
 | `status` | no | `todo` (default), `in_progress`, `blocked`, `done`, or `cancelled` |
-| `startDate`, `endDate` | no | `YYYY-MM-DD`; default today and today + 3 days |
+| `startDate`, `endDate` | no | `YYYY-MM-DD`; default the later of today and the shared parent's start, then + 3 days |
 
 Returns `{ ok: true, message: string }` naming the reference and the new
 sibling's dotted number. The new row is inserted right after the reference,
@@ -1470,7 +1471,8 @@ Returns `{ ok: true, message: string }` naming the container and the new
 child's dotted number. The division of labor with `gantt_create_task`:
 `create_task` is a committed task (with a `doneWhen`), while `capture` parks an
 idea — its verbatim words in `inspiration`, no completion standard, placeholder
-dates (today -> today + 3) — for a human to shape later. `inspiration` is the
+dates (the later of today and the container's start, plus three days) — for a
+human to shape later. `inspiration` is the
 idea-tier marker: it feeds the Inspiration label in the filter row, and while
 `doneWhen` stays empty the client renders the row unshaped (dimmed title,
 dashed bar); filling the standard shapes it. A plain task carrying neither

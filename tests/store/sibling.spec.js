@@ -51,6 +51,17 @@ describe('createSibling', () => {
     expect(created.doneWhen).toBe('')
   })
 
+  it('defaults dates to the later of today and the shared parent\'s start', () => {
+    const today = todayIso()
+    const parent = store.create({ title: 'Future parent', startDate: addDays(today, 5), endDate: addDays(today, 30) })
+    const first = store.create({ title: 'First', parentId: parent.id, startDate: addDays(today, 5), endDate: addDays(today, 6) })
+    const created = store.createSibling(first.id, { title: 'Next' })
+    expect(created.startDate).toBe(addDays(today, 5))
+    expect(created.endDate).toBe(addDays(today, 8))
+    const root = store.create({ title: 'Root' })
+    expect(store.createSibling(root.id, { title: 'Root next' }).startDate).toBe(today)
+  })
+
   it('reuses the create validation for fields, extras, and links', () => {
     const reference = store.create({ title: 'Reference', kind: 'track', ref: 'T1' })
     const created = store.createSibling(reference.id, {
