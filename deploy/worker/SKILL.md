@@ -19,10 +19,12 @@ agent id。
 `details` 里加两行——`capabilities: <你能做什么，逗号分隔>` 与
 `dispatch: <无头启动你自己的命令>`。分发者经 SSH 把任务简报（点号编号、标题、
 完成标准、执行说明、写回方式）送进该命令的 stdin；命令读不了 stdin 就在命令里
-写 `{prompt}`，分发者会把简报安全内联。命令必须无 TTY 可跑；长任务自己
-`nohup` 并把日志落到你能回看的地方。守门会拒绝破坏性命令（rm -rf 等），
-每次派发都进审计日志。结果照常由你经 MCP 自上报（update_task /
-report_completion / decompose_task），不要等派发方。
+写 `{prompt}`，分发者会把简报安全内联。ssh 起的是非交互 shell，不读 `~/.zshrc`
+等 rc 文件：裸名命令（哪怕 `~/.local/bin` 里装了）常不在 PATH，远端直接退出码
+127 —— 命令里前置 `export PATH="$HOME/.local/bin:$PATH";`，或写绝对路径。命令
+必须无 TTY 可跑；长任务自己 `nohup` 并把日志落到你能回看的地方。守门会拒绝
+破坏性命令（rm -rf 等），每次派发都进审计日志。结果照常由你经 MCP 自上报
+（update_task / report_completion / decompose_task），不要等派发方。
 
 **开始。** 接手甘特任务时，先调用一次 `get_worker_guide` 并照它执行。然后拉取：
 `list_ready_tasks`（`tag` 取 `ready` | `next` | `todo`，默认 `ready`；可用

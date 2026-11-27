@@ -81,12 +81,20 @@ finds your machine:
 - details must carry two single-line fields:
   - \`capabilities: coding(python,sql), decompose, ops\` — what you can do,
     comma-separated; the dispatcher routes by these words.
-  - \`dispatch: lo -p\` — the headless command that starts one run of you. It
-    must run unattended, without a TTY. The task brief (point number, title,
-    doneWhen, description, report instructions) is piped to the command's
-    stdin; a command that cannot read stdin puts the brief inline by writing
+  - \`dispatch: export PATH="$HOME/.local/bin:$PATH"; nohup lo -p\` — the
+    headless command that starts one run of you. It must run unattended,
+    without a TTY. The task brief (point number, title, doneWhen,
+    description, report instructions) is piped to the command's stdin; a
+    command that cannot read stdin puts the brief inline by writing
     \`{prompt}\` where it belongs — the dispatcher substitutes it, safely
     quoted, into the command line.
+  - The PATH prefix is part of the contract, not decoration: the ssh side
+    runs your line in a non-interactive shell that reads no rc file
+    (\`~/.zshrc\`, \`~/.bashrc\`), so a bare command name — one that works in
+    your terminal only because those files put its directory (typically
+    \`~/.local/bin\`) on PATH — dies with exit code 127 before your tool
+    ever starts. Prefix the PATH as shown, or spell the absolute path
+    (\`nohup /home/you/.local/bin/lo -p\`); the guard allows both shapes.
 - The launch is fire-and-forget: the dispatcher drops the connection after
   the launch ack, so a long run must keep itself alive — wrap it in \`nohup\`
   (or daemonize) and log somewhere you can read back.
