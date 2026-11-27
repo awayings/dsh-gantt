@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-gantt",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "private": true,
   "description": "A hierarchical task Gantt page with weekly and monthly timelines, backed by SQLite.",
   "license": "UNLICENSED",
