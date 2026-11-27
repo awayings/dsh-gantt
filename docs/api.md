@@ -561,6 +561,9 @@ curl -s -X POST http://127.0.0.1:3080/api/gantt/agents \
   unique. Registering the same name again updates that row and returns the same
   `id`; passing an existing `id` updates by id. An unknown `id` falls back to
   the name upsert.
+- A field the call omits keeps its stored value — a minimal identity
+  re-register cannot wipe the dispatch contract an earlier registration
+  recorded — while a provided field, empty string included, overwrites.
 - `type` is `human` or `ai-agent` (default `ai-agent`). `role`, `description`,
   `details`, and `endpoint` are optional strings of at most 2000 characters.
 - Renaming an agent onto another agent's name is a `409`
