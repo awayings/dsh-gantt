@@ -37,7 +37,7 @@ export function assertHttpBinding(host, token) {
  */
 export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: conversations and turns gain time and relation dimensions in a Gantt tree. This server is pull-only — nothing is dispatched to you.
 
-Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: search_tasks {q} when you know a concept but not its point number — it matches title, description, and doneWhen across every track and depth, done work included, and each hit carries its number and ancestor chain; list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
+Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: get_tree_overview when you have no keyword — the whole tree in two levels, parentId drills one level deeper per call; search_tasks {q} when you know a concept but not its point number — it matches title, description, and doneWhen across every track and depth, done work included, and each hit carries its number and ancestor chain; list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
 Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
 
@@ -59,7 +59,9 @@ pulling from it; nothing is ever pushed to you.
    human may also hand you the point number). When you know the concept but
    not the number, search_tasks {q} first: it matches title, description, and
    doneWhen across every track and depth — completed work included — and every
-   hit carries its point number, matched fields, and ancestor chain.
+   hit carries its point number, matched fields, and ancestor chain. With no
+   keyword at all, get_tree_overview shows the whole tree in two levels; pass
+   parentId to drill one level deeper per call until you reach the task.
 3. get_task_context {taskId} — always before writing. The chain, the detail, and
    the completion report are the context a decomposition needs; a title alone is
    never enough.
@@ -142,7 +144,7 @@ moment it is dispatched.
   is missing (HTTP 401) or the client renders an empty tool list while tools
   still work. Verify by calling get_worker_guide.
 - "task ... was not found": the id is stale or belongs to another store; re-read
-  list_ready_tasks or search_tasks by keyword instead of guessing.
+  list_ready_tasks, get_tree_overview, or search_tasks by keyword instead of guessing.
 - "agent ... was not found": register_agent first, or pass the exact name.`
 
 /** @typedef {import('./store.js').GanttStore} GanttStore */
@@ -210,6 +212,17 @@ export const MCP_TOOLS = /** @type {McpTool[]} */ ([
         limit: { type: 'integer', minimum: 1, maximum: 100 },
       },
       required: ['q'],
+    },
+  },
+  {
+    name: 'get_tree_overview',
+    description: 'Read the whole task tree at a glance when you have no keyword: every track with its direct children (two levels), each row carrying its point number, kind, status, and child count. Pass parentId to see the one level below that task instead, and repeat with any child that has children to walk down level by level; then read the task you land on with get_task_context.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        parentId: { type: 'string', description: 'Optional parent task: internal id, point number (1.12), or ref. Returns the one level below it instead of the two-level whole tree.' },
+      },
     },
   },
   {
@@ -488,6 +501,10 @@ function callTool(store, name, args) {
   }
   if (name === 'search_tasks') {
     return { ok: true, ...store.searchTasks({ q: args.q, limit: args.limit }) }
+  }
+  if (name === 'get_tree_overview') {
+    const parentId = typeof args.parentId === 'string' && args.parentId.trim() !== '' ? resolveTaskId(store, args.parentId) : null
+    return { ok: true, ...store.treeOverview(parentId) }
   }
   if (name === 'get_task_context') {
     return { ok: true, ...store.taskContext(resolveTaskId(store, args.taskId)) }

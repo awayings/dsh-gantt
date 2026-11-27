@@ -1366,7 +1366,7 @@ Read the task context for the calling conversation.
 
 | | |
 | --- | --- |
-| Parameters | none |
+| Parameters | `full?` (force a full re-read), `id?` (drill-down parent: internal id, `ref`, or dotted number) |
 | Returns | `{ ok: true, markdown: string }` |
 
 The conversation id comes from the tool execution context, not from an
@@ -1377,8 +1377,12 @@ task's dotted id, internal id, title, description (omitted when empty), depth
 its direct children. It also
 includes a `## 任务轨迹（会话与轮次）` section listing recent trajectory events
 newest first, each with the full session id and turn, so the model can see how
-the task reached its current state. With no focus, the tool falls back to the whole-tree
-context document, capped at 6000 characters.
+the task reached its current state. With no focus, the tool falls back to the
+two-level whole-tree overview (every track with its direct children, drillable
+rows marked `· N 个子任务`); passing `id` renders the one level below that
+parent instead, so the model can walk the tree down level by level. A drill
+read always renders fresh — the unchanged-since-last-read shortcut only covers
+the default context.
 
 ### `gantt_decompose`
 

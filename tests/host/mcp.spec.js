@@ -33,7 +33,7 @@ describe('MCP metadata', () => {
   it('publishes the protocol version and every tool schema', () => {
     expect(MCP_PROTOCOL_VERSION).toBe('2025-06-18')
     expect(MCP_TOOLS.map(tool => tool.name)).toEqual([
-      'register_agent', 'list_agents', 'list_ready_tasks', 'search_tasks', 'get_task_context',
+      'register_agent', 'list_agents', 'list_ready_tasks', 'search_tasks', 'get_tree_overview', 'get_task_context',
       'create_task', 'decompose_task', 'update_task', 'track_task', 'report_completion',
       'get_worker_guide',
     ])
@@ -54,8 +54,14 @@ describe('MCP metadata', () => {
     expect(search.inputSchema.required).toEqual(['q'])
     expect(search.inputSchema.properties.q.type).toBe('string')
     expect(search.inputSchema.properties.limit).toMatchObject({ type: 'integer', minimum: 1, maximum: 100 })
+    const overview = /** @type {any} */ (MCP_TOOLS.find(tool => tool.name === 'get_tree_overview'))
+    expect(overview.inputSchema.required).toBeUndefined()
+    expect(overview.inputSchema.properties.parentId.type).toBe('string')
+    expect(overview.description).toContain('two levels')
     expect(MCP_INSTRUCTIONS).toMatch(/register_agent/)
     expect(MCP_INSTRUCTIONS).toMatch(/search_tasks/)
+    expect(MCP_INSTRUCTIONS).toMatch(/get_tree_overview/)
+    expect(WORKER_GUIDE).toMatch(/get_tree_overview/)
     expect(MCP_INSTRUCTIONS).toMatch(/dispatch:/)
     expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
     expect(WORKER_GUIDE).toMatch(/## Loop/)
@@ -302,6 +308,36 @@ describe('tools/call', () => {
     expect(call({ q: 7 }).result.isError).toBe(true)
     expect(call({ q: '冰点', limit: 101 }).result).toEqual({
       content: [{ type: 'text', text: 'limit must be an integer from 1 to 100' }], isError: true,
+    })
+  })
+
+  it('reads the whole tree in two levels and drills one level under a parent', () => {
+    const invest = store.create({ title: '投资系统', kind: 'track', ref: 'track:1' })
+    const strategy = store.create({ title: '长期策略', parentId: invest.id })
+    store.create({ title: '冰点抄底', parentId: strategy.id })
+    store.create({ title: '打工', kind: 'track', ref: 'track:2' })
+    const call = args => rpc({
+      jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'get_tree_overview', arguments: args },
+    })
+
+    const overview = toolJson(call({}))
+    expect(overview.ok).toBe(true)
+    expect(overview.parentId).toBeNull()
+    expect(overview.chars).toBe(overview.markdown.length)
+    expect(overview.markdown).toContain('# 任务树概览（2 条支线 · 前两层）')
+    expect(overview.markdown).toContain('- 1 投资系统（支线 · 待办） · 1 个子任务')
+    expect(overview.markdown).toContain('  - 1.1 长期策略（任务 · 待办） · 1 个子任务')
+    expect(overview.markdown).not.toContain('冰点抄底')
+
+    const drilled = toolJson(call({ parentId: strategy.number }))
+    expect(drilled.parentId).toBe(strategy.id)
+    expect(drilled.markdown).toContain('# 1.1 长期策略（任务 · 待办）的下一层')
+    expect(drilled.markdown).toContain('- 1.1.1 冰点抄底（任务 · 待办）')
+    expect(toolJson(call({ parentId: invest.ref })).markdown).toContain('长期策略')
+    expect(toolJson(call({ parentId: 7 })).parentId).toBeNull()
+
+    expect(call({ parentId: 'missing' }).result).toEqual({
+      content: [{ type: 'text', text: 'task missing was not found' }], isError: true,
     })
   })
 

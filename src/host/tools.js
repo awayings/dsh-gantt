@@ -27,8 +27,6 @@ export const TOOL_NAMES = {
   capture: 'gantt_capture',
 }
 
-const MAX_CONTEXT_CHARS = 6000
-
 /** Digest of the last context a conversation read, keyed by session id. An
  * unchanged re-read answers with one line instead of re-entering the whole
  * document, so a long-lived dispatch conversation keeps its token budget. */
@@ -149,9 +147,9 @@ async function contextMarkdown(store, sessionId, titles) {
     lines.push(
       '',
       '## 当前会话没有聚焦任务',
-      '用户可以在右侧甘特图面板点选一个任务来聚焦，也可以直接说出任务标题或点号 id。下面是整棵树的上下文：',
+      '用户可以在右侧甘特图面板点选一个任务来聚焦，也可以直接说出任务标题或点号 id。下面是全树两层概览；传 id 参数可按父任务逐层下钻：',
       '',
-      store.contextDocument({ limit: MAX_CONTEXT_CHARS }).markdown,
+      store.treeOverview().markdown,
     )
   }
   return lines.join('\n')
@@ -322,12 +320,13 @@ export function toolDefinitions(store, titles = null) {
   return [
     {
       name: TOOL_NAMES.context,
-      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务、最近的会话与轮次轨迹，或（未聚焦时）整棵树。拆解任务或回答任务问题前先调用它。树自上次读取未变化时只回一行提示（沿用上次读取结果即可）；需要完整重读时传 full。',
+      description: '读取用户的甘特图任务树，以及本会话当前聚焦的任务：该任务到支线根的链路、完成标准、直接子任务、最近的会话与轮次轨迹；未聚焦时回全树两层概览（每条支线连同直接子任务）。传 id 按父任务逐层下钻，只看它的下一层子任务——就算找不到最细分的任务，先找到它的 parent 再逐层往下即可。拆解任务或回答任务问题前先调用它。树自上次读取未变化时只回一行提示（沿用上次读取结果即可）；需要完整重读时传 full。',
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
           full: { type: 'boolean', description: '可选，强制返回完整上下文；默认树未变化时只回一行提示。' },
+          id: { type: 'string', description: '可选，下钻父任务：内部 id、点号 id 或编号（如 1.12）；传入时返回该任务下一层的子任务概览，带「N 个子任务」后缀的条目可继续下钻。' },
         },
       },
       output: {
@@ -340,6 +339,12 @@ export function toolDefinitions(store, titles = null) {
         render: (_args, value) => [{ type: 'text', text: value.markdown }],
       },
       async execute(args, exec) {
+        // A drill-down read is a different document each call, so it bypasses
+        // the unchanged-since-last-read shortcut, which only covers the
+        // default context.
+        if (typeof args.id === 'string' && args.id.trim() !== '') {
+          return { ok: true, markdown: store.treeOverview(resolveTaskId(store, args.id)).markdown }
+        }
         const markdown = await contextMarkdown(store, exec?.agent?.session?.id, titles)
         const sessionId = sessionIdOf(exec)
         if (args.full === true || sessionId === '') return { ok: true, markdown }

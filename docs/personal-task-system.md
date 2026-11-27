@@ -516,8 +516,9 @@ detail, and sets `truncated: true`; only a document whose headers alone exceed
 the limit is hard-cut.
 
 The export is a read-only seam: the page offers it as a dialog with a copy
-button, and the host assistant tools reuse the same markdown for their
-whole-tree fallback (capped at 6000 characters there). Automatic memory
+button. The host assistant tools render their own no-focus fallback — the
+two-level tree overview with `id` drill-down (`renderTreeOverview`) — instead
+of this document. Automatic memory
 injection — feeding the tree into a model prompt without a user action — is
 still deferred; see [Not adopted](#not-adopted--deferred).
 
@@ -584,7 +585,8 @@ results, and captured ideas straight into the tree.
   focused task (kind, status, `doneWhen` per row), the task's dotted id,
   internal id, title, description (omitted when empty), depth, status,
   `doneWhen`, and direct children. With no focus it falls back to the
-  whole-tree context document capped at 6000 characters. The runtime
+  two-level whole-tree overview, and its `id` parameter drills one level below
+  any parent task. The runtime
   `gantt:focus` snapshot renders the same chain and detail; the full context
   layout, its data sources, and the rules for adding a field are in
   [work-context.md](work-context.md).

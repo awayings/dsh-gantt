@@ -234,7 +234,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 
 | 工具 | 说明 |
 | --- | --- |
-| `gantt_context` | 读任务树与本会话聚焦的任务：到支线根的链路、完成标准、直接子任务、最近轨迹；未聚焦时回整棵树。树未变只回一行提示。拆解或回答任务问题前先调用 |
+| `gantt_context` | 读任务树与本会话聚焦的任务：到支线根的链路、完成标准、直接子任务、最近轨迹；未聚焦时回全树两层概览，传 `id` 按父任务逐层下钻。树未变只回一行提示。拆解或回答任务问题前先调用 |
 | `gantt_create_task` | 在聚焦任务之后创建同级节点；建议带可验证的完成标准 `doneWhen` |
 | `gantt_decompose` | 把聚焦任务拆成子任务写进树；每个子任务必须带可验证 `doneWhen`；最多 4 层、单次最多 100 个 |
 | `gantt_update_task` | 更新状态 / 进度 / 标题 / 描述 / 完成标准；标 `done` 自动记录完成的会话与轮次 |
@@ -263,7 +263,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 
 ### MCP 工具（外部 Agent）
 
-`gantt-mcp` 服务器给外部编码工具暴露十一个工具——`register_agent` / `list_agents` / `list_ready_tasks` / `search_tasks` / `get_task_context` / `create_task` / `decompose_task` / `update_task` / `track_task` / `report_completion` / `get_worker_guide`——参数与返回 schema 见 [docs/mcp.md](docs/mcp.md)。
+`gantt-mcp` 服务器给外部编码工具暴露十二个工具——`register_agent` / `list_agents` / `list_ready_tasks` / `search_tasks` / `get_tree_overview` / `get_task_context` / `create_task` / `decompose_task` / `update_task` / `track_task` / `report_completion` / `get_worker_guide`——参数与返回 schema 见 [docs/mcp.md](docs/mcp.md)。
 
 ## JSON API
 
@@ -387,7 +387,7 @@ host 插件在 tools 服务上为**每个会话**注册六个助手工具；写�
 - [docs/README.md](docs/README.md) — 文档索引
 - [docs/development.md](docs/development.md) — 环境搭建、工具链、门禁、验证
 - [docs/api.md](docs/api.md) — JSON API 参考
-- [docs/mcp.md](docs/mcp.md) — MCP 服务器、传输、十一个工具、排障
+- [docs/mcp.md](docs/mcp.md) — MCP 服务器、传输、十二个工具、排障
 - [docs/worker-flow.md](docs/worker-flow.md) — 外部 worker 如何经 MCP 拉上下文、拆解、收尾
 - [docs/deployment.md](docs/deployment.md) — 插件与 MCP sidecar 的 k3s 同 Pod 部署、升级/回滚、schema 契约、Claude Code / Codex 客户端
 - [docs/remote-exec.md](docs/remote-exec.md) — 守卫式 SSH 包装：规则、审计日志、测试

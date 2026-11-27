@@ -9,7 +9,7 @@ store.
 
 The server has no runtime dependency and no protocol SDK: it is a hand-written
 JSON-RPC 2.0 implementation over newline-delimited stdio (the default) or an
-optional HTTP transport. There is no MCP `resources`/`prompts` surface; the eleven
+optional HTTP transport. There is no MCP `resources`/`prompts` surface; the twelve
 tools below are the contract. The worker-side workflow that uses them — pull
 loop, when to decompose, how a round is closed — is in
 [worker-flow.md](worker-flow.md) and is also served by the `get_worker_guide`
@@ -147,6 +147,7 @@ as text; they never crash the server.
 | `list_agents` | List operators with optional filters |
 | `list_ready_tasks` | Pull ready / next / todo work, optionally by manual tag |
 | `search_tasks` | Locate tasks by keyword across the whole tree, done work included |
+| `get_tree_overview` | Read the whole tree in two levels, or drill one level under a parent |
 | `get_task_context` | Read one task's stable markdown context |
 | `create_task` | Create a child task, or the next sibling of a task |
 | `decompose_task` | Split one task into 1–100 child tasks |
@@ -155,7 +156,7 @@ as text; they never crash the server.
 | `report_completion` | Write the operator, completer, report, status, and progress back |
 | `get_worker_guide` | Read the full worker playbook |
 
-All eleven tools return `{ "ok": true, … }` on success and `isError` content on a
+All twelve tools return `{ "ok": true, … }` on success and `isError` content on a
 validation failure. `taskId` / `parentId` / `afterTaskId` accept three forms:
 the internal UUID, the rendered point number (`1.8.1`), or an external ref.
 `agentId` / `agentName` resolve the same registered operator, so a worker never
@@ -319,6 +320,33 @@ that carried the keyword, in `title`/`description`/`doneWhen` order; `chain`
 is the ancestor path from the track root down to the parent, and the matched
 task's own `number` is the locator every task tool accepts.
 
+### `get_tree_overview`
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `parentId` | no | Internal id, point number, or ref; returns the one level below it |
+
+The no-keyword counterpart of `search_tasks`: without `parentId` it renders
+every track with its direct children (two levels), so a worker always has the
+whole picture; with `parentId` it renders the one level below that task, so a
+task too deep for the overview is reached level by level — find its parent
+first, then drill. Every row carries its point number, kind, status, and — when
+it has children — a `· N 个子任务` suffix marking it as drillable. The call
+after landing on a task is `get_task_context`.
+
+```json
+{
+  "ok": true,
+  "parentId": "e0fc2236-…",
+  "markdown": "# 1.12 长期策略（任务 · 进行中）的下一层\n\n- 1.12.1 冰点抄底（任务 · 待办）\n…",
+  "chars": 312
+}
+```
+
+`parentId` echoes the resolved internal id (`null` for the whole-tree view);
+`markdown` is the rendered overview and `chars` its length. An unknown
+`parentId` is `isError` text `task … was not found`.
+
 ### `get_task_context`
 
 | Parameter | Required | Notes |
@@ -469,7 +497,7 @@ report as its detail is appended under the worker's session key. Returns:
   full playbook is `get_worker_guide`).
 - `notifications/initialized` and every other message without an `id` are
   ignored.
-- `ping` returns `{}`; `tools/list` returns the eleven tool schemas verbatim.
+- `ping` returns `{}`; `tools/list` returns the twelve tool schemas verbatim.
 - Unknown methods are JSON-RPC error `-32601`; a non-object message or a
   missing/blank `method` is `-32600` with `id: null` when the request has no
   usable id.

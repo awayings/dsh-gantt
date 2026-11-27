@@ -19,8 +19,10 @@ complements [mcp.md](mcp.md) and [deployment.md](deployment.md).
 
 Nothing pushes work to a worker. The server has no queue, no assignment, no
 outbound call, and no notification; that surface is deliberately not
-implemented. A worker pulls: `search_tasks` to locate a task by keyword when
-only the concept is known, `list_ready_tasks` for executable work,
+implemented. A worker pulls: `get_tree_overview` for the whole tree in two
+levels (drill one level per `parentId`) when there is no keyword,
+`search_tasks` to locate a task by keyword when only the concept is known,
+`list_ready_tasks` for executable work,
 `get_task_context` for one task's background, `list_agents` for the peers it
 shares the tree with, and writes the result back. A human naming a task by
 point number or id is the only other entry point.
@@ -151,6 +153,8 @@ Steps 1-2 happen once per worker, 3-8 once per task, and step 9 closes a round.
    track. When only a concept or a name is remembered, `search_tasks {q}`
    matches `title`/`description`/`doneWhen` across the whole tree — done work
    included — and each hit carries `number`, `matchedFields`, and `chain`.
+   With no keyword at all, `get_tree_overview` shows every track with its
+   direct children; pass `parentId` to drill one level deeper per call.
 4. **Read before you write.** `get_task_context` for the picked task: ancestor
    chain, fields, links, earlier report, recent trajectory.
 5. **Work** in your own environment; the store never runs your code.
