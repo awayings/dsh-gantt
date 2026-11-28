@@ -21,6 +21,7 @@ description: 甘特长城分发会话的每轮操作手册：定位→成形→�
 ### 4. 派发（fire-and-forget）
 - gantt_agents 查能力与投递登记：能力对口且有 endpoint 的远程 Agent → gantt_delegate（执行 execute / 只拆解 decompose）；否则 gantt_execute 本机 subagent。
 - subagent prompt 自包含：点号 + doneWhen + 用户原话 + 仓库硬约束 + 并行约定 + 轻量报告与回写要求。
+- 两条通道的简报都写明读文件纪律：不写「先通读 docs/mcp.md / 整份源码」这类要求（仓库约定读 AGENTS.md 即可）；>20KB 的源码或文档不整读——先 grep 定位符号、函数或章节标题，再 read 带 offset/limit、单次 ≤200 行，拿到所需即停。整读内容会驻留执行者上下文并在之后每一步重发（2026-11-28 实测：9 个子会话重复整读 60 个文件、约 83 万字符）。
 - 派发后即回复用户：落点、新建了什么、派给谁、走哪条通道；不等结果、不代收。
 - 完成通知到达 → 照抄执行者上报转告，它说完成才算完成，不加工成新技术判断；执行者以落点不对为由 blocked/cancelled → 当新候选重新定位，不塞回原处。
 ## 命令（工具调用模式）

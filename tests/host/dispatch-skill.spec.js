@@ -75,6 +75,7 @@ describe('dispatch manual skill provider', () => {
     const definition = await provider.get()
     expect(definition.name).toBe('gantt-dispatch-flow')
     expect(definition.content.startsWith('# gantt-dispatch-flow')).toBe(true)
+    expect(definition.content).toContain('读文件纪律')
     expect(definition.content.endsWith('提醒。\n')).toBe(true)
     // An independent extraction: everything past the closing delimiter.
     const text = await readFile(SKILL_URL, 'utf8')

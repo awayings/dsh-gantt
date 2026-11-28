@@ -39,7 +39,7 @@ export const MCP_INSTRUCTIONS = `dsh-gantt is a shared task and context store: c
 
 Start once with register_agent: the name is your stable identity (re-registering the same name returns the same id), and passing agentName on later calls attributes every write to you. Registration doubles as your dispatch contract: to receive tasks remotely, put \`ssh://user@host\` (or an ssh alias) in endpoint and two single-line fields in details — \`capabilities:\` (what you can do) and \`dispatch:\` (the headless command that starts one run of you; the task brief arrives on that command's stdin, or inline where the command writes {prompt}). Call get_worker_guide for the exact format. Then: get_tree_overview when you have no keyword — the whole tree in two levels, parentId drills one level deeper per call; search_tasks {q} when you know a concept but not its point number — it matches title, description, and doneWhen across every track and depth, done work included, and each hit carries its number and ancestor chain; list_ready_tasks (tag=ready, optional tags list + mode=any|and) to find work; get_task_context before decomposing, updating, or answering anything about a task, because a task only makes sense inside its ancestor chain; create_task / decompose_task / update_task write straight into the shared tree (every child needs a verifiable doneWhen); track_task records a round that wrote no task tree; report_completion closes a task with evidence. taskId accepts the internal id, a point number such as 1.8.1, or a ref.
 
-Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Call get_worker_guide for the full playbook.`
+Finish every round with exactly one write or one track. Never invent a task id: if a reference is ambiguous, read the context again or ask a human. When you commit code for the task you are working, end the commit subject with its point number, e.g. \`feat(today): keep the plan row bold (1.8.1)\`. Read large files in offset/limit windows, never whole. Call get_worker_guide for the full playbook.`
 
 /** The full worker playbook served by `get_worker_guide`. */
 export const WORKER_GUIDE = `# Working a shared Gantt task tree
@@ -117,6 +117,17 @@ decompose_task, track_task — each with your agentName). The dispatcher only
 reads the tree and the trajectory, so the store stays the single channel
 between you two; a delegated task carries your name as its operator the
 moment it is dispatched.
+
+## Reading code in a repo
+
+Locate before you read: \`grep\` for the symbol or function name (\`wc -l\` for
+size), then \`read\` with offset/limit in windows of 200 lines or fewer, and
+stop once the task has what it needs. Never read a whole source file to answer
+one question: a whole-file read stays in your context for the rest of the run
+and is re-sent on every step, so a 30 KB file read once is a permanent tax on
+every later call — and several workers on the same repo pay it again each.
+Nothing in a task brief requires a file's full text; when it looks like it
+does, grep for the relevant symbol or ask.
 
 ## Rules
 

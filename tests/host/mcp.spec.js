@@ -66,6 +66,7 @@ describe('MCP metadata', () => {
     expect(MCP_INSTRUCTIONS.length).toBeLessThan(2048)
     expect(WORKER_GUIDE).toMatch(/## Loop/)
     expect(WORKER_GUIDE).toMatch(/## Registration doubles as the dispatch contract/)
+    expect(WORKER_GUIDE).toMatch(/## Reading code in a repo/)
     expect(WORKER_GUIDE).toMatch(/\{prompt\}/)
   })
 })

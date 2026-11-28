@@ -34,6 +34,10 @@ shell 不读 rc 文件，裸名命令常不在 PATH（远端退出码 127），�
 不要同时发任务树写操作和 `track_task`，也不要把 `track_task` 当作完成报告 ——
 完成意味着用 `report_completion` 写清产出了什么、在哪里验证过。
 
+**读源码先定位，不整读。** >20KB 的源码或文档先 `grep` 定位符号、函数或章节
+标题，再 `read` 带 offset/limit、单次 200 行以内，拿到所需即停。整读的内容会留在
+上下文里、之后每一步都重发；同一仓库上多个 worker 会各付一遍。
+
 **不要编造 id。** 只对 server 返回的或人给你的 id / 编号动手；未知 id 会回
 `task ... was not found`，此时用 `list_ready_tasks` 或按关键词 `search_tasks`
 重新解析，不要猜。没有人给你派单：任务是你自己拉取的。链路不明确就问人；没人能
